@@ -206,6 +206,24 @@ aside, section {
   color: var(--accent);
   font-weight: 700;
 }
+.girl-item .busy {
+  background: rgba(239, 83, 80, 0.15);
+  color: var(--red);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(239, 83, 80, 0.4);
+}
+.girl-item .busy.sched {
+  background: rgba(255, 213, 79, 0.12);
+  color: var(--yellow);
+  border-color: rgba(255, 213, 79, 0.4);
+}
+.girl-item.overbooked {
+  box-shadow: 0 0 0 2px var(--red) inset;
+  animation: pulse 1.6s infinite;
+}
 .girl-item .del {
   position: absolute;
   top: 4px;
@@ -605,3 +623,19 @@ body.edit-mode .table-card .edit-badge { display: flex; flex-direction: column; 
   text-align: left;
   padding: 4px 2px;
 }
+.girl-picker .opt.warn-msg.minus {
+  color: var(--accent);
+  background: rgba(255, 183, 77, 0.08);
+  border: 1px solid rgba(255, 183, 77, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+}
+.girl-picker .opt.cross {
+  border-color: #ff9800;
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffb74d;
+}
+
+.ctrl.status strong { color: var(--fg); }
+.ctrl.status.minus strong { color: var(--red); }
+.ctrl.status.plus strong { color: var(--ok); }

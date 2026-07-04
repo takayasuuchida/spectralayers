@@ -172,10 +172,29 @@
     return state.girls.find((g) => g.id === id);
   }
 
-  // 同じお客様（卓）に同じ女の子を二回つけようとしているかチェック
+  // 同じお客様（卓）に同じ女の子を二回つけようとしているかチェック（禁止）
   function isDuplicateAssignment(table, girlId, rotationIndex) {
     if (!girlId) return false;
     return table.rotations.some((r, i) => i !== rotationIndex && r.girlId === girlId);
+  }
+
+  // 現在（進行中の回転）に別卓でついているキャストのリスト
+  function girlActiveNowTables(girlId, excludeTableId) {
+    return state.tables.filter((t) => {
+      if (t.closed) return false;
+      if (excludeTableId && t.id === excludeTableId) return false;
+      const cur = getCurrentRotation(t);
+      return cur && cur.girlId === girlId;
+    });
+  }
+
+  // これから予定に入っている（未消化の）別卓
+  function girlScheduledTables(girlId, excludeTableId) {
+    return state.tables.filter((t) => {
+      if (t.closed) return false;
+      if (excludeTableId && t.id === excludeTableId) return false;
+      return t.rotations.some((r) => r.girlId === girlId && r.actualDuration == null);
+    });
   }
 
   function assignGirl(tableId, rotationIndex, girlId) {
@@ -183,12 +202,23 @@
     if (!t) return;
     if (girlId && isDuplicateAssignment(t, girlId, rotationIndex)) {
       flashDuplicate(girlId);
-      return false;
+      return { ok: false, reason: "same-table" };
     }
     t.rotations[rotationIndex].girlId = girlId;
     save();
     render();
-    return true;
+    return { ok: true };
+  }
+
+  // 開いている（closedでない）卓の数
+  function openTableCount() {
+    return state.tables.filter((t) => !t.closed).length;
+  }
+  function activeGirlCount() {
+    return state.girls.length;
+  }
+  function isMinusMode() {
+    return activeGirlCount() > 0 && openTableCount() > activeGirlCount();
   }
 
   function flashDuplicate(girlId) {
@@ -290,6 +320,14 @@
     $("#storeName").textContent = state.settings.storeName || "店舗名未設定";
     $("#baseTime").value = String(state.settings.baseTime);
     $("#perRotation").textContent = fmtTime(rotationDurationSec());
+    const casts = activeGirlCount();
+    const open = openTableCount();
+    const label = $("#opsLabel");
+    const wrap = $("#opsStatus");
+    label.textContent = `${casts}人 / ${open}卓`;
+    wrap.classList.toggle("minus", isMinusMode());
+    wrap.classList.toggle("plus", casts > 0 && open > 0 && casts >= open);
+    if (isMinusMode()) label.textContent += "  📉マイナス";
   }
 
   function renderGirls() {
@@ -306,10 +344,20 @@
       li.dataset.girlId = g.id;
       if (assignedAtSelected.has(g.id)) li.classList.add("assigned");
 
+      const nowTables = girlActiveNowTables(g.id);
+      const scheduled = girlScheduledTables(g.id);
+      if (nowTables.length > 1) li.classList.add("overbooked");
+      const busyBadge = nowTables.length > 0
+        ? `<span class="busy" title="現在稼働中の卓">🔴 ${nowTables.map((t) => t.number).join(",")}</span>`
+        : (scheduled.length > 0
+          ? `<span class="busy sched" title="予約先">⏳ ${scheduled.map((t) => t.number).join(",")}</span>`
+          : "");
+
       const drinks = totalGirlDrinks(g.id);
       li.innerHTML = `
         <button class="del" data-act="delete" aria-label="削除">×</button>
         <span class="name" data-act="rename">${escapeHtml(g.name)}</span>
+        ${busyBadge}
         <span class="drinks">🍹 ${drinks}</span>
         <span class="edit-tools">
           <button data-act="up" title="上へ">↑</button>
@@ -572,27 +620,46 @@
     );
     const currentId = t.rotations[rotationIndex].girlId;
 
+    const isFirstRotation = rotationIndex === 0 || t.rotations.slice(0, rotationIndex).every((r) => r.actualDuration != null);
+
     const grid = state.girls
       .map((g) => {
         const dup = usedIds.has(g.id);
         const isCurrent = g.id === currentId;
+        const nowTables = girlActiveNowTables(g.id, tableId);
+        const scheduled = girlScheduledTables(g.id, tableId);
+        const isCross = (isFirstRotation && nowTables.length > 0) || scheduled.length > 0;
+
         let cls = "opt";
         if (dup) cls += " dup";
+        else if (isCross) cls += " cross";
         if (isCurrent) cls += " now";
-        return `<div class="${cls}" data-gid="${g.id}" data-dup="${dup}">${escapeHtml(g.name)}${dup ? " ⚠" : ""}</div>`;
+
+        let note = "";
+        if (dup) note = " ⚠ 同一卓";
+        else if (nowTables.length > 0) note = ` ⚡ 稼働中(卓${nowTables.map((tt) => tt.number).join(",")})`;
+        else if (scheduled.length > 0) note = ` ⏳ 予約(卓${scheduled.map((tt) => tt.number).join(",")})`;
+
+        return `<div class="${cls}" data-gid="${g.id}" data-dup="${dup}" data-cross="${isCross}">${escapeHtml(g.name)}${note}</div>`;
       })
       .join("");
 
-    const dupHint = state.girls.some((g) => usedIds.has(g.id))
-      ? `<div class="opt warn-msg">⚠ 赤い女の子は同じお客様にすでに付いています</div>`
-      : "";
+    const hints = [];
+    if (state.girls.some((g) => usedIds.has(g.id))) {
+      hints.push(`<div class="opt warn-msg">⚠ 赤 = 同一お客様に既配置（選択不可）</div>`);
+    }
+    if (isMinusMode()) {
+      hints.push(`<div class="opt warn-msg minus">📉 マイナス営業モード：橙のキャストは他卓と兼務。確認してから配置してください。</div>`);
+    } else if (state.girls.some((g) => girlActiveNowTables(g.id, tableId).length > 0 || girlScheduledTables(g.id, tableId).length > 0)) {
+      hints.push(`<div class="opt warn-msg">🟠 橙 = 他卓に付いている／予約されている（兼務可・確認付き）</div>`);
+    }
 
     openModal(`
-      <h3>女の子を選択（回転 ${rotationIndex + 1}）</h3>
+      <h3>キャストを選択（回転 ${rotationIndex + 1}）</h3>
       <div class="girl-picker">
         ${grid}
-        ${dupHint}
-        <div class="opt clear" data-clear="1">未割当に戻す</div>
+        ${hints.join("")}
+        <div class="opt clear" data-clear="1">未割当（空きにする）</div>
       </div>
       <div class="actions">
         <button class="btn ghost" data-close="1">キャンセル</button>
@@ -610,8 +677,17 @@
             el.classList.add("dup");
             return;
           }
-          const ok = assignGirl(tableId, rotationIndex, el.dataset.gid);
-          if (ok) closeModal();
+          if (el.dataset.cross === "true") {
+            const g = getGirl(el.dataset.gid);
+            const nowTables = girlActiveNowTables(el.dataset.gid, tableId);
+            const scheduled = girlScheduledTables(el.dataset.gid, tableId);
+            const parts = [];
+            if (nowTables.length) parts.push(`稼働中: 卓${nowTables.map((tt) => tt.number).join(",")}`);
+            if (scheduled.length) parts.push(`予約: 卓${scheduled.map((tt) => tt.number).join(",")}`);
+            if (!confirm(`${g.name} は既に他卓に配置されています（${parts.join(" / ")}）。\nマイナス営業として兼務させますか？`)) return;
+          }
+          const res = assignGirl(tableId, rotationIndex, el.dataset.gid);
+          if (res && res.ok) closeModal();
         });
       });
       root.querySelectorAll("[data-close]").forEach((el) =>
