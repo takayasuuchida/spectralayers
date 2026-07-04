@@ -6,6 +6,7 @@
 
   const defaultState = () => ({
     settings: {
+      storeName: "店舗名未設定",
       baseTime: 50,
       rotations: 3,
       setPrice: 5000,
@@ -17,6 +18,7 @@
     nextGirlId: 1,
     nextTableId: 1,
     nextTableNumber: 1,
+    editMode: false,
   });
 
   let state = load();
@@ -70,6 +72,24 @@
     save();
     render();
   }
+  function renameGirl(id, name) {
+    const g = getGirl(id);
+    if (!g) return;
+    const trimmed = (name || "").trim();
+    if (!trimmed) return;
+    g.name = trimmed;
+    save();
+    render();
+  }
+  function moveGirl(id, dir) {
+    const i = state.girls.findIndex((g) => g.id === id);
+    if (i < 0) return;
+    const j = i + dir;
+    if (j < 0 || j >= state.girls.length) return;
+    [state.girls[i], state.girls[j]] = [state.girls[j], state.girls[i]];
+    save();
+    render();
+  }
 
   function addTable() {
     const number = state.nextTableNumber++;
@@ -113,6 +133,34 @@
     if (!confirm("この卓を削除します。よろしいですか？")) return;
     state.tables = state.tables.filter((t) => t.id !== id);
     if (state.selectedTableId === id) state.selectedTableId = null;
+    save();
+    render();
+  }
+  function renameTable(id, label) {
+    const t = getTable(id);
+    if (!t) return;
+    const trimmed = (label || "").trim();
+    if (!trimmed) return;
+    t.number = trimmed;
+    save();
+    render();
+  }
+  function moveTable(id, dir) {
+    const i = state.tables.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    const j = i + dir;
+    if (j < 0 || j >= state.tables.length) return;
+    [state.tables[i], state.tables[j]] = [state.tables[j], state.tables[i]];
+    save();
+    render();
+  }
+  function reorderTables(fromId, toId) {
+    if (fromId === toId) return;
+    const from = state.tables.findIndex((t) => t.id === fromId);
+    const to = state.tables.findIndex((t) => t.id === toId);
+    if (from < 0 || to < 0) return;
+    const [moved] = state.tables.splice(from, 1);
+    state.tables.splice(to, 0, moved);
     save();
     render();
   }
@@ -227,14 +275,19 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   function render() {
+    document.body.classList.toggle("edit-mode", !!state.editMode);
     renderTop();
     renderGirls();
     renderTables();
     renderDetail();
     $("#emptyHint").style.display = state.tables.length === 0 ? "block" : "none";
+    $("#girlHint").textContent = state.editMode ? "編集モード：名前タップで変更 / ↑↓で並び替え" : "タップでドリンク追加（卓選択中）";
+    $("#tableHint").textContent = state.editMode ? "編集モード：ドラッグで並び替え / 番号タップで変更" : "卓をタップで詳細";
+    $("#editModeBtn").textContent = state.editMode ? "✓ 編集完了" : "✎ 編集";
   }
 
   function renderTop() {
+    $("#storeName").textContent = state.settings.storeName || "店舗名未設定";
     $("#baseTime").value = String(state.settings.baseTime);
     $("#perRotation").textContent = fmtTime(rotationDurationSec());
   }
@@ -256,12 +309,27 @@
       const drinks = totalGirlDrinks(g.id);
       li.innerHTML = `
         <button class="del" data-act="delete" aria-label="削除">×</button>
-        <span class="name">${escapeHtml(g.name)}</span>
+        <span class="name" data-act="rename">${escapeHtml(g.name)}</span>
         <span class="drinks">🍹 ${drinks}</span>
+        <span class="edit-tools">
+          <button data-act="up" title="上へ">↑</button>
+          <button data-act="down" title="下へ">↓</button>
+        </span>
       `;
       li.addEventListener("click", (e) => {
-        if (e.target.dataset.act === "delete") {
+        const act = e.target.dataset.act;
+        if (act === "delete") {
           if (confirm(`「${g.name}」を削除しますか？`)) removeGirl(g.id);
+          return;
+        }
+        if (state.editMode) {
+          if (act === "up") return moveGirl(g.id, -1);
+          if (act === "down") return moveGirl(g.id, 1);
+          if (act === "rename") {
+            const v = prompt("キャスト名を変更", g.name);
+            if (v != null) renameGirl(g.id, v);
+            return;
+          }
           return;
         }
         if (selectedTable) {
@@ -280,6 +348,7 @@
     for (const t of state.tables) {
       const div = document.createElement("div");
       div.className = "table-card";
+      div.dataset.tableId = t.id;
       if (state.selectedTableId === t.id) div.classList.add("selected");
 
       const total = totalSessionSec(t);
@@ -301,12 +370,54 @@
 
       const timerText = t.closed ? "閉店" : fmtTime(rem);
       div.innerHTML = `
-        <div class="num">卓 ${t.number}</div>
+        <div class="num" data-act="rename">卓 ${escapeHtml(String(t.number))}</div>
         <div class="cust">${escapeHtml(t.customerName || "お客様")}</div>
         <div class="timer">${timerText}</div>
         <div class="girls"><span class="now-girl">${currentGirl ? escapeHtml(currentGirl.name) : ""}</span><br>${escapeHtml(assigned)}</div>
+        <div class="edit-badge">
+          <button data-act="up" title="前へ">←</button>
+          <button data-act="down" title="次へ">→</button>
+          <button data-act="del" title="削除">×</button>
+        </div>
       `;
-      div.addEventListener("click", () => selectTable(t.id));
+      div.draggable = !!state.editMode;
+      div.addEventListener("click", (e) => {
+        const act = e.target.dataset.act;
+        if (state.editMode) {
+          if (act === "up") return moveTable(t.id, -1);
+          if (act === "down") return moveTable(t.id, 1);
+          if (act === "del") return deleteTable(t.id);
+          if (act === "rename") {
+            const v = prompt("卓番号／名前を変更", String(t.number));
+            if (v != null) renameTable(t.id, v);
+            return;
+          }
+          return;
+        }
+        selectTable(t.id);
+      });
+      // ドラッグ&ドロップで並び替え
+      div.addEventListener("dragstart", (e) => {
+        if (!state.editMode) return;
+        e.dataTransfer.setData("text/plain", t.id);
+        e.dataTransfer.effectAllowed = "move";
+        div.classList.add("dragging");
+      });
+      div.addEventListener("dragend", () => div.classList.remove("dragging"));
+      div.addEventListener("dragover", (e) => {
+        if (!state.editMode) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        div.classList.add("drag-over");
+      });
+      div.addEventListener("dragleave", () => div.classList.remove("drag-over"));
+      div.addEventListener("drop", (e) => {
+        if (!state.editMode) return;
+        e.preventDefault();
+        div.classList.remove("drag-over");
+        const src = e.dataTransfer.getData("text/plain");
+        reorderTables(src, t.id);
+      });
       grid.appendChild(div);
     }
   }
@@ -555,6 +666,10 @@
     openModal(`
       <h3>設定</h3>
       <div class="field">
+        <label>店舗名</label>
+        <input type="text" id="storeNameInput" value="${escapeHtml(state.settings.storeName)}" />
+      </div>
+      <div class="field">
         <label>セット料金（円）</label>
         <input type="number" id="setPrice" value="${state.settings.setPrice}" />
       </div>
@@ -575,6 +690,8 @@
       </div>
     `, (root) => {
       root.querySelector("#saveSettings").addEventListener("click", () => {
+        const sn = root.querySelector("#storeNameInput").value.trim();
+        state.settings.storeName = sn || "店舗名未設定";
         state.settings.setPrice = Math.max(0, parseInt(root.querySelector("#setPrice").value, 10) || 0);
         state.settings.drinkPrice = Math.max(0, parseInt(root.querySelector("#drinkPrice").value, 10) || 0);
         state.settings.rotations = Math.max(1, Math.min(6, parseInt(root.querySelector("#rotations").value, 10) || 3));
@@ -609,6 +726,19 @@
     $("#addGirlBtn").addEventListener("click", openAddGirl);
     $("#addTableBtn").addEventListener("click", addTable);
     $("#settingsBtn").addEventListener("click", openSettings);
+    $("#editModeBtn").addEventListener("click", () => {
+      state.editMode = !state.editMode;
+      save();
+      render();
+    });
+    $("#storeName").addEventListener("click", () => {
+      const v = prompt("店舗名を変更", state.settings.storeName);
+      if (v != null) {
+        state.settings.storeName = v.trim() || "店舗名未設定";
+        save();
+        render();
+      }
+    });
     $("#baseTime").addEventListener("change", (e) => {
       state.settings.baseTime = parseInt(e.target.value, 10);
       save();

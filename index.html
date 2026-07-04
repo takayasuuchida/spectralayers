@@ -14,7 +14,8 @@
 <body>
   <header id="topbar">
     <div class="brand">
-      <h1>つけ回し</h1>
+      <h1 id="storeName">店舗名未設定</h1>
+      <span class="subtitle">つけ回し管理</span>
     </div>
     <div class="controls">
       <label class="ctrl">
@@ -28,8 +29,9 @@
         <span>1回転</span>
         <strong id="perRotation">16:40</strong>
       </div>
-      <button class="btn" id="addGirlBtn">＋ 女の子</button>
+      <button class="btn" id="addGirlBtn">＋ キャスト</button>
       <button class="btn" id="addTableBtn">＋ 卓</button>
+      <button class="btn ghost" id="editModeBtn">✎ 編集</button>
       <button class="btn ghost" id="settingsBtn">⚙ 設定</button>
     </div>
   </header>
@@ -37,13 +39,17 @@
   <main id="layout">
     <aside id="girlsPanel">
       <div class="panel-head">
-        <h2>女の子</h2>
-        <span class="hint">タップでドリンク追加（卓選択中）</span>
+        <h2>キャスト</h2>
+        <span class="hint" id="girlHint">タップでドリンク追加</span>
       </div>
       <ul id="girlList" class="girl-list"></ul>
     </aside>
 
     <section id="tablesPanel">
+      <div class="panel-head">
+        <h2>フロア</h2>
+        <span class="hint" id="tableHint">編集モードでレイアウト変更</span>
+      </div>
       <div id="tables" class="tables-grid"></div>
       <div id="emptyHint" class="empty">右上「＋卓」から卓を追加してください</div>
     </section>
