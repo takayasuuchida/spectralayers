@@ -124,7 +124,7 @@ export default function App() {
       if (raw) {
         try {
           const d = JSON.parse(raw);
-          setSettings({ ...DEFAULT_SETTINGS, ...(d.settings || {}) });
+          setSettings({ ...DEFAULT_SETTINGS, ...(d.settings || {}), storeName: URL_STORE });
           setTables(d.tables || DEFAULT_TABLES);
           setMergeGroups(d.mergeGroups || DEFAULT_MERGE_GROUPS);
           setCasts((d.casts || SEED_CASTS).map(mergeCastDefaults));
@@ -1053,6 +1053,13 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
       </div>
 
       <button onClick={() => { if (confirmReset) { resetNight(); setConfirmReset(false); } else setConfirmReset(true); }} style={{ background: confirmReset ? "#7a2222" : "#15151a", border: `1px solid ${confirmReset ? "#a13b3b" : "#2a2a32"}`, color: confirmReset ? "#fff" : "#999" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{confirmReset ? "⚠ もう一度タップで全卓クリア確定" : "営業リセット（全卓クリア・名簿は保持）"}</button>
+
+      <button onClick={() => {
+        if (confirm("この店舗のすべてのデータ（キャスト・卓・設定）を完全削除して初期状態に戻します。よろしいですか？")) {
+          try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+          location.reload();
+        }
+      }} style={{ background: "#3a1010", border: "1px solid #7a2222", color: "#ff8888" }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-2">🗑 完全リセット（この店舗の全データ削除）</button>
     </div>
   );
 }
