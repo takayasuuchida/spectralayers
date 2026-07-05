@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2 } from "lucide-react";
 
 const GOLD = "#c9a64e";
-const STORE_KEY = "viverce-v1";
 const TEAL = "#3fb6b0";
+// URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
+const URL_STORE = (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("store")) || "viverce";
+const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a" };
 
-const DEFAULT_SETTINGS = { storeName: "viverce", target: 1000000, layoutLocked: true, overheadPct: 15 };
+const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15 };
 const DEFAULT_CAST_PAY = {
   hourlyWage: 3000,
   drinkBack: 500,
