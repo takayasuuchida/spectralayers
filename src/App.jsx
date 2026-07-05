@@ -49,7 +49,7 @@ const DEFAULT_TABLES = [
 ];
 const DEFAULT_MERGE_GROUPS = { A: ["t3", "t4"], B: ["t5", "t6"], C: ["t10", "t11", "t12"] };
 
-const SEED_CASTS = [
+const DEFAULT_SEED_CASTS = [
   { id: "c1", name: "リカ", score: 9, genres: ["綺麗"], status: "出勤" },
   { id: "c2", name: "マオ", score: 8, genres: ["可愛い"], status: "出勤" },
   { id: "c3", name: "ユイ", score: 7, genres: ["綺麗"], status: "出勤" },
@@ -63,6 +63,20 @@ const SEED_CASTS = [
   { id: "c11", name: "ミナ", score: 6, genres: ["おもしろい"], status: "未出勤" },
   { id: "c12", name: "ホノカ", score: 7, genres: ["可愛い"], status: "未出勤" },
 ];
+
+const ANELA_SEED_CASTS = [
+  "あいり", "あや", "あやな", "うた", "えな", "かれん", "かんな",
+  "さはな", "さら", "のぞみ", "はのん", "ひより", "まい", "まゆ",
+  "みき", "もえ", "もか", "ゆい", "ゆあ", "わかな", "なつき",
+].map((name, i) => ({
+  id: "a" + (i + 1),
+  name,
+  score: 5,
+  genres: ["可愛い"],
+  status: "出勤",
+}));
+
+const SEED_CASTS = URL_STORE === "ANELA" ? ANELA_SEED_CASTS : DEFAULT_SEED_CASTS;
 
 const yen = (n) => "¥" + (n || 0).toLocaleString("ja-JP");
 
