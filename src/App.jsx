@@ -318,7 +318,7 @@ export default function App() {
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups }} />}
 
-      {sel && ts[sel] !== undefined && (
+      {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
           castById, served, tableTotal, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
