@@ -365,3 +365,8 @@ FodyWeavers.xsd
 dist/
 .vite/
 package-lock.json.bak
+
+# Local env
+.env.local
+.env.*.local
+
