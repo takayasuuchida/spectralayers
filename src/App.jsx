@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2 } from "lucide-react";
+import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
@@ -9,7 +9,7 @@ const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a" };
 
-const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15 };
+const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10 };
 const DEFAULT_CAST_PAY = {
   hourlyWage: 3000,
   drinkBack: 500,
@@ -95,6 +95,16 @@ const storeSet = async (key, val) => {
 const remainOf = (t, now) => t.setStart + t.setDuration * 60000 - now;
 const tstateOf = (t, now) => { const r = remainOf(t, now); if (r <= 0) return "over"; if (r <= 600000) return "soon"; return "ok"; };
 const fmt = (ms) => { const a = Math.abs(ms); const m = Math.floor(a / 60000); const s = Math.floor((a % 60000) / 1000); return `${m}:${String(s).padStart(2, "0")}`; };
+// 業務日: AM6:00 未満は前日扱い（キャバクラの深夜業態向け）
+function businessDateOfNow(now = new Date()) {
+  const d = new Date(now);
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function useNow(active) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!active) return; const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, [active]);
@@ -113,6 +123,9 @@ export default function App() {
   const [merges, setMerges] = useState({});
   const [sel, setSel] = useState(null);
   const [closed, setClosed] = useState([]);
+  const [history, setHistory] = useState([]); // [{ businessDate, subtotal, tax, grand, tableCount, activeCount, timestamp }]
+  const [customerBook, setCustomerBook] = useState([]); // 客名帳マスタ [{ id, name, birthday, pref, memo, favoriteCastIds, visits, lastVisitAt }]
+  const [bottleKeeps, setBottleKeeps] = useState([]); // [{ id, customerBookId, label, openedAt, expiresAt, memo, status }]
   const [pick, setPick] = useState(null); // {tableId, customerId}
   const [modal, setModal] = useState(null); // {type, msg, onOk}
   const [loaded, setLoaded] = useState(false);
@@ -132,6 +145,9 @@ export default function App() {
           setServed(d.served || {});
           setMerges(d.merges || {});
           setClosed(d.closed || []);
+          setHistory(d.history || []);
+          setCustomerBook(d.customerBook || []);
+          setBottleKeeps(d.bottleKeeps || []);
         } catch (e) { setTs({}); setServed({}); }
       } else { setTs({}); setServed({}); }
       setLoaded(true);
@@ -141,11 +157,28 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps]);
 
   function resetNight() {
+    // 今日の集計を history に保存
+    const activeRows = Object.values(ts).filter(t => t?.active);
+    const activeSubtotal = activeRows.reduce((s, t) => s + tableTotal(t), 0);
+    const closedSubtotal = closed.reduce((s, r) => s + (r.total || 0), 0);
+    const subtotal = activeSubtotal + closedSubtotal;
+    const tax = Math.floor(subtotal * taxRate);
+    const grand = subtotal + tax;
+    const tableCount = closed.length;
+    const activeCount = activeRows.length;
+    if (subtotal > 0 || tableCount > 0) {
+      const entry = {
+        businessDate: businessDateOfNow(),
+        subtotal, tax, grand, tableCount, activeCount,
+        timestamp: Date.now(),
+      };
+      setHistory(h => [entry, ...h].slice(0, 365));
+    }
     setTs({}); setServed({}); setClosed([]); setMerges({}); setSel(null);
     setCasts(cs => cs.map(c => ({ ...c, ...DEFAULT_CAST_COUNTERS, status: c.status === "出勤" ? "出勤" : c.status })));
   }
@@ -213,6 +246,9 @@ export default function App() {
   }
 
   const tableTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
+  const taxRate = (settings.taxRate ?? 10) / 100;
+  const tableTax = (t) => Math.floor(tableTotal(t) * taxRate);
+  const tableGrand = (t) => tableTotal(t) + tableTax(t);
 
   // ---- 付け回しロジック ----
   function suggest(t, cust) {
@@ -261,9 +297,34 @@ export default function App() {
   }
   function removeCast(tableId, castId) { upd(tableId, t => ({ ...t, casts: t.casts.filter(a => a.castId !== castId), seats: t.seats.filter(s => !(s.k === "cast" && s.id === castId)) })); }
   function moveSeat(tableId, idx, dir) { upd(tableId, t => { const a = [...t.seats]; const j = idx + dir; if (j < 0 || j >= a.length) return t; [a[idx], a[j]] = [a[j], a[idx]]; return { ...t, seats: a }; }); }
-  function addCustomer(tableId, name) {
+  function ensureCustomerBookEntry(name) {
+    const nm = (name || "").trim();
+    if (!nm) return null;
+    const found = customerBook.find(c => c.name === nm);
+    if (found) return found;
+    const newCust = { id: "cb" + Math.random().toString(36).slice(2, 8), name: nm, birthday: "", pref: "綺麗", memo: "", favoriteCastIds: [], visits: 0, lastVisitAt: null };
+    setCustomerBook(cb => [...cb, newCust]);
+    return newCust;
+  }
+  function addCustomer(tableId, arg) {
+    // arg: string (新規) | { customerBookId, name } (既存 or 新規)
+    let cbId, name, pref;
+    if (typeof arg === "string") {
+      const cust = ensureCustomerBookEntry(arg);
+      if (!cust) return;
+      cbId = cust.id; name = cust.name; pref = cust.pref || "綺麗";
+    } else if (arg?.customerBookId) {
+      const existing = customerBook.find(c => c.id === arg.customerBookId);
+      if (!existing) return;
+      cbId = existing.id; name = existing.name; pref = existing.pref || "綺麗";
+    } else {
+      const cust = ensureCustomerBookEntry(arg?.name);
+      if (!cust) return;
+      cbId = cust.id; name = cust.name; pref = cust.pref || "綺麗";
+    }
+    setCustomerBook(cb => cb.map(c => c.id === cbId ? { ...c, visits: (c.visits || 0) + 1, lastVisitAt: Date.now() } : c));
     const id = "cu" + Math.random().toString(36).slice(2, 7);
-    upd(tableId, t => ({ ...t, customers: [...t.customers, { id, name: name || "客", isBoss: t.customers.length === 0, pref: "綺麗" }], seats: [...t.seats, { k: "cust", id }] }));
+    upd(tableId, t => ({ ...t, customers: [...t.customers, { id, customerBookId: cbId, name, isBoss: t.customers.length === 0, pref }], seats: [...t.seats, { k: "cust", id }] }));
   }
   function removeCustomer(tableId, custId) {
     upd(tableId, t => ({ ...t, customers: t.customers.filter(c => c.id !== custId), casts: t.casts.filter(a => a.customerId !== custId), seats: t.seats.filter(s => s.id !== custId && !(s.k === "cast" && t.casts.find(a => a.castId === s.id)?.customerId === custId)) }));
@@ -315,14 +376,17 @@ export default function App() {
 
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter }} />}
-      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target }} />}
+      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
+      {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
-          castById, served, tableTotal, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
+          castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder,
+          castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
+          customerBook, bottleKeeps,
         }} />
       )}
 
@@ -350,7 +414,7 @@ export default function App() {
       )}
 
       <div style={{ background: "#0a0a0c", borderTop: "1px solid #1c1c22" }} className="fixed bottom-0 inset-x-0 z-30 flex">
-        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["sales", null, "売上"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => (
+        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["book", Users, "客名帳"], ["sales", null, "売上"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => (
           <button key={k} onClick={() => setView(k)} className="flex-1 py-2.5 flex flex-col items-center gap-1" style={{ color: view === k ? GOLD : "#5a5a62" }}>
             {Icon ? <Icon size={20} /> : <span className="text-lg leading-none font-bold">¥</span>}
             <span className="text-[10px]">{label}</span>
@@ -447,7 +511,9 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, castsInTable, customerBook, bottleKeeps } = p;
+  const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
+  const [bookPickOpen, setBookPickOpen] = useState(false);
   const cnameRef = useRef(null);
   const chLabelRef = useRef(null);
   const chPriceRef = useRef(null);
@@ -463,7 +529,7 @@ function Detail(p) {
     const l = (chLabelRef.current?.value || "").trim();
     const pr = (chPriceRef.current?.value || "").replace(/[^0-9]/g, "");
     if (!l || !pr) return;
-    addOrder(tableId, { label: l, price: +pr, kind: "champagne" });
+    setDrinkPick({ label: l, price: +pr, kind: "champagne" });
     if (chLabelRef.current) chLabelRef.current.value = "";
     if (chPriceRef.current) chPriceRef.current.value = "";
   };
@@ -543,8 +609,9 @@ function Detail(p) {
                 );
               })}
               <div className="flex gap-2">
-                <input ref={cnameRef} placeholder="お客様名" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitCustomer(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
-                <button onClick={submitCustomer} style={{ background: "#22222a", color: GOLD }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><UserPlus size={14} />追加</button>
+                <input ref={cnameRef} placeholder="お客様名（新規）" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitCustomer(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+                <button onClick={submitCustomer} style={{ background: "#22222a", color: GOLD }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><UserPlus size={14} />新規</button>
+                <button onClick={() => setBookPickOpen(true)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><Users size={14} />名帳</button>
               </div>
             </div>
           </Section>
@@ -566,8 +633,8 @@ function Detail(p) {
 
           <Section title="ドリンク・ボトル">
             <div className="flex gap-2 mb-2">
-              <button onClick={() => addOrder(tableId, { label: "ドリンク", price: 1500, kind: "drink" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ドリンク ¥1,500</button>
-              <button onClick={() => addOrder(tableId, { label: "ショット", price: 3000, kind: "shot" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ショット ¥3,000</button>
+              <button onClick={() => setDrinkPick({ label: "ドリンク", price: 1500, kind: "drink" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ドリンク ¥1,500</button>
+              <button onClick={() => setDrinkPick({ label: "ショット", price: 3000, kind: "shot" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ショット ¥3,000</button>
             </div>
             <div className="flex gap-2 mb-3">
               <input ref={chLabelRef} placeholder="シャンパン等" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-2 py-2 outline-none min-w-0" />
@@ -588,15 +655,128 @@ function Detail(p) {
             </div>
           </Section>
 
-          <div style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-4 flex items-center justify-between">
-            <div className="text-xs text-zinc-400">
-              <div>セット {yen(t.setType)} × {t.customers.length}名</div>
-              <div>飲食 {yen(t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</div>
+          <div style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-4">
+            <div className="text-xs text-zinc-400 mb-2 space-y-0.5">
+              <div className="flex justify-between"><span>セット {yen(t.setType)} × {t.customers.length}名</span><span>{yen(t.setType * t.customers.length)}</span></div>
+              <div className="flex justify-between"><span>飲食</span><span>{yen(t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</span></div>
             </div>
-            <div style={{ color: GOLD }} className="text-2xl font-bold">{yen(tableTotal(t))}</div>
+            <div className="border-t border-[#2a2a32] pt-2 space-y-1">
+              <div className="flex justify-between text-xs text-zinc-400"><span>小計</span><span>{yen(tableTotal(t))}</span></div>
+              <div className="flex justify-between text-xs text-zinc-500"><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-sm text-zinc-300 font-bold">合計（税込）</span>
+                <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tableGrand(t))}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
+
+      {drinkPick && (
+        <DrinkCastPicker
+          drink={drinkPick}
+          castsInTable={castsInTable}
+          onPick={(castId) => { addOrder(tableId, { ...drinkPick, castId }); setDrinkPick(null); }}
+          onFree={() => { addOrder(tableId, { ...drinkPick }); setDrinkPick(null); }}
+          onClose={() => setDrinkPick(null)}
+        />
+      )}
+
+      {bookPickOpen && (
+        <CustomerBookPicker
+          customerBook={customerBook}
+          bottleKeeps={bottleKeeps}
+          onPick={(cbId) => { addCustomer(tableId, { customerBookId: cbId }); setBookPickOpen(false); }}
+          onClose={() => setBookPickOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function daysToBirthday(md) {
+  if (!md) return null;
+  const now = new Date();
+  const [_, m, d] = /^(\d{4})?-?(\d{2})-(\d{2})$/.exec(md) || [null, null, null, null];
+  if (!m || !d) return null;
+  let target = new Date(now.getFullYear(), +m - 1, +d);
+  if (target < now) target = new Date(now.getFullYear() + 1, +m - 1, +d);
+  return Math.ceil((target - now) / 86400000);
+}
+
+function CustomerBookPicker({ customerBook, bottleKeeps, onPick, onClose }) {
+  const [q, setQ] = useState("");
+  const activeKeeps = (bottleKeeps || []).filter(k => k.status !== "empty" && k.status !== "disposed");
+  const keepCountByCust = activeKeeps.reduce((acc, k) => { acc[k.customerBookId] = (acc[k.customerBookId] || 0) + 1; return acc; }, {});
+  const filtered = (customerBook || [])
+    .filter(c => !q || c.name.includes(q))
+    .sort((a, b) => (b.lastVisitAt || 0) - (a.lastVisitAt || 0));
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">客名帳から選ぶ</h3>
+          <button onClick={onClose}><X size={20} color="#888" /></button>
+        </div>
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="名前で検索" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
+        {filtered.length === 0 ? (
+          <p className="text-center text-zinc-500 text-sm py-6">
+            {customerBook?.length ? "該当なし" : "客名帳がまだ空です。新規で追加すると自動で登録されます。"}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            {filtered.map(c => {
+              const days = daysToBirthday(c.birthday);
+              const nearBd = days !== null && days <= 30;
+              const last = c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "未来店";
+              return (
+                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: "#141418", border: `1px solid ${nearBd ? "#e0a84a" : "#22222a"}` }} className="rounded-xl p-3 text-left">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm">{c.name}</span>
+                      {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22222a", color: "#000" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
+                      {nearBd && <span style={{ color: "#e0a84a" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />誕生日 {days === 0 ? "本日" : `あと${days}日`}</span>}
+                      {keepCountByCust[c.id] > 0 && <span style={{ color: "#e8d29a", background: "rgba(201,166,78,.15)" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">🍾 キープ{keepCountByCust[c.id]}本</span>}
+                    </div>
+                    <span className="text-[10px] text-zinc-500">{c.visits || 0}回 / {last}</span>
+                  </div>
+                  {c.memo && <p className="text-[11px] text-zinc-500 mt-1 truncate">📝 {c.memo}</p>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DrinkCastPicker({ drink, castsInTable, onPick, onFree, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[70vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">
+            <span className="text-zinc-500">{drink.label} </span>
+            <span style={{ color: GOLD }}>{yen(drink.price)}</span>
+            <span className="text-zinc-500 text-xs"> を誰につける？</span>
+          </h3>
+          <button onClick={onClose}><X size={20} color="#888" /></button>
+        </div>
+        {castsInTable.length === 0 ? (
+          <p className="text-xs text-zinc-500 mb-3">この卓にはまだキャストが付いていません。「フリー」で追加します。</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {castsInTable.map(c => (
+              <button key={c.id} onClick={() => onPick(c.id)} style={{ background: "#141418", border: `1px solid ${TEAL}` }} className="rounded-xl p-3 text-left">
+                <div className="font-bold text-sm">{c.name}</div>
+                <div className="text-[10px] text-zinc-500">バック ¥{(drink.kind === "shot" ? c.shotBack : c.drinkBack) || 0}</div>
+              </button>
+            ))}
+          </div>
+        )}
+        <button onClick={onFree} style={{ background: "#22222a", color: "#aaa", border: "1px dashed #444" }} className="w-full rounded-lg py-2 text-xs font-bold">キャスト指定なし（フリー）で追加</button>
+      </div>
     </div>
   );
 }
@@ -798,7 +978,25 @@ function SalaryLine({ l, v, cut }) {
   );
 }
 
-function Sales({ ts, dispTable, tables, tableTotal, closed, target }) {
+function Sales({ ts, dispTable, tables, tableTotal, closed, target, taxRate, history }) {
+  const [tab, setTab] = useState("today");
+  return (
+    <div className="p-4">
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setTab("today")} style={{ background: tab === "today" ? GOLD : "#141418", color: tab === "today" ? "#000" : "#888", border: `1px solid ${tab === "today" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">今日</button>
+        <button onClick={() => setTab("history")} style={{ background: tab === "history" ? GOLD : "#141418", color: tab === "history" ? "#000" : "#888", border: `1px solid ${tab === "history" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">
+          <CalendarDays size={13} />履歴 {history?.length > 0 && <span className="text-[10px]">({history.length})</span>}
+        </button>
+      </div>
+      {tab === "today"
+        ? <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} closed={closed} target={target} taxRate={taxRate} />
+        : <SalesHistory history={history} />
+      }
+    </div>
+  );
+}
+
+function SalesToday({ ts, dispTable, tables, tableTotal, closed, target, taxRate }) {
   const rows = [
     ...Object.entries(ts).filter(([, t]) => t?.active).map(([id, t]) => {
       const ref = tables.find(x => x.id === id);
@@ -807,11 +1005,14 @@ function Sales({ ts, dispTable, tables, tableTotal, closed, target }) {
     ...closed.map(c => ({ ...c, live: false })),
   ].sort((a, b) => b.total - a.total);
   const total = rows.reduce((s, r) => s + r.total, 0);
+  const totalTax = Math.floor(total * (taxRate ?? 10) / 100);
+  const grand = total + totalTax;
   const pct = target > 0 ? Math.min(100, Math.round(total / target * 100)) : 0;
   return (
-    <div className="p-4">
+    <>
       <p className="text-xs text-zinc-500 mb-1">本日の売上 ・ {new Date().toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" })}</p>
-      <div style={{ background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }} className="text-5xl font-bold mb-4">{yen(total)}</div>
+      <div style={{ background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }} className="text-5xl font-bold">{yen(total)}</div>
+      <p className="text-xs text-zinc-500 mb-4">税込 {yen(grand)}（内税 {yen(totalTax)}）</p>
       <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">目標 {yen(target)}</span><span style={{ color: GOLD }} className="font-bold">{pct}%</span></div>
       <div style={{ background: "#1c1c22" }} className="h-2 rounded-full overflow-hidden mb-6">
         <div style={{ width: pct + "%", background: "linear-gradient(90deg,#f3e2a0,#c9a64e)" }} className="h-full" />
@@ -825,6 +1026,311 @@ function Sales({ ts, dispTable, tables, tableTotal, closed, target }) {
           </div>
         ))}
         {rows.length === 0 && <p className="text-center text-zinc-600 text-sm py-8">まだ売上がありません</p>}
+      </div>
+    </>
+  );
+}
+
+function SalesHistory({ history }) {
+  if (!history || history.length === 0) {
+    return (
+      <div className="text-center text-zinc-500 text-sm py-16">
+        まだ履歴がありません。<br />
+        <span className="text-[11px] text-zinc-600">営業リセット時に自動で記録されます。</span>
+      </div>
+    );
+  }
+  const monthly = history.reduce((acc, h) => {
+    const ym = h.businessDate.slice(0, 7);
+    if (!acc[ym]) acc[ym] = { subtotal: 0, grand: 0, days: 0, tableCount: 0 };
+    acc[ym].subtotal += h.subtotal || 0;
+    acc[ym].grand += h.grand || 0;
+    acc[ym].days += 1;
+    acc[ym].tableCount += h.tableCount || 0;
+    return acc;
+  }, {});
+  const months = Object.entries(monthly).sort((a, b) => b[0].localeCompare(a[0]));
+  return (
+    <>
+      {months.map(([ym, m]) => (
+        <div key={ym} className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <span style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-lg font-bold">{ym.replace("-", "年") + "月"}</span>
+            <div className="text-right">
+              <div style={{ color: GOLD }} className="text-sm font-bold">{yen(m.subtotal)}</div>
+              <div className="text-[10px] text-zinc-500">税込 {yen(m.grand)} / {m.days}日 / 卓 {m.tableCount}</div>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            {history.filter(h => h.businessDate.startsWith(ym)).map((h, i) => {
+              const d = new Date(h.businessDate + "T00:00:00");
+              const wd = ["日","月","火","水","木","金","土"][d.getDay()];
+              return (
+                <div key={i} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-lg px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">{h.businessDate.slice(5).replace("-", "/")}</span>
+                    <span className="text-[10px] text-zinc-500">({wd})</span>
+                    <span className="text-[10px] text-zinc-500">卓 {h.tableCount}</span>
+                  </div>
+                  <div className="text-right">
+                    <div style={{ color: GOLD }} className="text-sm font-bold">{yen(h.subtotal)}</div>
+                    <div className="text-[9px] text-zinc-500">税込 {yen(h.grand)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }) {
+  const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null); // customer object
+  const nameRef = useRef(null);
+  const sorted = useMemo(() => {
+    return [...(customerBook || [])].sort((a, b) => (b.lastVisitAt || 0) - (a.lastVisitAt || 0));
+  }, [customerBook]);
+  const filtered = sorted.filter(c => !q || c.name.includes(q) || (c.memo || "").includes(q));
+
+  const upcomingBd = sorted
+    .map(c => ({ c, days: daysToBirthday(c.birthday) }))
+    .filter(x => x.days !== null && x.days <= 30)
+    .sort((a, b) => a.days - b.days);
+
+  const activeKeeps = (bottleKeeps || []).filter(k => k.status !== "empty" && k.status !== "disposed");
+  const keepCountByCust = activeKeeps.reduce((acc, k) => { acc[k.customerBookId] = (acc[k.customerBookId] || 0) + 1; return acc; }, {});
+  const now = Date.now();
+  const expiringKeeps = activeKeeps
+    .filter(k => k.expiresAt && (k.expiresAt - now) <= 14 * 86400000)
+    .sort((a, b) => a.expiresAt - b.expiresAt);
+
+  function addNew() {
+    const v = (nameRef.current?.value || "").trim();
+    if (!v) return;
+    const newCust = { id: "cb" + Math.random().toString(36).slice(2, 8), name: v, birthday: "", pref: "綺麗", memo: "", favoriteCastIds: [], visits: 0, lastVisitAt: null };
+    setCustomerBook(cb => [...cb, newCust]);
+    if (nameRef.current) nameRef.current.value = "";
+    setEditing(newCust);
+  }
+
+  return (
+    <div className="p-4">
+      <h2 className="text-lg font-bold mb-1">客名帳</h2>
+      <p className="text-xs text-zinc-500 mb-3">お客様の好み・誕生日・注意事項を登録。卓の「名帳」ボタンから呼び出せます。</p>
+
+      {upcomingBd.length > 0 && (
+        <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #e0a84a" }} className="rounded-xl p-3 mb-3">
+          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#e0a84a" }}>
+            <Cake size={14} />誕生日が近い（30日以内）
+          </div>
+          <div className="space-y-1">
+            {upcomingBd.slice(0, 5).map(({ c, days }) => (
+              <div key={c.id} className="flex items-center justify-between text-xs">
+                <span className="font-bold">{c.name}</span>
+                <span style={{ color: "#e0a84a" }}>{days === 0 ? "本日🎉" : `あと ${days}日`}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {expiringKeeps.length > 0 && (
+        <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3 mb-4">
+          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#e08484" }}>
+            🍾 期限が近いキープ本（14日以内）
+          </div>
+          <div className="space-y-1">
+            {expiringKeeps.slice(0, 5).map(k => {
+              const cust = customerBook.find(x => x.id === k.customerBookId);
+              const daysLeft = Math.ceil((k.expiresAt - now) / 86400000);
+              return (
+                <div key={k.id} className="flex items-center justify-between text-xs">
+                  <span><span className="font-bold">{cust?.name || "?"}</span> <span className="text-zinc-500">/ {k.label}</span></span>
+                  <span style={{ color: daysLeft <= 0 ? "#ff6a6a" : "#e08484" }}>{daysLeft <= 0 ? "期限切れ" : `あと ${daysLeft}日`}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-3">
+        <input ref={nameRef} placeholder="新規お客様名" onKeyDown={e => { if (e.key === "Enter") addNew(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+        <button onClick={addNew} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
+      </div>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="検索（名前・メモ）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
+
+      <p className="text-xs text-zinc-500 mb-2">{filtered.length}名</p>
+      <div className="space-y-2">
+        {filtered.map(c => {
+          const days = daysToBirthday(c.birthday);
+          const nearBd = days !== null && days <= 30;
+          const last = c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "未来店";
+          return (
+            <button key={c.id} onClick={() => setEditing(c)} style={{ background: "#141418", border: `1px solid ${nearBd ? "#e0a84a" : "#22222a"}` }} className="w-full rounded-xl p-3 text-left">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sm">{c.name}</span>
+                  {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22222a", color: "#000" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
+                  {nearBd && <span style={{ color: "#e0a84a" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />{days === 0 ? "本日🎉" : `+${days}d`}</span>}
+                  {keepCountByCust[c.id] > 0 && <span style={{ color: "#e8d29a", background: "rgba(201,166,78,.15)" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">🍾 {keepCountByCust[c.id]}本</span>}
+                </div>
+                <span className="text-[10px] text-zinc-500">{c.visits || 0}回 / {last}</span>
+              </div>
+              {c.memo && <p className="text-[11px] text-zinc-500 truncate">📝 {c.memo}</p>}
+              {c.favoriteCastIds?.length > 0 && (
+                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  <span className="text-[10px] text-zinc-600">好き:</span>
+                  {c.favoriteCastIds.map(id => {
+                    const cast = casts.find(x => x.id === id);
+                    return cast && <span key={id} style={{ background: "rgba(63,182,176,.15)", color: TEAL }} className="text-[10px] rounded-full px-1.5 py-0.5">{cast.name}</span>;
+                  })}
+                </div>
+              )}
+            </button>
+          );
+        })}
+        {filtered.length === 0 && <p className="text-center text-zinc-500 text-sm py-8">客名帳が空です</p>}
+      </div>
+
+      {editing && (
+        <CustomerBookEditor
+          customer={editing}
+          casts={casts}
+          bottleKeeps={bottleKeeps}
+          setBottleKeeps={setBottleKeeps}
+          onSave={(next) => {
+            setCustomerBook(cb => cb.map(c => c.id === next.id ? next : c));
+            setEditing(null);
+          }}
+          onDelete={() => {
+            if (confirm(`${editing.name} を客名帳から削除しますか？（キープ本も一緒に削除されます）`)) {
+              setCustomerBook(cb => cb.filter(c => c.id !== editing.id));
+              setBottleKeeps(bk => bk.filter(k => k.customerBookId !== editing.id));
+              setEditing(null);
+            }
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSave, onDelete, onClose }) {
+  const [c, setC] = useState(customer);
+  const [newBottle, setNewBottle] = useState({ label: "", days: 90 });
+  const toggleFav = (id) => setC(x => ({ ...x, favoriteCastIds: (x.favoriteCastIds || []).includes(id) ? x.favoriteCastIds.filter(y => y !== id) : [...(x.favoriteCastIds || []), id] }));
+
+  const myKeeps = (bottleKeeps || []).filter(k => k.customerBookId === customer.id).sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0));
+  const now = Date.now();
+
+  function addBottle() {
+    const label = newBottle.label.trim();
+    if (!label) return;
+    const days = Math.max(1, +newBottle.days || 90);
+    const openedAt = Date.now();
+    const expiresAt = openedAt + days * 86400000;
+    const k = { id: "bk" + Math.random().toString(36).slice(2, 8), customerBookId: customer.id, label, openedAt, expiresAt, memo: "", status: "active" };
+    setBottleKeeps(bks => [k, ...bks]);
+    setNewBottle({ label: "", days: 90 });
+  }
+  function markEmpty(id) {
+    setBottleKeeps(bks => bks.map(k => k.id === id ? { ...k, status: "empty" } : k));
+  }
+  function removeBottle(id) {
+    if (!confirm("このキープ本を削除しますか？")) return;
+    setBottleKeeps(bks => bks.filter(k => k.id !== id));
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-xl font-bold">お客様情報</h3>
+          <button onClick={onClose}><X size={20} color="#888" /></button>
+        </div>
+        <div className="space-y-3">
+          <label className="block">
+            <div className="text-[10px] text-zinc-500 mb-1">名前</div>
+            <input value={c.name} onChange={e => setC(x => ({ ...x, name: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
+          </label>
+          <label className="block">
+            <div className="text-[10px] text-zinc-500 mb-1">誕生日 (YYYY-MM-DD or MM-DD)</div>
+            <input value={c.birthday || ""} onChange={e => setC(x => ({ ...x, birthday: e.target.value }))} placeholder="例: 1990-05-14 or --05-14" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
+          </label>
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">好み</div>
+            <div className="flex gap-1.5">
+              {GENRES.map(g => (
+                <button key={g} onClick={() => setC(x => ({ ...x, pref: g }))} style={{ background: c.pref === g ? GENRE_COLOR[g] : "#1c1c22", color: c.pref === g ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{g}</button>
+              ))}
+            </div>
+          </div>
+          <label className="block">
+            <div className="text-[10px] text-zinc-500 mb-1">注意事項・メモ</div>
+            <textarea value={c.memo || ""} onChange={e => setC(x => ({ ...x, memo: e.target.value }))} rows={3} placeholder="例: シャンパン強め、○○さんNG、深酒注意" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="w-full rounded px-3 py-2 outline-none" />
+          </label>
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">お気に入りキャスト（複数可）</div>
+            <div className="flex flex-wrap gap-1.5">
+              {casts.map(cast => {
+                const on = (c.favoriteCastIds || []).includes(cast.id);
+                return (
+                  <button key={cast.id} onClick={() => toggleFav(cast.id)} style={{ background: on ? "rgba(63,182,176,.2)" : "#1c1c22", border: `1px solid ${on ? TEAL : "#2a2a32"}`, color: on ? TEAL : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{cast.name}</button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="text-[10px] text-zinc-500">
+            来店回数 {c.visits || 0}回 / 最終来店 {c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : "未来店"}
+          </div>
+
+          <div className="pt-3 border-t border-[#22222a]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-bold" style={{ color: "#e8d29a" }}>🍾 ボトルキープ ({myKeeps.filter(k => k.status !== "empty" && k.status !== "disposed").length}本 有効)</div>
+            </div>
+            <div className="space-y-1.5 mb-2">
+              {myKeeps.map(k => {
+                const daysLeft = k.expiresAt ? Math.ceil((k.expiresAt - now) / 86400000) : null;
+                const expired = daysLeft !== null && daysLeft <= 0;
+                const soon = daysLeft !== null && daysLeft > 0 && daysLeft <= 14;
+                const inactive = k.status === "empty" || k.status === "disposed";
+                return (
+                  <div key={k.id} style={{ background: "#0d0d10", border: `1px solid ${inactive ? "#2a2a32" : expired ? "#a15050" : soon ? "#e0a84a" : "#22222a"}`, opacity: inactive ? 0.5 : 1 }} className="rounded-lg p-2 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold truncate">{k.label} {inactive && <span className="text-[10px] text-zinc-500">({k.status === "empty" ? "空" : "廃棄"})</span>}</div>
+                      <div className="text-[10px] text-zinc-500">
+                        入 {new Date(k.openedAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
+                        {daysLeft !== null && !inactive && (
+                          <> ・ 期限 {new Date(k.expiresAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
+                            <span style={{ color: expired ? "#ff6a6a" : soon ? "#e0a84a" : "#666" }}> ({expired ? "切れ" : `+${daysLeft}d`})</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {!inactive && <button onClick={() => markEmpty(k.id)} style={{ background: "#22222a", color: "#aaa" }} className="text-[10px] rounded px-2 py-1 font-bold">空</button>}
+                    <button onClick={() => removeBottle(k.id)}><Trash2 size={12} color="#555" /></button>
+                  </div>
+                );
+              })}
+              {myKeeps.length === 0 && <p className="text-[11px] text-zinc-500 py-1">キープ本はありません</p>}
+            </div>
+            <div className="flex gap-2 items-center">
+              <input value={newBottle.label} onChange={e => setNewBottle(x => ({ ...x, label: e.target.value }))} placeholder="ボトル名（例: ドンペリ白）" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
+              <input type="number" value={newBottle.days} onChange={e => setNewBottle(x => ({ ...x, days: e.target.value }))} min="1" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="w-14 rounded px-2 py-1.5 outline-none" />
+              <span className="text-[10px] text-zinc-500">日</span>
+              <button onClick={addBottle} style={{ background: GOLD, color: "#000" }} className="px-2.5 rounded text-xs font-bold py-1.5">＋</button>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onDelete} style={{ background: "#3a1010", border: "1px solid #7a2222", color: "#ff8888" }} className="px-3 py-2 rounded-lg text-xs font-bold">削除</button>
+          <button onClick={onClose} style={{ background: "#22222a", color: "#aaa" }} className="flex-1 py-2 rounded-lg text-sm">キャンセル</button>
+          <button onClick={() => onSave(c)} style={{ background: GOLD, color: "#000" }} className="flex-1 py-2 rounded-lg text-sm font-bold">保存</button>
+        </div>
       </div>
     </div>
   );
