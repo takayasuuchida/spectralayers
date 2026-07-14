@@ -72,7 +72,7 @@ function TableCard({ table, session, onOpen, onStart }) {
 }
 
 // 空き卓 → セッション開始ダイアログ
-function StartDialog({ table, storeId, onClose, onStarted }) {
+function StartDialog({ table, storeId, staffId, onClose, onStarted }) {
   const [minutes, setMinutes] = useState(60);
   const [fee, setFee] = useState(4000);
   const [head, setHead] = useState(1);
@@ -91,6 +91,7 @@ function StartDialog({ table, storeId, onClose, onStarted }) {
       set_fee_yen: fee,
       head_count: head,
       status: "active",
+      created_by: staffId || null,
     });
     setBusy(false);
     if (error) {
@@ -278,6 +279,7 @@ export default function FloorTab({ ctx }) {
         <StartDialog
           table={starting}
           storeId={storeId}
+          staffId={staffId}
           onClose={() => setStarting(null)}
           onStarted={() => {
             setStarting(null);
