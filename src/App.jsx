@@ -514,6 +514,15 @@ function Detail(p) {
   const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, castsInTable, customerBook, bottleKeeps } = p;
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
+  // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
+  const favCastIds = useMemo(() => {
+    const s = new Set();
+    (t?.customers || []).forEach(cu => {
+      const cb = (customerBook || []).find(x => x.id === cu.customerBookId);
+      (cb?.favoriteCastIds || []).forEach(id => s.add(id));
+    });
+    return s;
+  }, [t?.customers, customerBook]);
   const cnameRef = useRef(null);
   const chLabelRef = useRef(null);
   const chPriceRef = useRef(null);
@@ -676,6 +685,7 @@ function Detail(p) {
         <DrinkCastPicker
           drink={drinkPick}
           castsInTable={castsInTable}
+          favCastIds={favCastIds}
           onPick={(castId) => { addOrder(tableId, { ...drinkPick, castId }); setDrinkPick(null); }}
           onFree={() => { addOrder(tableId, { ...drinkPick }); setDrinkPick(null); }}
           onClose={() => setDrinkPick(null)}
@@ -751,7 +761,10 @@ function CustomerBookPicker({ customerBook, bottleKeeps, onPick, onClose }) {
   );
 }
 
-function DrinkCastPicker({ drink, castsInTable, onPick, onFree, onClose }) {
+function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onClose }) {
+  const fav = favCastIds || new Set();
+  // お気に入りキャストを先頭に（同グループ内は元の並び順を維持）
+  const sorted = [...castsInTable].sort((a, b) => (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0));
   return (
     <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[70vh] overflow-y-auto">
@@ -763,16 +776,22 @@ function DrinkCastPicker({ drink, castsInTable, onPick, onFree, onClose }) {
           </h3>
           <button onClick={onClose}><X size={20} color="#888" /></button>
         </div>
-        {castsInTable.length === 0 ? (
+        {sorted.length === 0 ? (
           <p className="text-xs text-zinc-500 mb-3">この卓にはまだキャストが付いていません。「フリー」で追加します。</p>
         ) : (
           <div className="grid grid-cols-2 gap-2 mb-3">
-            {castsInTable.map(c => (
-              <button key={c.id} onClick={() => onPick(c.id)} style={{ background: "#141418", border: `1px solid ${TEAL}` }} className="rounded-xl p-3 text-left">
-                <div className="font-bold text-sm">{c.name}</div>
-                <div className="text-[10px] text-zinc-500">バック ¥{(drink.kind === "shot" ? c.shotBack : c.drinkBack) || 0}</div>
-              </button>
-            ))}
+            {sorted.map(c => {
+              const isFav = fav.has(c.id);
+              return (
+                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: isFav ? "rgba(201,166,78,.1)" : "#141418", border: `1px solid ${isFav ? GOLD : TEAL}` }} className="rounded-xl p-3 text-left">
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-sm">{c.name}</span>
+                    {isFav && <span style={{ color: GOLD }} className="text-[10px] font-bold">⭐ お気に入り</span>}
+                  </div>
+                  <div className="text-[10px] text-zinc-500">バック ¥{(drink.kind === "shot" ? c.shotBack : c.drinkBack) || 0}</div>
+                </button>
+              );
+            })}
           </div>
         )}
         <button onClick={onFree} style={{ background: "#22222a", color: "#aaa", border: "1px dashed #444" }} className="w-full rounded-lg py-2 text-xs font-bold">キャスト指定なし（フリー）で追加</button>
