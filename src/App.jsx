@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.3.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.4.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
 const URL_STORE = (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("store")) || "viverce";
 const STORE_KEY = URL_STORE + "-v1";
-const GENRES = ["綺麗", "可愛い", "おもしろい"];
-const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a" };
+const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
+const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
 
 const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10 };
 const DEFAULT_CAST_PAY = {
@@ -251,14 +251,34 @@ export default function App() {
   const tableTax = (t) => Math.floor(tableTotal(t) * taxRate);
   const tableGrand = (t) => tableTotal(t) + tableTax(t);
 
-  // ---- 付け回しロジック ----
+  // ---- 付け回しロジック（公平ドラフト方式） ----
+  // 客がこれまで受けた「質」= 付いたキャスト（現在含む）の最高ランク。
+  // まだいい子が付いてない客から順に、その時点の最良を配る。
+  // → ボスに上位が集中せず、3名様なら3人に1回ずついい子が回る。
+  const qualityReceived = (custId) =>
+    Math.max(0, ...((served[custId] || []).map(id => castById[id]?.score || 0)));
+
+  function fairDraft(targetCustomers, pool) {
+    const order = [...targetCustomers].sort((a, b) =>
+      qualityReceived(a.id) - qualityReceived(b.id) ||
+      (b.isBoss ? 1 : 0) - (a.isBoss ? 1 : 0));
+    let avail = [...pool];
+    const plan = [];
+    for (const cust of order) {
+      const cand = avail.filter(c => !(served[cust.id] || []).includes(c.id));
+      if (!cand.length) continue;
+      const matched = cand.filter(c => cust.pref && c.genres.includes(cust.pref));
+      const base = matched.length ? matched : cand;
+      const pick = [...base].sort((a, b) => b.score - a.score)[0];
+      plan.push([cust.id, pick.id]);
+      avail = avail.filter(c => c.id !== pick.id);
+    }
+    return plan;
+  }
+
   function suggest(t, cust) {
-    let pool = available.filter(c => !(served[cust.id] || []).includes(c.id));
-    if (!pool.length) return null;
-    if (cust.isBoss) { pool = [...pool].sort((a, b) => b.score - a.score || (b.genres.includes(cust.pref) ? 1 : 0) - (a.genres.includes(cust.pref) ? 1 : 0)); return pool[0]; }
-    const matched = pool.filter(c => cust.pref && c.genres.includes(cust.pref));
-    const base = matched.length ? matched : pool;
-    return [...base].sort((a, b) => b.score - a.score)[0];
+    const plan = fairDraft([cust], available);
+    return plan.length ? castById[plan[0][1]] : null;
   }
   function doAssign(tableId, castId, customerId) {
     upd(tableId, t => {
@@ -284,15 +304,8 @@ export default function App() {
   function autoTable(tableId) {
     const t = ts[tableId];
     const assigned = new Set(t.casts.map(a => a.customerId));
-    let pool = available.slice();
-    const ops = [];
-    t.customers.forEach(cust => {
-      if (assigned.has(cust.id)) return;
-      let cand = pool.filter(c => !(served[cust.id] || []).includes(c.id));
-      if (cust.isBoss) cand.sort((a, b) => b.score - a.score);
-      else { const m = cand.filter(c => cust.pref && c.genres.includes(cust.pref)); cand = (m.length ? m : cand).sort((a, b) => b.score - a.score); }
-      if (cand[0]) { ops.push([cust.id, cand[0].id]); pool = pool.filter(c => c.id !== cand[0].id); }
-    });
+    const targets = t.customers.filter(cust => !assigned.has(cust.id));
+    const ops = fairDraft(targets, available);
     if (!ops.length) { setModal({ type: "ng", msg: "全員アサイン済み、または空き不足です。" }); return; }
     ops.forEach(([cu, ca]) => doAssign(tableId, ca, cu));
   }
@@ -388,9 +401,12 @@ export default function App() {
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
-          autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder,
+          autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps,
+          nextPlan: ts[sel]?.active
+            ? Object.fromEntries(fairDraft(ts[sel].customers, available))
+            : {},
         }} />
       )}
 
@@ -515,7 +531,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, castsInTable, customerBook, bottleKeeps } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, nextPlan } = p;
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
   // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
@@ -592,7 +608,11 @@ function Detail(p) {
           <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#000" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
             <div className="space-y-2">
               {t.customers.map(cust => {
-                const myCasts = t.casts.filter(a => a.customerId === cust.id).map(a => castById[a.castId]);
+                const myCasts = t.casts.filter(a => a.customerId === cust.id).map(a => castById[a.castId]).filter(Boolean);
+                const pastCasts = (served[cust.id] || [])
+                  .filter(id => !myCasts.some(c => c.id === id))
+                  .map(id => castById[id]).filter(Boolean);
+                const nextCast = nextPlan?.[cust.id] ? castById[nextPlan[cust.id]] : null;
                 return (
                   <div key={cust.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -612,12 +632,24 @@ function Detail(p) {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {myCasts.map(c => (
                         <span key={c.id} style={{ background: "rgba(63,182,176,.15)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-                          {c.name}<button onClick={() => removeCast(tableId, c.id)}><X size={11} /></button>
+                          今 {c.name}<button onClick={() => removeCast(tableId, c.id)}><X size={11} /></button>
                         </span>
                       ))}
-                      <button onClick={() => autoCustomer(tableId, cust)} style={{ border: `1px dashed ${GOLD}`, color: GOLD }} className="text-[11px] rounded-full px-2 py-0.5 flex items-center gap-1"><Wand2 size={11} />おすすめ</button>
+                      {nextCast && (
+                        <button onClick={() => tryAssign(tableId, nextCast.id, cust.id)} style={{ background: "rgba(201,166,78,.08)", border: `1px dashed ${GOLD}`, color: GOLD }} className="text-[11px] rounded-full px-2 py-0.5 font-bold flex items-center gap-1">
+                          <Wand2 size={11} />次▶ {nextCast.name}
+                        </button>
+                      )}
                       <button onClick={() => setPick({ tableId, customerId: cust.id })} style={{ border: "1px dashed #444", color: "#999" }} className="text-[11px] rounded-full px-2 py-0.5 flex items-center gap-1"><Plus size={11} />指名</button>
                     </div>
+                    {pastCasts.length > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                        <span className="text-[9px] text-zinc-600">済:</span>
+                        {pastCasts.map(c => (
+                          <span key={c.id} style={{ background: "#1a1a20", border: "1px solid #2a2a32", color: "#777" }} className="text-[10px] rounded-full px-1.5 py-0.5">{c.name}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -819,13 +851,23 @@ function Section({ title, right, children }) {
 function CastPicker({ pick, close, available, tableCasts, served, castById, casts, tryAssign, cust }) {
   const inTable = new Set(tableCasts.map(a => a.castId));
   const list = casts.filter(c => c.status === "出勤" && (available.find(a => a.id === c.id) || inTable.has(c.id)));
+  const nowNames = tableCasts.filter(a => a.customerId === cust?.id).map(a => castById[a.castId]?.name).filter(Boolean);
+  const pastNames = (served[cust?.id] || [])
+    .filter(id => !tableCasts.some(a => a.customerId === cust?.id && a.castId === id))
+    .map(id => castById[id]?.name).filter(Boolean);
   return (
     <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={close}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-bold">{cust?.name}さんに付ける（好み: <span style={{ color: GENRE_COLOR[cust?.pref] }}>{cust?.pref}</span>）</h3>
           <button onClick={close}><X size={20} color="#888" /></button>
         </div>
+        {(nowNames.length > 0 || pastNames.length > 0) && (
+          <p className="text-[11px] mb-1">
+            {nowNames.length > 0 && <span style={{ color: "#a8e6e2" }}>今: {nowNames.join("・")}　</span>}
+            {pastNames.length > 0 && <span className="text-zinc-500">済: {pastNames.join("・")}</span>}
+          </p>
+        )}
         <p className="text-[10px] text-zinc-600 mb-3">※ ランクは非表示。ジャンル一致を上に表示。</p>
         <div className="grid grid-cols-2 gap-2">
           {list.sort((a, b) => (b.genres.includes(cust?.pref) ? 1 : 0) - (a.genres.includes(cust?.pref) ? 1 : 0)).map(c => {
