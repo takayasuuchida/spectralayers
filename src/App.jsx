@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.4.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.4.2"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -301,11 +301,21 @@ export default function App() {
     if (!s) { setModal({ type: "ng", msg: `空きキャストが足りません（${cust.name}さんに付けられる子がいない）。` }); return; }
     doAssign(tableId, s.id, cust.id);
   }
+  // 卓のドラフト計画（2段方式）:
+  //   1段目 = 未アサイン客（「卓を自動付け回し」が実行するのはここだけ）
+  //   2段目 = アサイン済み客の次ローテ候補（1段目で使わなかった残りプールから）
+  // 次▶チップ表示と自動付け回しの実行結果が常に一致する。
+  function draftPlan(t, pool) {
+    const assigned = new Set(t.casts.map(a => a.customerId));
+    const nowStage = fairDraft(t.customers.filter(c => !assigned.has(c.id)), pool);
+    const used = new Set(nowStage.map(([, castId]) => castId));
+    const nextStage = fairDraft(t.customers.filter(c => assigned.has(c.id)), pool.filter(c => !used.has(c.id)));
+    return { nowStage, all: [...nowStage, ...nextStage] };
+  }
+
   function autoTable(tableId) {
     const t = ts[tableId];
-    const assigned = new Set(t.casts.map(a => a.customerId));
-    const targets = t.customers.filter(cust => !assigned.has(cust.id));
-    const ops = fairDraft(targets, available);
+    const ops = draftPlan(t, available).nowStage;
     if (!ops.length) { setModal({ type: "ng", msg: "全員アサイン済み、または空き不足です。" }); return; }
     ops.forEach(([cu, ca]) => doAssign(tableId, ca, cu));
   }
@@ -405,7 +415,7 @@ export default function App() {
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps,
           nextPlan: ts[sel]?.active
-            ? Object.fromEntries(fairDraft(ts[sel].customers, available))
+            ? Object.fromEntries(draftPlan(ts[sel], available).all)
             : {},
         }} />
       )}
@@ -635,7 +645,7 @@ function Detail(p) {
                       </button>
                       <button onClick={() => removeCustomer(tableId, cust.id)}><Trash2 size={14} color="#555" /></button>
                     </div>
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                       <span className="text-[10px] text-zinc-500">好み</span>
                       {GENRES.map(g => (
                         <button key={g} onClick={() => setPref(tableId, cust.id, g)} style={{ background: cust.pref === g ? GENRE_COLOR[g] : "#1c1c22", color: cust.pref === g ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
@@ -915,7 +925,7 @@ function CastPicker({ pick, close, available, tableCasts, served, castById, cast
                   {ng && <span style={{ color: "#e05555" }} className="text-[9px] font-bold">NG重複</span>}
                   {!ng && here && <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">在卓⚠</span>}
                 </div>
-                <div className="flex gap-1 mt-1">
+                <div className="flex gap-1 mt-1 flex-wrap">
                   {c.genres.map(g => <span key={g} style={{ color: GENRE_COLOR[g], border: `1px solid ${GENRE_COLOR[g]}` }} className="text-[9px] rounded px-1">{g}</span>)}
                 </div>
               </button>
@@ -1361,7 +1371,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSa
           </label>
           <div>
             <div className="text-[10px] text-zinc-500 mb-1">好み</div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {GENRES.map(g => (
                 <button key={g} onClick={() => setC(x => ({ ...x, pref: g }))} style={{ background: c.pref === g ? GENRE_COLOR[g] : "#1c1c22", color: c.pref === g ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{g}</button>
               ))}
@@ -1681,7 +1691,7 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre }) {
         <input type="range" min="1" max="10" value={c.score} onChange={e => upd(c.id, x => ({ ...x, score: +e.target.value }))} className="flex-1" style={{ accentColor: GOLD }} />
         <span style={{ color: GOLD }} className="text-sm font-bold w-6 text-center">{c.score}</span>
       </div>
-      <div className="flex items-center gap-1.5 mb-2">
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">ジャンル</span>
         {GENRES.map(g => (
           <button key={g} onClick={() => toggleGenre(c.id, g)} style={{ background: c.genres.includes(g) ? GENRE_COLOR[g] : "#1c1c22", color: c.genres.includes(g) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
