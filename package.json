@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:standalone": "vite build --config vite.config.standalone.js",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "sharp": "^0.35.3",
     "tailwindcss": "^3.4.4",
     "vite": "^5.3.1",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

@@ -370,3 +370,4 @@ package-lock.json.bak
 .env.local
 .env.*.local
 
+dist-standalone/
