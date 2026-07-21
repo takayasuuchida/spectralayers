@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.2.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.3.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -382,7 +382,7 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
@@ -1359,13 +1359,17 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSa
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [tblEdit, setTblEdit] = useState(null); // {id, label, cap}
   const [mergeEdit, setMergeEdit] = useState(null); // {key, tableIds:[]}
+  const [confirmDelTbl, setConfirmDelTbl] = useState(null); // 2度押し削除用: 卓id
+  const [confirmDelGrp, setConfirmDelGrp] = useState(null); // 2度押し削除用: グループkey
+  const [tblMsg, setTblMsg] = useState(null);
+  const [mergeErr, setMergeErr] = useState(null);
 
   const upd = (id, fn) => setCasts(cs => cs.map(c => c.id === id ? fn(c) : c));
   const toggleGenre = (id, g) => upd(id, c => ({ ...c, genres: c.genres.includes(g) ? c.genres.filter(x => x !== g) : [...c.genres, g] }));
@@ -1391,8 +1395,9 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
     setTblEdit(null);
   };
   const delTable = (id) => {
-    if (!confirm("この卓を削除しますか？結合設定からも外れます。")) return;
-    setTables(ts => ts.filter(t => t.id !== id));
+    if (ts?.[id]?.active) { setTblMsg("この卓は接客中です。会計してから削除してください。"); setConfirmDelTbl(null); return; }
+    if (confirmDelTbl !== id) { setConfirmDelTbl(id); return; } // 1回目は確認待ち
+    setTables(list => list.filter(t => t.id !== id));
     setMergeGroups(mg => {
       const next = {};
       Object.entries(mg).forEach(([k, arr]) => {
@@ -1401,7 +1406,14 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
       });
       return next;
     });
+    setConfirmDelTbl(null);
   };
+  const moveTable = (id, dir) => setTables(list => {
+    const i = list.findIndex(t => t.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return list;
+    const a = [...list]; [a[i], a[j]] = [a[j], a[i]]; return a;
+  });
 
   const addMergeGroup = () => {
     const keys = Object.keys(mergeGroups);
@@ -1410,13 +1422,15 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
   };
   const saveMergeEdit = () => {
     if (!mergeEdit) return;
-    if (mergeEdit.tableIds.length < 2) { alert("2つ以上の卓を選択してください"); return; }
+    if (mergeEdit.tableIds.length < 2) { setMergeErr("2つ以上の卓を選択してください"); return; }
     setMergeGroups(mg => ({ ...mg, [mergeEdit.key]: mergeEdit.tableIds }));
     setMergeEdit(null);
+    setMergeErr(null);
   };
   const delMergeGroup = (k) => {
-    if (!confirm(`結合グループ ${k} を削除しますか？`)) return;
+    if (confirmDelGrp !== k) { setConfirmDelGrp(k); return; } // 1回目は確認待ち
     setMergeGroups(mg => { const n = { ...mg }; delete n[k]; return n; });
+    setConfirmDelGrp(null);
   };
 
   return (
@@ -1438,57 +1452,43 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold">卓レイアウト</h2>
-          <button onClick={() => {
-            if (settings.layoutLocked) {
-              if (confirm("卓レイアウトのロックを解除しますか？\n（誤操作防止のため、通常はロックしたままご使用ください）")) {
-                setSettings(s => ({ ...s, layoutLocked: false }));
-              }
-            } else {
-              setSettings(s => ({ ...s, layoutLocked: true }));
-              setTblEdit(null);
-              setMergeEdit(null);
-            }
-          }} style={{ background: settings.layoutLocked ? "rgba(63,182,176,.15)" : "rgba(224,168,74,.15)", border: `1px solid ${settings.layoutLocked ? TEAL : "#e0a84a"}`, color: settings.layoutLocked ? TEAL : "#e0a84a" }} className="text-[11px] rounded-full px-3 py-1 font-bold">
-            {settings.layoutLocked ? "🔒 ロック中" : "🔓 編集モード"}
-          </button>
-        </div>
-        <p className="text-xs text-zinc-500 mb-3">
-          {settings.layoutLocked
-            ? "レイアウトは固定されています。変更するには右上の 🔒 をタップして解除してください。"
-            : "⚠️ 編集モード：卓番号・定員・削除が可能。作業が終わったら再度ロックしてください。"}
-        </p>
-        {!settings.layoutLocked && (
-          <div className="flex gap-2 mb-3">
-            <input ref={tblLabelRef} placeholder="卓名（例: 卓13, VIP2）" onKeyDown={e => { if (e.key === "Enter") addTable(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
-            <input ref={tblCapRef} type="number" defaultValue="2" min="1" placeholder="定員" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
-            <button onClick={addTable} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
-          </div>
+        <h2 className="text-lg font-bold mb-1">卓の編集</h2>
+        <p className="text-xs text-zinc-500 mb-3">卓の名前・定員（何人入るか）・並び順・追加・削除。すべて自動保存。接客中の卓は削除できません。</p>
+        {tblMsg && (
+          <button onClick={() => setTblMsg(null)} className="w-full text-left mb-2 text-xs rounded-lg p-2" style={{ color: "#e0a84a", background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }}>{tblMsg}（タップで閉じる）</button>
         )}
+        <div className="flex gap-2 mb-3">
+          <input ref={tblLabelRef} placeholder="卓名（例: 卓13, VIP2）" onKeyDown={e => { if (e.key === "Enter") addTable(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+          <input ref={tblCapRef} type="number" defaultValue="2" min="1" placeholder="定員" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+          <button onClick={addTable} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
+        </div>
         <div className="space-y-2">
-          {tables.map(t => (
-            <div key={t.id} style={{ background: "#141418", border: "1px solid #22222a", opacity: settings.layoutLocked ? 0.75 : 1 }} className="rounded-xl p-3">
-              {!settings.layoutLocked && tblEdit?.id === t.id ? (
+          {tables.map((t, idx) => (
+            <div key={t.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
+              {tblEdit?.id === t.id ? (
                 <div className="flex items-center gap-2">
-                  <input value={tblEdit.label} onChange={e => setTblEdit(x => ({ ...x, label: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
-                  <input type="number" value={tblEdit.cap} onChange={e => setTblEdit(x => ({ ...x, cap: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded px-2 py-1.5 outline-none" />
+                  <input value={tblEdit.label} onChange={e => setTblEdit(x => ({ ...x, label: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
+                  <input type="number" value={tblEdit.cap} onChange={e => setTblEdit(x => ({ ...x, cap: e.target.value }))} min="1" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded px-2 py-1.5 outline-none" />
                   <button onClick={saveTblEdit} style={{ background: GOLD, color: "#000" }} className="px-3 py-1.5 rounded text-xs font-bold">保存</button>
-                  <button onClick={() => setTblEdit(null)} className="text-xs text-zinc-500">×</button>
+                  <button onClick={() => setTblEdit(null)} className="text-xs text-zinc-500 px-1">×</button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-lg font-bold">{t.label}</span>
-                    <span className="text-xs text-zinc-500">定員 {t.cap}名</span>
-                    {settings.layoutLocked && <span className="text-[10px] text-zinc-600">🔒</span>}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-lg font-bold whitespace-nowrap">{t.label}</span>
+                    <span className="text-xs text-zinc-500 whitespace-nowrap">定員 {t.cap}名</span>
+                    {ts?.[t.id]?.active && <span style={{ color: GOLD }} className="text-[10px] font-bold whitespace-nowrap">接客中</span>}
                   </div>
-                  {!settings.layoutLocked && (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setTblEdit({ id: t.id, label: t.label, cap: t.cap })} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">編集</button>
-                      <button onClick={() => delTable(t.id)}><Trash2 size={14} color="#555" /></button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => moveTable(t.id, -1)} disabled={idx === 0} style={{ background: "#1c1c22", color: idx === 0 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↑</button>
+                    <button onClick={() => moveTable(t.id, 1)} disabled={idx === tables.length - 1} style={{ background: "#1c1c22", color: idx === tables.length - 1 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↓</button>
+                    <button onClick={() => { setConfirmDelTbl(null); setTblEdit({ id: t.id, label: t.label, cap: t.cap }); }} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold">編集</button>
+                    {confirmDelTbl === t.id ? (
+                      <button onClick={() => delTable(t.id)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">削除確定</button>
+                    ) : (
+                      <button onClick={() => delTable(t.id)} className="p-1.5"><Trash2 size={14} color="#555" /></button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1498,34 +1498,29 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
 
       <div>
         <h2 className="text-lg font-bold mb-1">卓結合グループ</h2>
-        <p className="text-xs text-zinc-500 mb-3">
-          {settings.layoutLocked
-            ? "編集にはロック解除が必要です（上の卓レイアウトの 🔒 を解除）。"
-            : "2卓以上をまとめて1つの卓として扱えるようにする設定。"}
-        </p>
+        <p className="text-xs text-zinc-500 mb-3">2卓以上をまとめて1つの卓として扱えるようにする設定。</p>
         <div className="space-y-2 mb-3">
           {Object.entries(mergeGroups).map(([k, arr]) => {
             const labels = arr.map(id => tables.find(t => t.id === id)?.label || "?").join(" + ");
             return (
-              <div key={k} style={{ background: "#141418", border: "1px solid #22222a", opacity: settings.layoutLocked ? 0.75 : 1 }} className="rounded-xl p-3 flex items-center justify-between">
+              <div key={k} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <span style={{ color: GOLD }} className="text-sm font-bold mr-2">グループ {k}</span>
                   <span className="text-xs text-zinc-400">{labels}</span>
                 </div>
-                {!settings.layoutLocked && (
-                  <div className="flex gap-2">
-                    <button onClick={() => setMergeEdit({ key: k, tableIds: [...arr], isNew: false })} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">編集</button>
-                    <button onClick={() => delMergeGroup(k)}><Trash2 size={14} color="#555" /></button>
-                  </div>
-                )}
-                {settings.layoutLocked && <span className="text-[10px] text-zinc-600">🔒</span>}
+                <div className="flex gap-2 items-center">
+                  <button onClick={() => { setConfirmDelGrp(null); setMergeEdit({ key: k, tableIds: [...arr], isNew: false }); }} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">編集</button>
+                  {confirmDelGrp === k ? (
+                    <button onClick={() => delMergeGroup(k)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1 font-bold whitespace-nowrap">削除確定</button>
+                  ) : (
+                    <button onClick={() => delMergeGroup(k)} className="p-1"><Trash2 size={14} color="#555" /></button>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-        {!settings.layoutLocked && (
-          <button onClick={addMergeGroup} style={{ background: "#22222a", color: GOLD }} className="w-full rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1"><Plus size={12} />結合グループを追加</button>
-        )}
+        <button onClick={addMergeGroup} style={{ background: "#22222a", color: GOLD }} className="w-full rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1"><Plus size={12} />結合グループを追加</button>
       </div>
 
       {mergeEdit && (
@@ -1551,8 +1546,9 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
                 );
               })}
             </div>
+            {mergeErr && <p className="text-xs mb-2" style={{ color: "#e08484" }}>{mergeErr}</p>}
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setMergeEdit(null)} className="px-4 py-2 rounded-lg text-sm text-zinc-400">キャンセル</button>
+              <button onClick={() => { setMergeEdit(null); setMergeErr(null); }} className="px-4 py-2 rounded-lg text-sm text-zinc-400">キャンセル</button>
               <button onClick={saveMergeEdit} style={{ background: GOLD, color: "#000" }} className="px-4 py-2 rounded-lg text-sm font-bold">保存</button>
             </div>
           </div>
