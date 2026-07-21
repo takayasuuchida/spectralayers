@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.4.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.4.1"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -286,7 +286,7 @@ export default function App() {
       const ci = seats.findIndex(s => s.k === "cust" && s.id === customerId);
       const entry = { k: "cast", id: castId };
       if (ci >= 0) seats.splice(ci + 1, 0, entry); else seats.push(entry);
-      return { ...t, casts: [...t.casts, { castId, customerId }], seats };
+      return { ...t, casts: [...t.casts, { castId, customerId, at: Date.now() }], seats };
     });
     setServed(s => ({ ...s, [customerId]: [...new Set([...(s[customerId] || []), castId])] }));
   }
@@ -471,12 +471,22 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
   const now = useNow(active);
   const tstate = active ? tstateOf(t, now) : null;
   const red = tstate === "soon" || tstate === "over";
+  // 回転警告: 1回転 = セット時間÷3。いずれかのキャストが残3分以内/超過なら表示
+  const rotMs = active ? (t.setDuration / 3) * 60000 : 0;
+  const rotRemains = active ? t.casts.map(a => (a.at ?? t.setStart) + rotMs - now) : [];
+  const rotOver = rotRemains.some(r => r <= 0);
+  const rotSoon = !rotOver && rotRemains.some(r => r <= 3 * 60000);
   return (
     <button onClick={onClick} style={{ background: active ? "#141418" : "#0d0d10", border: `1.5px solid ${red ? "#a13b3b" : active ? GOLD : "#1c1c22"}`, boxShadow: red ? "0 0 14px rgba(180,60,60,.35)" : "none" }} className="rounded-2xl p-3 text-left min-h-[120px] flex flex-col">
       <div className="flex items-center justify-between mb-1">
         <span style={{ color: active ? "#fff" : "#555", fontFamily: "Georgia,serif" }} className="text-lg font-bold">{disp.label}</span>
         {active ? (
-          <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-[11px] font-bold flex items-center gap-0.5"><Clock size={11} />{tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}</span>
+          <span className="flex items-center gap-1.5">
+            {(rotOver || rotSoon) && (
+              <span style={{ color: rotOver ? "#ff6a6a" : "#e0a84a" }} className="text-[10px] font-bold">♻{rotOver ? "交代!" : "まもなく"}</span>
+            )}
+            <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-[11px] font-bold flex items-center gap-0.5"><Clock size={11} />{tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}</span>
+          </span>
         ) : <span className="text-[10px] text-zinc-600">空席</span>}
       </div>
       {active ? (
@@ -608,11 +618,13 @@ function Detail(p) {
           <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#000" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
             <div className="space-y-2">
               {t.customers.map(cust => {
-                const myCasts = t.casts.filter(a => a.customerId === cust.id).map(a => castById[a.castId]).filter(Boolean);
+                const myAssigns = t.casts.filter(a => a.customerId === cust.id);
+                const myCasts = myAssigns.map(a => castById[a.castId]).filter(Boolean);
                 const pastCasts = (served[cust.id] || [])
                   .filter(id => !myCasts.some(c => c.id === id))
                   .map(id => castById[id]).filter(Boolean);
                 const nextCast = nextPlan?.[cust.id] ? castById[nextPlan[cust.id]] : null;
+                const rotMs = (t.setDuration / 3) * 60000;
                 return (
                   <div key={cust.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -630,11 +642,13 @@ function Detail(p) {
                       ))}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {myCasts.map(c => (
-                        <span key={c.id} style={{ background: "rgba(63,182,176,.15)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-                          今 {c.name}<button onClick={() => removeCast(tableId, c.id)}><X size={11} /></button>
-                        </span>
-                      ))}
+                      {myAssigns.map(a => {
+                        const c = castById[a.castId];
+                        if (!c) return null;
+                        return (
+                          <RotationChip key={a.castId} cast={c} at={a.at ?? t.setStart} rotMs={rotMs} onRemove={() => removeCast(tableId, c.id)} />
+                        );
+                      })}
                       {nextCast && (
                         <button onClick={() => tryAssign(tableId, nextCast.id, cust.id)} style={{ background: "rgba(201,166,78,.08)", border: `1px dashed ${GOLD}`, color: GOLD }} className="text-[11px] rounded-full px-2 py-0.5 font-bold flex items-center gap-1">
                           <Wand2 size={11} />次▶ {nextCast.name}
@@ -833,6 +847,25 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
         <button onClick={onFree} style={{ background: "#22222a", color: "#aaa", border: "1px dashed #444" }} className="w-full rounded-lg py-2 text-xs font-bold">キャスト指定なし（フリー）で追加</button>
       </div>
     </div>
+  );
+}
+
+// 「今 ○○」チップ + 回転残り時間。1回転 = セット時間÷3。
+// 残り3分で黄色、超過で赤「交代!」
+function RotationChip({ cast, at, rotMs, onRemove }) {
+  const now = useNow(true);
+  const remain = at + rotMs - now;
+  const over = remain <= 0;
+  const soon = !over && remain <= 3 * 60000;
+  const color = over ? "#ff6a6a" : soon ? "#e0a84a" : TEAL;
+  const bg = over ? "rgba(224,85,85,.12)" : soon ? "rgba(224,168,74,.12)" : "rgba(63,182,176,.15)";
+  const fg = over ? "#ffb3b3" : soon ? "#f0cf9a" : "#a8e6e2";
+  return (
+    <span style={{ background: bg, border: `1px solid ${color}`, color: fg }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
+      今 {cast.name}
+      <span className="text-[9px] opacity-90">{over ? "交代!" : `残${Math.ceil(remain / 60000)}分`}</span>
+      <button onClick={onRemove}><X size={11} /></button>
+    </span>
   );
 }
 
