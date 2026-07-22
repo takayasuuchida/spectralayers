@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.5.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.6.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -10,7 +10,7 @@ const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
 
-const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10 };
+const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false };
 const DEFAULT_CAST_PAY = {
   hourlyWage: 3000,
   drinkBack: 500,
@@ -24,6 +24,7 @@ const DEFAULT_CAST_PAY = {
   transportBack: 0,
   hasHairMake: false,
   hairMakeAmount: 0,
+  shiftStart: "", // 出勤予定時刻 "20:00" 形式。空なら遅刻判定なし
 };
 const DEFAULT_CAST_COUNTERS = {
   drinkCount: 0,
@@ -33,6 +34,7 @@ const DEFAULT_CAST_COUNTERS = {
   fieldNominationCount: 0,
   mainNominationCount: 0,
   clockedInAt: null,
+  lateMinutes: 0,
 };
 const mergeCastDefaults = (c) => ({ ...DEFAULT_CAST_PAY, ...DEFAULT_CAST_COUNTERS, ...c });
 const DEFAULT_TABLES = [
@@ -128,6 +130,8 @@ export default function App() {
   const [customerBook, setCustomerBook] = useState([]); // 客名帳マスタ [{ id, name, birthday, pref, memo, favoriteCastIds, visits, lastVisitAt }]
   const [bottleKeeps, setBottleKeeps] = useState([]); // [{ id, customerBookId, label, openedAt, expiresAt, memo, status }]
   const [auditLog, setAuditLog] = useState([]); // 監査ログ [{ t, action, detail }] 最新が先頭・最大1000件
+  const [salaryHistory, setSalaryHistory] = useState([]); // 給料履歴（退勤確定ごと・最新が先頭・最大2000件）
+  const [salaryAdjust, setSalaryAdjust] = useState({}); // 月次調整 { "YYYY-MM": { castId: { bonus, deduct, memo } } }
   const [pick, setPick] = useState(null); // {tableId, customerId}
   const [modal, setModal] = useState(null); // {type, msg, onOk}
   const [loaded, setLoaded] = useState(false);
@@ -151,6 +155,8 @@ export default function App() {
           setCustomerBook(d.customerBook || []);
           setBottleKeeps(d.bottleKeeps || []);
           setAuditLog(d.auditLog || []);
+          setSalaryHistory(d.salaryHistory || []);
+          setSalaryAdjust(d.salaryAdjust || {});
         } catch (e) { setTs({}); setServed({}); }
       } else { setTs({}); setServed({}); }
       setLoaded(true);
@@ -160,16 +166,16 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust]);
 
   // ---- 監査ログ ----
   const logAudit = (action, detail = "") =>
     setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
 
   // ---- バックアップ ----
-  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog });
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust });
 
   function exportData() {
     const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
@@ -198,6 +204,8 @@ export default function App() {
     setCustomerBook(p.customerBook || []);
     setBottleKeeps(p.bottleKeeps || []);
     setAuditLog(p.auditLog || []);
+    setSalaryHistory(p.salaryHistory || []);
+    setSalaryAdjust(p.salaryAdjust || {});
     setSel(null);
   }
 
@@ -267,7 +275,28 @@ export default function App() {
 
   // 稼働開始／終了
   function clockIn(castId) {
-    setCasts(cs => cs.map(c => c.id === castId ? { ...c, clockedInAt: Date.now(), status: "出勤" } : c));
+    const c = casts.find(x => x.id === castId);
+    const now = new Date();
+    // 遅刻判定: shiftStart "HH:MM" が設定されていれば予定時刻との差分（分）
+    let lateMinutes = 0;
+    if (c?.shiftStart && /^\d{1,2}:\d{2}$/.test(c.shiftStart)) {
+      const [h, m] = c.shiftStart.split(":").map(Number);
+      const sched = new Date(now);
+      sched.setHours(h, m, 0, 0);
+      // 深夜営業: 予定が 0-5 時台で現在が夕方以降なら翌日扱い
+      if (h < 6 && now.getHours() >= 12) sched.setDate(sched.getDate() + 1);
+      lateMinutes = Math.max(0, Math.floor((now - sched) / 60000));
+    }
+    setCasts(cs => cs.map(x => x.id === castId ? { ...x, clockedInAt: Date.now(), status: "出勤", lateMinutes } : x));
+    logAudit("出勤打刻", `${c?.name || "?"}${lateMinutes > 0 ? ` 遅刻${lateMinutes}分` : ""}`);
+    // GPS打刻（設定でONの場合のみ・失敗しても打刻自体は成立）
+    if (settings.gpsClockIn && typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => logAudit("出勤GPS", `${c?.name || "?"} ${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`),
+        () => logAudit("出勤GPS", `${c?.name || "?"} 取得失敗`),
+        { timeout: 8000, maximumAge: 60000 }
+      );
+    }
   }
   function clockOut(castId) {
     const c = casts.find(x => x.id === castId);
@@ -278,7 +307,25 @@ export default function App() {
   }
   function confirmClockOut(castId) {
     const c = casts.find(x => x.id === castId);
-    if (salaryModal?.cast?.id === castId) logAudit("退勤確定", `${c?.name || "?"} 給料${yen(salaryModal.breakdown?.net || 0)}`);
+    if (c && salaryModal?.cast?.id === castId) {
+      const b = salaryModal.breakdown;
+      // 給料履歴に確定スナップショットを保存（月次集計・明細・CSV の元データ）
+      setSalaryHistory(h => [{
+        id: "sr" + Math.random().toString(36).slice(2, 8),
+        castId, castName: c.name,
+        businessDate: businessDateOfNow(),
+        clockedInAt: c.clockedInAt, clockedOutAt: Date.now(),
+        hours: +(b.hours || 0).toFixed(2),
+        lateMinutes: b.lateMinutes || 0,
+        wage: b.wage, drinkBack: b.drinkBack, shotBack: b.shotBack, bottleBack: b.bottleBack,
+        dohanBack: b.dohanBack, fieldBack: b.fieldBack, mainBack: b.mainBack,
+        gross: b.gross, hairMake: b.hairMake, transOut: b.transOut, transBack: b.transBack,
+        latePenalty: b.latePenalty || 0, overhead: b.overhead, net: b.net,
+        drinkCount: c.drinkCount || 0, shotCount: c.shotCount || 0, bottleSales: c.bottleSales || 0,
+        dohanCount: c.dohanCount || 0, fieldNominationCount: c.fieldNominationCount || 0, mainNominationCount: c.mainNominationCount || 0,
+      }, ...h].slice(0, 2000));
+      logAudit("退勤確定", `${c.name} 給料${yen(b?.net || 0)}`);
+    }
     setCasts(cs => cs.map(x => x.id === castId ? { ...x, ...DEFAULT_CAST_COUNTERS, status: "退勤済" } : x));
     setSalaryModal(null);
   }
@@ -299,12 +346,13 @@ export default function App() {
     const hairMake = c.hasHairMake ? (c.hairMakeAmount || 0) : 0;
     const transOut = c.hasTransport ? (c.transportOut || 0) : 0;
     const transBack = c.hasTransport ? (c.transportBack || 0) : 0;
-    const afterCuts = gross - hairMake - transOut - transBack;
+    const latePenalty = (c.lateMinutes || 0) * (settings.latePenaltyPerMin || 0);
+    const afterCuts = gross - hairMake - transOut - transBack - latePenalty;
 
     const overhead = Math.round(afterCuts * (settings.overheadPct || 0) / 100);
     const net = afterCuts - overhead;
 
-    return { hours, hoursMs, wage, drinkBack, shotBack, bottleBack, dohanBack, fieldBack, mainBack, gross, hairMake, transOut, transBack, afterCuts, overhead, net };
+    return { hours, hoursMs, wage, drinkBack, shotBack, bottleBack, dohanBack, fieldBack, mainBack, gross, hairMake, transOut, transBack, latePenalty, lateMinutes: c.lateMinutes || 0, afterCuts, overhead, net };
   }
 
   // カウンター増減
@@ -492,7 +540,7 @@ export default function App() {
       </div>
 
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge }} />}
-      {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter }} />}
+      {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }} />}
@@ -1027,7 +1075,29 @@ function CastPicker({ pick, close, available, tableCasts, served, castById, cast
   );
 }
 
-function CastView({ casts, busy, clockIn, clockOut, bumpCastCounter }) {
+function CastView({ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }) {
+  const [tab, setTab] = useState("today");
+  if (tab === "salary") {
+    return (
+      <div className="p-4 pb-4">
+        <CastTabBar tab={tab} setTab={setTab} />
+        <SalaryView {...{ salaryHistory, salaryAdjust, setSalaryAdjust, settings, casts }} />
+      </div>
+    );
+  }
+  return <CastToday {...{ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTab }} />;
+}
+
+function CastTabBar({ tab, setTab }) {
+  return (
+    <div className="flex gap-2 mb-4">
+      <button onClick={() => setTab("today")} style={{ background: tab === "today" ? GOLD : "#141418", color: tab === "today" ? "#000" : "#888", border: `1px solid ${tab === "today" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">出勤・稼働</button>
+      <button onClick={() => setTab("salary")} style={{ background: tab === "salary" ? GOLD : "#141418", color: tab === "salary" ? "#000" : "#888", border: `1px solid ${tab === "salary" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">給料集計（月次）</button>
+    </div>
+  );
+}
+
+function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTab }) {
   const working = casts.filter(c => c.clockedInAt);
   const notYet = casts.filter(c => !c.clockedInAt && c.status !== "退勤済");
   const done = casts.filter(c => c.status === "退勤済");
@@ -1035,6 +1105,7 @@ function CastView({ casts, busy, clockIn, clockOut, bumpCastCounter }) {
 
   return (
     <div className="p-4 pb-4">
+      <CastTabBar tab={tab} setTab={setTab} />
       <p className="text-xs text-zinc-500 mb-1">キャスト稼働・指名・給料</p>
       <h2 className="text-2xl font-bold mb-4" style={{ fontFamily: "Georgia,serif" }}>稼働中 {working.length}名</h2>
 
@@ -1073,6 +1144,201 @@ function CastView({ casts, busy, clockIn, clockOut, bumpCastCounter }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function SalaryView({ salaryHistory, salaryAdjust, setSalaryAdjust, settings, casts }) {
+  const months = useMemo(() => [...new Set((salaryHistory || []).map(r => r.businessDate.slice(0, 7)))].sort().reverse(), [salaryHistory]);
+  const [month, setMonth] = useState(months[0] || businessDateOfNow().slice(0, 7));
+  useEffect(() => { if (months.length && !months.includes(month)) setMonth(months[0]); }, [months.join("|")]);
+  const [detailCastId, setDetailCastId] = useState(null);
+
+  const recs = (salaryHistory || []).filter(r => r.businessDate.startsWith(month));
+  const byCast = {};
+  recs.forEach(r => {
+    const b = byCast[r.castId] || (byCast[r.castId] = { castId: r.castId, name: r.castName, days: new Set(), hours: 0, gross: 0, net: 0, drinkCount: 0, shotCount: 0, dohanCount: 0, fieldNominationCount: 0, mainNominationCount: 0, bottleSales: 0, lateMinutes: 0, records: [] });
+    b.days.add(r.businessDate); b.hours += r.hours || 0; b.gross += r.gross || 0; b.net += r.net || 0;
+    b.drinkCount += r.drinkCount || 0; b.shotCount += r.shotCount || 0; b.dohanCount += r.dohanCount || 0;
+    b.fieldNominationCount += r.fieldNominationCount || 0; b.mainNominationCount += r.mainNominationCount || 0;
+    b.bottleSales += r.bottleSales || 0; b.lateMinutes += r.lateMinutes || 0;
+    b.records.push(r);
+  });
+  const rows = Object.values(byCast).map(b => {
+    const adj = salaryAdjust?.[month]?.[b.castId] || {};
+    const bonus = +adj.bonus || 0, deduct = +adj.deduct || 0;
+    const payable = b.net + bonus - deduct;
+    const tax = settings.withholdTax ? Math.round(payable * 0.1021) : 0;
+    return { ...b, dayCount: b.days.size, bonus, deduct, payable, tax, final: payable - tax };
+  }).sort((a, b) => b.final - a.final);
+  const total = rows.reduce((s, r) => s + r.final, 0);
+
+  function exportCsv() {
+    const head = "キャスト,出勤日数,稼働時間,総支給,純支給,賞与,追加控除,源泉徴収,振込額";
+    const lines = rows.map(r => [r.name, r.dayCount, r.hours.toFixed(1), r.gross, r.net, r.bonus, r.deduct, r.tax, r.final].join(","));
+    const csv = "﻿" + [head, ...lines, `合計,,,,,,,,${total}`].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `給料_${month}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  const detail = rows.find(r => r.castId === detailCastId);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-xs text-zinc-500">対象月</span>
+        {(months.length ? months : [month]).map(m => (
+          <button key={m} onClick={() => setMonth(m)} style={{ background: month === m ? GOLD : "#141418", color: month === m ? "#000" : "#888", border: `1px solid ${month === m ? GOLD : "#22222a"}` }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">{m}</button>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-center text-zinc-500 text-sm py-12">
+          {month} の給料データがありません。<br />
+          <span className="text-[11px] text-zinc-600">キャストの「退勤」→「退勤確定」で自動的に記録されます。</span>
+        </div>
+      ) : (
+        <>
+          <div style={{ background: "rgba(201,166,78,.08)", border: `1px solid ${GOLD}` }} className="rounded-xl p-3 mb-3 flex items-center justify-between">
+            <span className="text-xs text-zinc-400">{month} 人件費合計（{rows.length}名）</span>
+            <span style={{ color: GOLD }} className="text-xl font-bold">{yen(total)}</span>
+          </div>
+          <button onClick={exportCsv} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2 text-xs font-bold mb-3">📄 振込用CSVを書き出す</button>
+          <div className="space-y-2">
+            {rows.map(r => (
+              <button key={r.castId} onClick={() => setDetailCastId(r.castId)} style={{ background: "#141418", border: "1px solid #22222a" }} className="w-full rounded-xl p-3 text-left">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold">{r.name}</span>
+                  <span style={{ color: GOLD }} className="font-bold">{yen(r.final)}</span>
+                </div>
+                <div className="text-[11px] text-zinc-500 flex gap-3 flex-wrap">
+                  <span>{r.dayCount}日 / {r.hours.toFixed(1)}h</span>
+                  <span>本指{r.mainNominationCount} 場内{r.fieldNominationCount} 同伴{r.dohanCount}</span>
+                  <span>Dr{r.drinkCount} 🍾{yen(r.bottleSales)}</span>
+                  {r.lateMinutes > 0 && <span style={{ color: "#e0a84a" }}>遅刻{r.lateMinutes}分</span>}
+                  {(r.bonus > 0 || r.deduct > 0 || r.tax > 0) && <span>調整 +{r.bonus}/-{r.deduct}{r.tax > 0 ? ` 源泉-${r.tax}` : ""}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {detail && (
+        <CastSalaryDetail
+          r={detail} month={month} settings={settings}
+          onAdjust={(key, val) => setSalaryAdjust(sa => ({ ...sa, [month]: { ...(sa[month] || {}), [detail.castId]: { ...((sa[month] || {})[detail.castId] || {}), [key]: val } } }))}
+          onClose={() => setDetailCastId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MiniBar({ label, value, max, color }) {
+  const pct = max > 0 ? Math.round(value / max * 100) : 0;
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <span className="w-12 text-zinc-500">{label}</span>
+      <div className="flex-1 h-3 rounded overflow-hidden" style={{ background: "#1c1c22" }}>
+        <div style={{ width: pct + "%", background: color, minWidth: value > 0 ? 4 : 0 }} className="h-full" />
+      </div>
+      <span className="w-8 text-right font-bold">{value}</span>
+    </div>
+  );
+}
+
+function CastSalaryDetail({ r, month, settings, onAdjust, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const [showText, setShowText] = useState(false);
+  const maxCount = Math.max(r.mainNominationCount, r.fieldNominationCount, r.dohanCount, r.drinkCount, r.shotCount, 1);
+
+  const slipText = [
+    `【給与明細】${month} ${r.name}`,
+    `出勤 ${r.dayCount}日 / 稼働 ${r.hours.toFixed(1)}h${r.lateMinutes > 0 ? ` / 遅刻 ${r.lateMinutes}分` : ""}`,
+    `総支給 ${yen(r.gross)}`,
+    `純支給（各種控除後） ${yen(r.net)}`,
+    r.bonus > 0 ? `賞与 +${yen(r.bonus)}` : null,
+    r.deduct > 0 ? `追加控除 -${yen(r.deduct)}` : null,
+    r.tax > 0 ? `源泉徴収(10.21%) -${yen(r.tax)}` : null,
+    `━━━━━━━━━━`,
+    `支給額 ${yen(r.final)}`,
+    ``,
+    `実績: 本指名${r.mainNominationCount} / 場内${r.fieldNominationCount} / 同伴${r.dohanCount} / ドリンク${r.drinkCount} / ショット${r.shotCount} / ボトル売上${yen(r.bottleSales)}`,
+  ].filter(x => x !== null).join("\n");
+
+  async function copySlip() {
+    try {
+      await navigator.clipboard.writeText(slipText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShowText(true); // クリップボード不可の環境では全文表示して手動コピー
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-xl font-bold">{r.name}</h3>
+          <button onClick={onClose}><X size={20} color="#888" /></button>
+        </div>
+        <p className="text-xs text-zinc-500 mb-3">{month} 月次明細 ・ {r.dayCount}日 / {r.hours.toFixed(1)}h</p>
+
+        <div className="space-y-1.5 mb-4">
+          <MiniBar label="本指名" value={r.mainNominationCount} max={maxCount} color={GOLD} />
+          <MiniBar label="場内" value={r.fieldNominationCount} max={maxCount} color="#e0a84a" />
+          <MiniBar label="同伴" value={r.dohanCount} max={maxCount} color={TEAL} />
+          <MiniBar label="ドリンク" value={r.drinkCount} max={maxCount} color="#7aa7ff" />
+          <MiniBar label="ショット" value={r.shotCount} max={maxCount} color="#a78bfa" />
+        </div>
+
+        <div className="space-y-1 text-sm mb-3">
+          <SalaryLine l="総支給（月合計）" v={r.gross} />
+          <SalaryLine l="純支給（控除後）" v={r.net} />
+        </div>
+
+        <div className="border-t border-[#22222a] pt-3 mb-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">賞与</span>
+            <input type="number" value={r.bonus || ""} placeholder="0" onChange={e => onAdjust("bonus", +e.target.value || 0)} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
+            <span className="text-[10px] text-zinc-500">円</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">追加控除</span>
+            <input type="number" value={r.deduct || ""} placeholder="0" onChange={e => onAdjust("deduct", +e.target.value || 0)} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
+            <span className="text-[10px] text-zinc-500">円</span>
+          </div>
+          {r.tax > 0 && <div className="flex justify-between text-xs"><span className="text-zinc-500">源泉徴収 10.21%</span><span style={{ color: "#ff8888" }}>-{yen(r.tax)}</span></div>}
+        </div>
+
+        <div style={{ background: "rgba(201,166,78,.1)", border: `1px solid ${GOLD}` }} className="rounded-xl p-3 mb-3 flex justify-between items-center">
+          <span className="text-sm text-zinc-400">支給額</span>
+          <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(r.final)}</span>
+        </div>
+
+        <div className="mb-3">
+          <p className="text-[10px] text-zinc-500 mb-1.5">日別</p>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {r.records.map(rec => (
+              <div key={rec.id} className="flex items-center justify-between text-[11px]" style={{ background: "#0d0d10", border: "1px solid #1c1c22" }}>
+                <span className="px-2 py-1 text-zinc-400">{rec.businessDate.slice(5).replace("-", "/")} ・ {rec.hours.toFixed(1)}h{rec.lateMinutes > 0 ? ` ・遅${rec.lateMinutes}分` : ""}</span>
+                <span className="px-2 py-1 font-bold">{yen(rec.net)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={copySlip} style={{ background: GOLD, color: "#000" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{copied ? "✅ コピーしました（LINE等に貼り付け）" : "📋 明細テキストをコピー"}</button>
+        {showText && (
+          <textarea readOnly value={slipText} rows={8} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "12px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
+        )}
+      </div>
     </div>
   );
 }
@@ -1152,6 +1418,7 @@ function SalaryModal({ cast, breakdown, overheadPct, onConfirm, onClose }) {
           {b.hairMake > 0 && <SalaryLine l="ヘアメイク" v={-b.hairMake} cut />}
           {b.transOut > 0 && <SalaryLine l="送迎（行き）" v={-b.transOut} cut />}
           {b.transBack > 0 && <SalaryLine l="送迎（帰り）" v={-b.transBack} cut />}
+          {b.latePenalty > 0 && <SalaryLine l={`遅刻ペナルティ ${b.lateMinutes}分`} v={-b.latePenalty} cut />}
           <SalaryLine l={`構成費 ${overheadPct}%`} v={-b.overhead} cut />
         </div>
         <div style={{ background: "rgba(201,166,78,.1)", border: `1px solid ${GOLD}` }} className="rounded-xl p-3 mt-3 flex justify-between items-center">
@@ -1731,10 +1998,26 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
       )}
 
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] text-zinc-500 w-16">構成費</span>
-          <input type="number" value={settings.overheadPct} onChange={e => setSettings(s => ({ ...s, overheadPct: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
-          <span className="text-xs text-zinc-500">%（全キャスト共通の給料からの控除率）</span>
+        <h2 className="text-lg font-bold mb-1">給料設定</h2>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-20">構成費</span>
+            <input type="number" value={settings.overheadPct} onChange={e => setSettings(s => ({ ...s, overheadPct: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
+            <span className="text-xs text-zinc-500">%（全キャスト共通の控除率）</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-20">遅刻ペナルティ</span>
+            <input type="number" value={settings.latePenaltyPerMin ?? 0} onChange={e => setSettings(s => ({ ...s, latePenaltyPerMin: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
+            <span className="text-xs text-zinc-500">円/分（キャストの出勤予定時刻を設定した場合のみ）</span>
+          </div>
+          <label className="flex items-center gap-2 py-1">
+            <input type="checkbox" checked={!!settings.withholdTax} onChange={e => setSettings(s => ({ ...s, withholdTax: e.target.checked }))} style={{ accentColor: GOLD }} />
+            <span className="text-xs">源泉徴収 10.21% を月次給料から差し引く</span>
+          </label>
+          <label className="flex items-center gap-2 py-1">
+            <input type="checkbox" checked={!!settings.gpsClockIn} onChange={e => setSettings(s => ({ ...s, gpsClockIn: e.target.checked }))} style={{ accentColor: GOLD }} />
+            <span className="text-xs">出勤打刻時に GPS 位置を記録する（変更履歴に残る・位置情報の許可が必要）</span>
+          </label>
         </div>
       </div>
 
@@ -1902,6 +2185,10 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre }) {
           <PayRow label="同伴バック" value={c.dohanBack} onChange={v => upd(c.id, x => ({ ...x, dohanBack: num(v) }))} suffix="円/回" />
           <PayRow label="場内指名" value={c.fieldNominationBack} onChange={v => upd(c.id, x => ({ ...x, fieldNominationBack: num(v) }))} suffix="円/回" />
           <PayRow label="本指名" value={c.mainNominationBack} onChange={v => upd(c.id, x => ({ ...x, mainNominationBack: num(v) }))} suffix="円/回" />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-24">出勤予定時刻</span>
+            <input value={c.shiftStart || ""} onChange={e => upd(c.id, x => ({ ...x, shiftStart: e.target.value }))} placeholder="例: 20:00（空欄=遅刻判定なし）" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1 outline-none" />
+          </div>
 
           <div className="pt-2 border-t border-[#22222a]">
             <label className="flex items-center gap-2 mb-2">
