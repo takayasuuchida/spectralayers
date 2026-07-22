@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
+import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "1.7.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.8.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -133,6 +133,8 @@ export default function App() {
   const [salaryHistory, setSalaryHistory] = useState([]); // 給料履歴（退勤確定ごと・最新が先頭・最大2000件）
   const [salaryAdjust, setSalaryAdjust] = useState({}); // 月次調整 { "YYYY-MM": { castId: { bonus, deduct, memo } } }
   const [reservations, setReservations] = useState([]); // 来店予約 [{ id, customerBookId, date, time, memo }]
+  const [products, setProducts] = useState([]); // 商品マスタ [{ id, name, category, price, cost, stock, lowStockAt }]
+  const [salesLog, setSalesLog] = useState([]); // 売上明細ログ（会計時に確定・原価分析用・最大3000件）
   const [pick, setPick] = useState(null); // {tableId, customerId}
   const [modal, setModal] = useState(null); // {type, msg, onOk}
   const [loaded, setLoaded] = useState(false);
@@ -159,6 +161,8 @@ export default function App() {
           setSalaryHistory(d.salaryHistory || []);
           setSalaryAdjust(d.salaryAdjust || {});
           setReservations(d.reservations || []);
+          setProducts(d.products || []);
+          setSalesLog(d.salesLog || []);
         } catch (e) { setTs({}); setServed({}); }
       } else { setTs({}); setServed({}); }
       setLoaded(true);
@@ -168,16 +172,16 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog]);
 
   // ---- 監査ログ ----
   const logAudit = (action, detail = "") =>
     setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
 
   // ---- バックアップ ----
-  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations });
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
 
   function exportData() {
     const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
@@ -209,6 +213,8 @@ export default function App() {
     setSalaryHistory(p.salaryHistory || []);
     setSalaryAdjust(p.salaryAdjust || {});
     setReservations(p.reservations || []);
+    setProducts(p.products || []);
+    setSalesLog(p.salesLog || []);
     setSel(null);
   }
 
@@ -499,8 +505,13 @@ export default function App() {
   const setPref = (tableId, id, pref) => upd(tableId, t => ({ ...t, customers: t.customers.map(c => c.id === id ? { ...c, pref } : c) }));
   const setSetType = (tableId, v) => upd(tableId, t => ({ ...t, setType: v }));
   const setDur = (tableId, v) => upd(tableId, t => ({ ...t, setDuration: v }));
+  const bumpStock = (productId, delta) => {
+    if (!productId || !delta) return;
+    setProducts(ps => ps.map(p => p.id === productId ? { ...p, stock: Math.max(0, (p.stock || 0) + delta) } : p));
+  };
   const addOrder = (tableId, o) => {
     upd(tableId, t => ({ ...t, orders: [...t.orders, { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1 }] }));
+    bumpStock(o.productId, -1); // リアルタイム在庫減算
     // カウンター自動加算（castId が付いていれば）
     if (o.castId) {
       if (o.kind === "drink") bumpCastCounter(o.castId, "drinkCount", 1);
@@ -508,8 +519,19 @@ export default function App() {
       else if (o.kind === "champagne" || o.kind === "bottle") setCasts(cs => cs.map(c => c.id === o.castId ? { ...c, bottleSales: (c.bottleSales || 0) + (o.price || 0) } : c));
     }
   };
-  const ordQty = (tableId, oid, d) => upd(tableId, t => ({ ...t, orders: t.orders.map(o => o.id === oid ? { ...o, qty: Math.max(1, o.qty + d) } : o) }));
-  const delOrder = (tableId, oid) => upd(tableId, t => ({ ...t, orders: t.orders.filter(o => o.id !== oid) }));
+  const ordQty = (tableId, oid, d) => {
+    const o = ts[tableId]?.orders.find(x => x.id === oid);
+    if (o) {
+      const delta = Math.max(1, o.qty + d) - o.qty; // 下限1でクランプした実変化量
+      bumpStock(o.productId, -delta);
+    }
+    upd(tableId, t => ({ ...t, orders: t.orders.map(o2 => o2.id === oid ? { ...o2, qty: Math.max(1, o2.qty + d) } : o2) }));
+  };
+  const delOrder = (tableId, oid) => {
+    const o = ts[tableId]?.orders.find(x => x.id === oid);
+    if (o) bumpStock(o.productId, o.qty); // 在庫を戻す
+    upd(tableId, t => ({ ...t, orders: t.orders.filter(o2 => o2.id !== oid) }));
+  };
   function openTable(tableId) {
     setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: Date.now(), customers: [], casts: [], seats: [], orders: [] } }));
     logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
@@ -530,6 +552,19 @@ export default function App() {
           ? { ...c, totalSpent: (c.totalSpent || 0) + share, visitLog: [{ date: bd, amount: share }, ...(c.visitLog || [])].slice(0, 100) }
           : c));
       }
+    }
+    // 売上明細ログ（原価・粗利分析用）: セット + 各注文を確定記録
+    {
+      const bd = businessDateOfNow();
+      const entries = [
+        ...(t.customers.length > 0 ? [{ businessDate: bd, label: "セット", price: t.setType * t.customers.length, qty: 1, cost: 0, productId: null }] : []),
+        ...t.orders.map(o => ({
+          businessDate: bd, label: o.label, price: o.price, qty: o.qty,
+          cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
+          productId: o.productId || null,
+        })),
+      ];
+      if (entries.length) setSalesLog(sl => [...entries, ...sl].slice(0, 3000));
     }
     setTs(s => { const n = { ...s }; delete n[tableId]; return n; });
     setSel(null);
@@ -560,7 +595,8 @@ export default function App() {
         </div>
       </div>
 
-      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations }} />}
+      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products }} />}
+      {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
@@ -572,7 +608,7 @@ export default function App() {
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
-          customerBook, bottleKeeps,
+          customerBook, bottleKeeps, products,
           nextPlan: ts[sel]?.active
             ? Object.fromEntries(draftPlan(ts[sel], available).all)
             : {},
@@ -603,7 +639,7 @@ export default function App() {
       )}
 
       <div style={{ background: "#0a0a0c", borderTop: "1px solid #1c1c22" }} className="fixed bottom-0 inset-x-0 z-30 flex">
-        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["book", Users, "客名帳"], ["sales", null, "売上"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => (
+        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["book", Users, "客名帳"], ["sales", null, "売上"], ["stock", Package, "在庫"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => (
           <button key={k} onClick={() => setView(k)} className="flex-1 py-2.5 flex flex-col items-center gap-1" style={{ color: view === k ? GOLD : "#5a5a62" }}>
             {Icon ? <Icon size={20} /> : <span className="text-lg leading-none font-bold">¥</span>}
             <span className="text-[10px]">{label}</span>
@@ -677,20 +713,22 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
   );
 }
 
-function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations }) {
+function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products }) {
   const groupEntries = Object.entries(mergeGroups || {});
   const bdToday = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 0);
   const bdTomorrow = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 1);
   const today = businessDateOfNow();
   const resToday = (reservations || []).filter(r => r.date === today).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const custName = (id) => (customerBook || []).find(c => c.id === id)?.name || "?";
+  const lowStock = (products || []).filter(p => p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt);
   return (
     <div className="p-3">
-      {(bdToday.length > 0 || bdTomorrow.length > 0 || resToday.length > 0) && (
+      {(bdToday.length > 0 || bdTomorrow.length > 0 || resToday.length > 0 || lowStock.length > 0) && (
         <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-2.5 mb-3 space-y-1 text-[11px]">
           {bdToday.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 本日誕生日:</span> {bdToday.map(c => c.name).join("・")}</div>}
           {bdTomorrow.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
           {resToday.length > 0 && <div><span style={{ color: TEAL }} className="font-bold">📅 本日予約:</span> {resToday.map(r => `${r.time || ""} ${custName(r.customerBookId)}`).join("・")}</div>}
+          {lowStock.length > 0 && <div><span style={{ color: "#e08484" }} className="font-bold">📦 在庫少:</span> {lowStock.map(p => `${p.name}(残${p.stock || 0})`).join("・")}</div>}
         </div>
       )}
       {groupEntries.length > 0 && (
@@ -722,7 +760,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, nextPlan } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan } = p;
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
   // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
@@ -878,6 +916,17 @@ function Detail(p) {
               <button onClick={() => setDrinkPick({ label: "ドリンク", price: 1500, kind: "drink" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ドリンク ¥1,500</button>
               <button onClick={() => setDrinkPick({ label: "ショット", price: 3000, kind: "shot" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ショット ¥3,000</button>
             </div>
+            {(products || []).length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {products.slice(0, 8).map(pr => (
+                  <button key={pr.id} onClick={() => setDrinkPick({ label: pr.name, price: pr.price, kind: pr.category || "drink", productId: pr.id })} style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-lg py-2 px-2 text-[11px] font-bold text-left">
+                    <span className="block truncate">{pr.name}</span>
+                    <span className="text-zinc-500">{yen(pr.price)}</span>
+                    {pr.lowStockAt != null && (pr.stock || 0) <= pr.lowStockAt && <span style={{ color: "#e0a84a" }}> 残{pr.stock || 0}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2 mb-3">
               <input ref={chLabelRef} placeholder="シャンパン等" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-2 py-2 outline-none min-w-0" />
               <input ref={chPriceRef} placeholder="価格" inputMode="numeric" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitChampagne(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-24 rounded-lg px-2 py-2 outline-none" />
@@ -1984,21 +2033,36 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
                 const expired = daysLeft !== null && daysLeft <= 0;
                 const soon = daysLeft !== null && daysLeft > 0 && daysLeft <= 14;
                 const inactive = k.status === "empty" || k.status === "disposed";
+                const pct = k.remainingPct ?? 100;
                 return (
-                  <div key={k.id} style={{ background: "#0d0d10", border: `1px solid ${inactive ? "#2a2a32" : expired ? "#a15050" : soon ? "#e0a84a" : "#22222a"}`, opacity: inactive ? 0.5 : 1 }} className="rounded-lg p-2 flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold truncate">{k.label} {inactive && <span className="text-[10px] text-zinc-500">({k.status === "empty" ? "空" : "廃棄"})</span>}</div>
-                      <div className="text-[10px] text-zinc-500">
-                        入 {new Date(k.openedAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
-                        {daysLeft !== null && !inactive && (
-                          <> ・ 期限 {new Date(k.expiresAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
-                            <span style={{ color: expired ? "#ff6a6a" : soon ? "#e0a84a" : "#666" }}> ({expired ? "切れ" : `+${daysLeft}d`})</span>
-                          </>
-                        )}
+                  <div key={k.id} style={{ background: "#0d0d10", border: `1px solid ${inactive ? "#2a2a32" : expired ? "#a15050" : soon ? "#e0a84a" : "#22222a"}`, opacity: inactive ? 0.5 : 1 }} className="rounded-lg p-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold truncate">{k.label} {inactive && <span className="text-[10px] text-zinc-500">({k.status === "empty" ? "空" : "廃棄"})</span>}</div>
+                        <div className="text-[10px] text-zinc-500">
+                          入 {new Date(k.openedAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
+                          {daysLeft !== null && !inactive && (
+                            <> ・ 期限 {new Date(k.expiresAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
+                              <span style={{ color: expired ? "#ff6a6a" : soon ? "#e0a84a" : "#666" }}> ({expired ? "切れ" : `+${daysLeft}d`})</span>
+                            </>
+                          )}
+                        </div>
                       </div>
+                      {!inactive && <button onClick={() => markEmpty(k.id)} style={{ background: "#22222a", color: "#aaa" }} className="text-[10px] rounded px-2 py-1 font-bold">空</button>}
+                      {!inactive && <button onClick={() => setBottleKeeps(bks => bks.map(x => x.id === k.id ? { ...x, status: "disposed" } : x))} style={{ background: "#3a1010", color: "#ff8888" }} className="text-[10px] rounded px-2 py-1 font-bold">廃棄</button>}
+                      <button onClick={() => removeBottle(k.id)}><Trash2 size={12} color="#555" /></button>
                     </div>
-                    {!inactive && <button onClick={() => markEmpty(k.id)} style={{ background: "#22222a", color: "#aaa" }} className="text-[10px] rounded px-2 py-1 font-bold">空</button>}
-                    <button onClick={() => removeBottle(k.id)}><Trash2 size={12} color="#555" /></button>
+                    {!inactive && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#1c1c22" }}>
+                          <div style={{ width: pct + "%", background: pct <= 20 ? "#e08484" : pct <= 50 ? "#e0a84a" : TEAL }} className="h-full" />
+                        </div>
+                        <input type="range" min="0" max="100" step="10" value={pct}
+                          onChange={e => setBottleKeeps(bks => bks.map(x => x.id === k.id ? { ...x, remainingPct: +e.target.value } : x))}
+                          className="w-20" style={{ accentColor: GOLD }} />
+                        <span className="text-[10px] w-9 text-right font-bold" style={{ color: pct <= 20 ? "#e08484" : "#aaa" }}>{pct}%</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -2268,6 +2332,141 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
           location.reload();
         }
       }} style={{ background: "#3a1010", border: "1px solid #7a2222", color: "#ff8888" }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-2">🗑 完全リセット（この店舗の全データ削除）</button>
+    </div>
+  );
+}
+
+const PRODUCT_CATEGORIES = [["drink", "ドリンク"], ["shot", "ショット"], ["bottle", "ボトル"], ["other", "その他"]];
+
+function InventoryView({ products, setProducts, salesLog, logAudit }) {
+  const [newP, setNewP] = useState({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "" });
+  const [stocktake, setStocktake] = useState(false);
+  const [orderSheet, setOrderSheet] = useState(null);
+  const [month] = useState(businessDateOfNow().slice(0, 7));
+
+  const lowStock = (products || []).filter(p => p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt);
+
+  // 今月の原価・粗利（会計確定した売上明細ログから）
+  const monthLog = (salesLog || []).filter(r => r.businessDate.startsWith(month));
+  const revenue = monthLog.reduce((s, r) => s + r.price * r.qty, 0);
+  const cost = monthLog.reduce((s, r) => s + (r.cost || 0), 0);
+  const gp = revenue - cost;
+  const costRate = revenue > 0 ? (cost / revenue * 100) : 0;
+
+  function addProduct() {
+    if (!newP.name.trim()) return;
+    setProducts(ps => [...ps, {
+      id: "p" + Math.random().toString(36).slice(2, 8),
+      name: newP.name.trim(), category: newP.category,
+      price: +newP.price || 0, cost: +newP.cost || 0,
+      stock: +newP.stock || 0, lowStockAt: newP.lowStockAt === "" ? null : +newP.lowStockAt,
+    }]);
+    logAudit("商品追加", newP.name.trim());
+    setNewP({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "" });
+  }
+  const updP = (id, patch) => setProducts(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p));
+  const delP = (id) => { const p = products.find(x => x.id === id); setProducts(ps => ps.filter(x => x.id !== id)); if (p) logAudit("商品削除", p.name); };
+
+  function makeOrderSheet() {
+    const items = lowStock.map(p => {
+      const suggest = Math.max((p.lowStockAt || 0) * 2 - (p.stock || 0), 1);
+      return `・${p.name}（現在 ${p.stock || 0}） → ${suggest}本`;
+    });
+    const text = [`【発注書】${businessDateOfNow()}`, ...(items.length ? items : ["発注が必要な商品はありません"]), "", "よろしくお願いします。"].join("\n");
+    setOrderSheet(text);
+    navigator.clipboard?.writeText(text).catch(() => {});
+    logAudit("発注書生成", `${items.length}品目`);
+  }
+
+  return (
+    <div className="p-4 space-y-5">
+      <div>
+        <h2 className="text-lg font-bold mb-1">在庫・原価管理</h2>
+        <p className="text-xs text-zinc-500">商品を登録すると卓のドリンク画面にボタンが出て、注文のたびに在庫が自動で減ります。</p>
+      </div>
+
+      {lowStock.length > 0 && (
+        <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3">
+          <div className="text-xs font-bold mb-1" style={{ color: "#e08484" }}>📦 低在庫アラート</div>
+          <div className="text-[11px] text-zinc-300">{lowStock.map(p => `${p.name}(残${p.stock || 0}/基準${p.lowStockAt})`).join("・")}</div>
+        </div>
+      )}
+
+      <div style={{ background: "rgba(201,166,78,.06)", border: "1px solid #3a3421" }} className="rounded-xl p-3">
+        <div className="text-xs text-zinc-500 mb-2">{month} 原価・粗利（会計確定分）</div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div><div className="text-[10px] text-zinc-500">売上</div><div style={{ color: GOLD }} className="text-sm font-bold">{yen(revenue)}</div></div>
+          <div><div className="text-[10px] text-zinc-500">原価</div><div className="text-sm font-bold text-zinc-300">{yen(cost)}</div></div>
+          <div><div className="text-[10px] text-zinc-500">粗利</div><div style={{ color: "#7ae0a0" }} className="text-sm font-bold">{yen(gp)}</div></div>
+        </div>
+        <div className="mt-2">
+          <div className="flex justify-between text-[10px] text-zinc-500 mb-0.5"><span>原価率</span><span>{costRate.toFixed(1)}%</span></div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: "#1c1c22" }}>
+            <div style={{ width: Math.min(100, costRate) + "%", background: costRate > 30 ? "#e08484" : "#7ae0a0" }} className="h-full" />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold">商品マスタ（{(products || []).length}品目）</h3>
+          <button onClick={() => setStocktake(s => !s)} style={{ background: stocktake ? GOLD : "#22222a", color: stocktake ? "#000" : GOLD }} className="text-[11px] rounded-full px-3 py-1 font-bold">{stocktake ? "棚卸し終了" : "📋 棚卸しモード"}</button>
+        </div>
+        <div className="space-y-2 mb-3">
+          {(products || []).map(p => (
+            <div key={p.id} style={{ background: "#141418", border: `1px solid ${p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#a15050" : "#22222a"}` }} className="rounded-xl p-3">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="min-w-0">
+                  <span className="font-bold text-sm">{p.name}</span>
+                  <span className="text-[10px] text-zinc-500 ml-2">{(PRODUCT_CATEGORIES.find(([k]) => k === p.category) || [])[1] || p.category}</span>
+                </div>
+                <button onClick={() => delP(p.id)}><Trash2 size={13} color="#555" /></button>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                <span className="text-zinc-500">売価</span>
+                <input type="number" value={p.price} onChange={e => updP(p.id, { price: +e.target.value || 0 })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
+                <span className="text-zinc-500">原価</span>
+                <input type="number" value={p.cost} onChange={e => updP(p.id, { cost: +e.target.value || 0 })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
+                {stocktake ? (
+                  <>
+                    <span style={{ color: GOLD }} className="font-bold">実在庫</span>
+                    <input type="number" value={p.stock || 0} onChange={e => { updP(p.id, { stock: Math.max(0, +e.target.value || 0) }); }} onBlur={() => logAudit("棚卸し補正", `${p.name} → ${p.stock || 0}`)} style={{ background: "#0d0d10", border: `1px solid ${GOLD}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
+                  </>
+                ) : (
+                  <span className="text-zinc-400">在庫 <b style={{ color: p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#e08484" : "#fff" }}>{p.stock || 0}</b></span>
+                )}
+                <span className="text-zinc-500">基準</span>
+                <input type="number" value={p.lowStockAt ?? ""} placeholder="-" onChange={e => updP(p.id, { lowStockAt: e.target.value === "" ? null : +e.target.value })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-14 rounded px-1.5 py-1 outline-none" />
+              </div>
+            </div>
+          ))}
+          {(products || []).length === 0 && <p className="text-[11px] text-zinc-500 py-2">まだ商品がありません。下から追加してください。</p>}
+        </div>
+
+        <div style={{ background: "#0d0d10", border: "1px dashed #2a2a32" }} className="rounded-xl p-3 space-y-2">
+          <div className="flex gap-2">
+            <input value={newP.name} onChange={e => setNewP(x => ({ ...x, name: e.target.value }))} placeholder="商品名（例: シャンパンA）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+            <select value={newP.category} onChange={e => setNewP(x => ({ ...x, category: e.target.value }))} style={{ background: "#141418", border: "1px solid #22222a", color: "#fff", fontSize: "14px" }} className="rounded-lg px-2 py-2 outline-none">
+              {PRODUCT_CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2 items-center text-[11px]">
+            <input type="number" value={newP.price} onChange={e => setNewP(x => ({ ...x, price: e.target.value }))} placeholder="売価" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.cost} onChange={e => setNewP(x => ({ ...x, cost: e.target.value }))} placeholder="原価" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.stock} onChange={e => setNewP(x => ({ ...x, stock: e.target.value }))} placeholder="在庫" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.lowStockAt} onChange={e => setNewP(x => ({ ...x, lowStockAt: e.target.value }))} placeholder="基準" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+            <button onClick={addProduct} style={{ background: GOLD, color: "#000" }} className="px-3 py-2 rounded-lg text-xs font-bold shrink-0">追加</button>
+          </div>
+          <p className="text-[10px] text-zinc-600">基準 = 低在庫アラートを出す残数（空欄でアラートなし）</p>
+        </div>
+      </div>
+
+      <div>
+        <button onClick={makeOrderSheet} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">📝 発注書を自動生成（低在庫分）</button>
+        {orderSheet && (
+          <textarea readOnly value={orderSheet} rows={6} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
+        )}
+      </div>
     </div>
   );
 }
