@@ -23,7 +23,10 @@
 
 ## 構成
 
-- `src/App.jsx` — v1 本体（localStorage 完結、現在 v1.3.x）。実店舗はこれを使用中
+- `src/App.jsx` — v1 本体（現在 v2.1.x・全フェーズA〜G+リアルタイム共有まで実装済）。実店舗はこれを使用中
+  - 実装済: 公平ドラフト付け回し/回転警告/税込会計/客名帳CRM(LTV・DM生成・予約)/ボトルキープ残量/月次給料・振込CSV/在庫・原価/BI分析/頭脳アドバイザー/バックアップ・監査ログ/卓状況のリアルタイム共有(外用ビュー、Supabase public.floor 経由・機密はローカル完結)
+  - 未実装: 全データの複数端末同期(共有は卓状況のみ)、Phase H(App Store/Capacitor)は対象外と合意済み
+  - 注意: この開発環境から supabase.co へは直接通信不可(プロキシ403)。共有機能の検証は scratchpad の mock-supabase.mjs (PostgREST互換モック) + localStorage "share-endpoint-override" で行う
 - `src/saas/` — SaaS 版（Supabase auth + マルチテナント）。プロジェクト `kngkckweonnnhfocfqan`、スキーマ `saas.*`（23テーブル + RLS 投入済）
 - `vite.config.standalone.js` — 1ファイル版ビルド（`npm run build:standalone`）
 - GitHub リポジトリ `takayasuuchida/spectralayers` は削除済で push 不可。成果物は Artifact URL（+必要時 ZIP）で配布
