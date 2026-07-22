@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "1.9.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.0.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -382,6 +382,8 @@ export default function App() {
 
   const upd = (id, fn) => setTs(s => ({ ...s, [id]: fn(s[id]) }));
 
+
+
   function secMerged(tid) { for (const [g, arr] of Object.entries(mergeGroups)) if (merges[g] && arr.slice(1).includes(tid)) return g; return null; }
   function primMerge(tid) { for (const [g, arr] of Object.entries(mergeGroups)) if (merges[g] && arr[0] === tid) return { g, arr }; return null; }
   function dispTable(t) {
@@ -428,6 +430,99 @@ export default function App() {
     const plan = fairDraft([cust], available);
     return plan.length ? castById[plan[0][1]] : null;
   }
+
+  // ---- Phase G: 頭脳（ルールベース AI アドバイザー） ----
+  // 30秒ごとに再評価（回転超過などの時間依存アドバイスのため）
+  const [brainTick, setBrainTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setBrainTick(t => t + 1), 30000); return () => clearInterval(id); }, []);
+
+  const WD_JP = ["日", "月", "火", "水", "木", "金", "土"];
+  const advices = useMemo(() => {
+    if (!loaded) return [];
+    const out = [];
+    const today = businessDateOfNow();
+    const nowMs = Date.now();
+
+    // 1) リアルタイム助言: 回転超過の卓 → 次の一手
+    Object.entries(ts).forEach(([tid, t]) => {
+      if (!t?.active) return;
+      const rotMs = (t.setDuration / 3) * 60000;
+      const over = t.casts.filter(a => (a.at ?? t.setStart) + rotMs - nowMs <= 0);
+      if (over.length) {
+        const label = tables.find(x => x.id === tid)?.label || tid;
+        const names = over.map(a => castById[a.castId]?.name).filter(Boolean).join("・");
+        const plan = fairDraft(t.customers, available);
+        const nextNames = plan.slice(0, over.length).map(([, cid]) => castById[cid]?.name).filter(Boolean);
+        out.push({ icon: "♻", level: "act", title: `${label}: ${names} が回転時間超過`, detail: nextNames.length ? `次候補: ${nextNames.join("・")}（卓詳細の 次▶ で1タップ交代）` : "空きキャストが不足。他卓からの回転を検討" });
+      }
+    });
+
+    // 2) 異常検知: 今日のドリンク単価 vs 平常
+    const drinkLogs = (salesLog || []).filter(r => r.label !== "セット");
+    const todayDr = drinkLogs.filter(r => r.businessDate === today);
+    const pastDr = drinkLogs.filter(r => r.businessDate !== today);
+    const qtyOf = a => a.reduce((s, r) => s + (r.qty || 0), 0);
+    if (qtyOf(todayDr) >= 3 && qtyOf(pastDr) >= 10) {
+      const avg = a => a.reduce((s, r) => s + r.price * r.qty, 0) / Math.max(1, a.reduce((s, r) => s + r.qty, 0));
+      const t0 = avg(todayDr), p0 = avg(pastDr);
+      const pct = Math.round(t0 / p0 * 100);
+      if (pct <= 75) out.push({ icon: "📉", level: "warn", title: `今日のドリンク単価が平常の${pct}%`, detail: `平均${yen(Math.round(t0))}/杯（普段${yen(Math.round(p0))}）。ボトル・シャンパン提案を強化` });
+      else if (pct >= 150) out.push({ icon: "📈", level: "info", title: `今日のドリンク単価が平常の${pct}%`, detail: `平均${yen(Math.round(t0))}/杯。高単価が出てる、この調子` });
+    }
+
+    // 3) 売上ペース vs 同曜日平均
+    const dow = new Date().getDay();
+    const sameWd = (history || []).filter(h => new Date(h.businessDate + "T12:00:00").getDay() === dow);
+    const todaySub = Object.values(ts).filter(t => t?.active).reduce((s, t) => s + tableTotal(t), 0) + closed.reduce((s, r) => s + (r.total || 0), 0);
+    if (sameWd.length >= 2 && todaySub > 0) {
+      const wavg = sameWd.reduce((s, h) => s + (h.subtotal || 0), 0) / sameWd.length;
+      const pct = Math.round(todaySub / wavg * 100);
+      out.push({ icon: pct >= 100 ? "🔥" : "🐢", level: "info", title: `本日 ${yen(todaySub)} — ${WD_JP[dow]}曜平均の${pct}%`, detail: `この曜日の平均は ${yen(Math.round(wavg))}` });
+    }
+
+    // 4) 需要予測: 明日の曜日ランク + 給料日前後
+    if ((history || []).length >= 7) {
+      const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+      const wdAvgAll = [0, 1, 2, 3, 4, 5, 6].map(d => {
+        const rows = (history || []).filter(h => new Date(h.businessDate + "T12:00:00").getDay() === d);
+        return rows.length ? rows.reduce((s, h) => s + (h.subtotal || 0), 0) / rows.length : 0;
+      });
+      const rank = [...wdAvgAll].sort((a, b) => b - a).indexOf(wdAvgAll[tmr.getDay()]);
+      const paydayNear = [24, 25, 26].includes(tmr.getDate()) || tmr.getDate() >= 28 || tmr.getDate() === 1;
+      if ((rank <= 1 && wdAvgAll[tmr.getDay()] > 0) || paydayNear) {
+        out.push({ icon: "🔮", level: "info", title: `明日(${WD_JP[tmr.getDay()]})は混雑予想`, detail: [rank <= 1 ? "売上上位の曜日" : null, paydayNear ? "給料日前後" : null].filter(Boolean).join(" + ") + "。キャストの出勤を厚めに" });
+      }
+    }
+
+    // 5) キープ提案: 残量30%以下（来店中なら今夜提案）
+    (bottleKeeps || []).filter(k => k.status !== "empty" && k.status !== "disposed" && (k.remainingPct ?? 100) <= 30).forEach(k => {
+      const cust = (customerBook || []).find(c => c.id === k.customerBookId);
+      const inStore = Object.values(ts).some(t => t?.active && t.customers.some(cu => cu.customerBookId === k.customerBookId));
+      out.push({ icon: "🍾", level: inStore ? "act" : "info", title: `${cust?.name || "?"}様「${k.label}」残り${k.remainingPct ?? 100}%`, detail: inStore ? "ご来店中！今夜が追加ボトル提案のチャンス" : "次回来店時に新しいボトルを提案する時期" });
+    });
+
+    // 6) キャストコーチング（直近30日の実績パターン）
+    const c30 = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+    const agg = {};
+    (salaryHistory || []).filter(r => r.businessDate >= c30).forEach(r => {
+      const a = agg[r.castName] || (agg[r.castName] = { main: 0, dohan: 0, drink: 0, days: 0 });
+      a.main += r.mainNominationCount || 0; a.dohan += r.dohanCount || 0; a.drink += r.drinkCount || 0; a.days += 1;
+    });
+    Object.entries(agg).forEach(([name, a]) => {
+      if (a.days < 3) return;
+      if (a.dohan >= 3 && a.main < a.dohan) out.push({ icon: "🎓", level: "info", title: `${name}: 同伴${a.dohan}回 / 本指名${a.main}回`, detail: "同伴は強いのに指名に繋がってない。同伴後の指名打診を仕込むと伸びる" });
+      else if (a.drink >= 30 && a.main === 0) out.push({ icon: "🎓", level: "info", title: `${name}: ドリンク${a.drink}杯で本指名0`, detail: "卓では人気。連絡先交換と再来店の口実づくりを強化" });
+    });
+
+    // 7) 離脱リスク客（30日以上・利用額の大きい順）
+    const ghosts = (customerBook || []).filter(c => (c.visits || 0) > 1 && c.lastVisitAt && nowMs - c.lastVisitAt >= 30 * 86400000)
+      .sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 3);
+    if (ghosts.length) out.push({ icon: "💤", level: "warn", title: `離脱リスク: ${ghosts.map(c => c.name).join("・")}`, detail: `累計${yen(ghosts.reduce((s, c) => s + (c.totalSpent || 0), 0))}の常連。客名帳の「ご無沙汰DM」で声かけを` });
+
+    // act(今すぐ) → warn → info の順
+    const rank = { act: 0, warn: 1, info: 2 };
+    return out.sort((a, b) => rank[a.level] - rank[b.level]);
+  }, [loaded, brainTick, ts, closed, history, salesLog, salaryHistory, customerBook, bottleKeeps, casts, served]);
   function doAssign(tableId, castId, customerId) {
     upd(tableId, t => {
       const seats = [...t.seats];
@@ -604,7 +699,7 @@ export default function App() {
         </div>
       </div>
 
-      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products }} />}
+      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
@@ -722,7 +817,43 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
   );
 }
 
-function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products }) {
+function AdvisorPanel({ advices }) {
+  const [open, setOpen] = useState(false);
+  if (!advices?.length) return null;
+  const urgent = advices.filter(a => a.level === "act").length;
+  const LEVEL_STYLE = {
+    act: { border: GOLD, bg: "rgba(201,166,78,.08)" },
+    warn: { border: "#a15050", bg: "rgba(224,85,85,.06)" },
+    info: { border: "#2a2a32", bg: "#141418" },
+  };
+  return (
+    <div className="mb-3">
+      <button onClick={() => setOpen(o => !o)} style={{ background: urgent ? "rgba(201,166,78,.12)" : "#141418", border: `1px solid ${urgent ? GOLD : "#2a2a32"}` }} className="w-full rounded-xl px-3 py-2.5 flex items-center justify-between">
+        <span className="text-xs font-bold flex items-center gap-2">
+          🧠 頭脳アドバイス
+          <span style={{ background: urgent ? GOLD : "#2a2a32", color: urgent ? "#000" : "#999" }} className="rounded-full px-2 py-0.5 text-[10px] font-bold">{advices.length}</span>
+          {urgent > 0 && <span style={{ color: GOLD }} className="text-[10px]">今すぐ対応 {urgent}件</span>}
+        </span>
+        <span className="text-zinc-500 text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {advices.map((a, i) => {
+            const st = LEVEL_STYLE[a.level] || LEVEL_STYLE.info;
+            return (
+              <div key={i} style={{ background: st.bg, border: `1px solid ${st.border}` }} className="rounded-xl p-2.5">
+                <div className="text-xs font-bold mb-0.5">{a.icon} {a.title}</div>
+                <div className="text-[11px] text-zinc-400">{a.detail}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices }) {
   const groupEntries = Object.entries(mergeGroups || {});
   const bdToday = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 0);
   const bdTomorrow = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 1);
@@ -732,6 +863,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
   const lowStock = (products || []).filter(p => p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt);
   return (
     <div className="p-3">
+      <AdvisorPanel advices={advices} />
       {(bdToday.length > 0 || bdTomorrow.length > 0 || resToday.length > 0 || lowStock.length > 0) && (
         <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-2.5 mb-3 space-y-1 text-[11px]">
           {bdToday.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 本日誕生日:</span> {bdToday.map(c => c.name).join("・")}</div>}
