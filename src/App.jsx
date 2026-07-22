@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.4.2"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.5.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -127,6 +127,7 @@ export default function App() {
   const [history, setHistory] = useState([]); // [{ businessDate, subtotal, tax, grand, tableCount, activeCount, timestamp }]
   const [customerBook, setCustomerBook] = useState([]); // 客名帳マスタ [{ id, name, birthday, pref, memo, favoriteCastIds, visits, lastVisitAt }]
   const [bottleKeeps, setBottleKeeps] = useState([]); // [{ id, customerBookId, label, openedAt, expiresAt, memo, status }]
+  const [auditLog, setAuditLog] = useState([]); // 監査ログ [{ t, action, detail }] 最新が先頭・最大1000件
   const [pick, setPick] = useState(null); // {tableId, customerId}
   const [modal, setModal] = useState(null); // {type, msg, onOk}
   const [loaded, setLoaded] = useState(false);
@@ -149,6 +150,7 @@ export default function App() {
           setHistory(d.history || []);
           setCustomerBook(d.customerBook || []);
           setBottleKeeps(d.bottleKeeps || []);
+          setAuditLog(d.auditLog || []);
         } catch (e) { setTs({}); setServed({}); }
       } else { setTs({}); setServed({}); }
       setLoaded(true);
@@ -158,11 +160,89 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog]);
+
+  // ---- 監査ログ ----
+  const logAudit = (action, detail = "") =>
+    setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
+
+  // ---- バックアップ ----
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog });
+
+  function exportData() {
+    const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tsukemawashi-${URL_STORE}-${businessDateOfNow()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    logAudit("バックアップ書き出し");
+  }
+
+  function applyPayload(p) {
+    setSettings({ ...DEFAULT_SETTINGS, ...(p.settings || {}), storeName: URL_STORE });
+    setTables(p.tables || DEFAULT_TABLES);
+    setMergeGroups(p.mergeGroups || DEFAULT_MERGE_GROUPS);
+    setCasts((p.casts || SEED_CASTS).map(mergeCastDefaults));
+    setTs(p.ts || {});
+    setServed(p.served || {});
+    setMerges(p.merges || {});
+    setClosed(p.closed || []);
+    setHistory(p.history || []);
+    setCustomerBook(p.customerBook || []);
+    setBottleKeeps(p.bottleKeeps || []);
+    setAuditLog(p.auditLog || []);
+    setSel(null);
+  }
+
+  function importData(fileText, onResult) {
+    try {
+      const data = JSON.parse(fileText);
+      if (data?.app !== "tsukemawashi" || !data.payload) { onResult?.({ ok: false, msg: "このアプリのバックアップファイルではありません。" }); return; }
+      applyPayload(data.payload);
+      setAuditLog(l => [{ t: Date.now(), action: "バックアップから復元", detail: `${data.store || "?"} / ${data.exportedAt || "?"}` }, ...l].slice(0, 1000));
+      onResult?.({ ok: true, msg: `復元しました（${data.store || "?"} / ${(data.exportedAt || "").slice(0, 10)}）` });
+    } catch (e) {
+      onResult?.({ ok: false, msg: "ファイルを読み込めませんでした: " + (e.message || e) });
+    }
+  }
+
+  // 自動世代バックアップ（営業リセット時に保存・最新5世代）
+  const BAK_PREFIX = STORE_KEY + ":bak:";
+  function writeAutoBackup() {
+    try {
+      const key = BAK_PREFIX + businessDateOfNow() + "-" + Date.now();
+      localStorage.setItem(key, JSON.stringify({ app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() }));
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(BAK_PREFIX)).sort().reverse();
+      keys.slice(5).forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* 容量オーバー等は黙って諦める（本体保存を優先） */ }
+  }
+  function listAutoBackups() {
+    try {
+      return Object.keys(localStorage).filter(k => k.startsWith(BAK_PREFIX)).sort().reverse().map(k => {
+        try {
+          const d = JSON.parse(localStorage.getItem(k));
+          return { key: k, exportedAt: d.exportedAt, casts: (d.payload?.casts || []).length, customers: (d.payload?.customerBook || []).length, historyDays: (d.payload?.history || []).length };
+        } catch { return { key: k, exportedAt: null }; }
+      });
+    } catch { return []; }
+  }
+  function restoreAutoBackup(key, onResult) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) { onResult?.({ ok: false, msg: "バックアップが見つかりません" }); return; }
+      importData(raw, onResult);
+    } catch (e) { onResult?.({ ok: false, msg: String(e) }); }
+  }
 
   function resetNight() {
+    writeAutoBackup(); // リセット前の状態を自動バックアップ（5世代保持）
     // 今日の集計を history に保存
     const activeRows = Object.values(ts).filter(t => t?.active);
     const activeSubtotal = activeRows.reduce((s, t) => s + tableTotal(t), 0);
@@ -182,6 +262,7 @@ export default function App() {
     }
     setTs({}); setServed({}); setClosed([]); setMerges({}); setSel(null);
     setCasts(cs => cs.map(c => ({ ...c, ...DEFAULT_CAST_COUNTERS, status: c.status === "出勤" ? "出勤" : c.status })));
+    logAudit("営業リセット", `小計${yen(subtotal)} / 会計済${tableCount}卓`);
   }
 
   // 稼働開始／終了
@@ -196,7 +277,9 @@ export default function App() {
     setSalaryModal({ cast: c, breakdown });
   }
   function confirmClockOut(castId) {
-    setCasts(cs => cs.map(c => c.id === castId ? { ...c, ...DEFAULT_CAST_COUNTERS, status: "退勤済" } : c));
+    const c = casts.find(x => x.id === castId);
+    if (salaryModal?.cast?.id === castId) logAudit("退勤確定", `${c?.name || "?"} 給料${yen(salaryModal.breakdown?.net || 0)}`);
+    setCasts(cs => cs.map(x => x.id === castId ? { ...x, ...DEFAULT_CAST_COUNTERS, status: "退勤済" } : x));
     setSalaryModal(null);
   }
 
@@ -289,6 +372,8 @@ export default function App() {
       return { ...t, casts: [...t.casts, { castId, customerId, at: Date.now() }], seats };
     });
     setServed(s => ({ ...s, [customerId]: [...new Set([...(s[customerId] || []), castId])] }));
+    const custName = ts[tableId]?.customers.find(c => c.id === customerId)?.name || "?";
+    logAudit("付け回し", `${castById[castId]?.name || "?"} → ${custName}`);
   }
   function tryAssign(tableId, castId, customerId) {
     const cust = ts[tableId].customers.find(c => c.id === customerId);
@@ -368,13 +453,18 @@ export default function App() {
   };
   const ordQty = (tableId, oid, d) => upd(tableId, t => ({ ...t, orders: t.orders.map(o => o.id === oid ? { ...o, qty: Math.max(1, o.qty + d) } : o) }));
   const delOrder = (tableId, oid) => upd(tableId, t => ({ ...t, orders: t.orders.filter(o => o.id !== oid) }));
-  function openTable(tableId) { setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: Date.now(), customers: [], casts: [], seats: [], orders: [] } })); }
+  function openTable(tableId) {
+    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: Date.now(), customers: [], casts: [], seats: [], orders: [] } }));
+    logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
+  }
   function closeTable(tableId) {
     const t = ts[tableId]; const total = tableTotal(t);
     const tRef = tables.find(x => x.id === tableId);
-    setClosed(c => [...c, { label: tRef ? dispTable(tRef).label : tableId, total, n: t.customers.length }]);
+    const label = tRef ? dispTable(tRef).label : tableId;
+    setClosed(c => [...c, { label, total, n: t.customers.length }]);
     setTs(s => { const n = { ...s }; delete n[tableId]; return n; });
     setSel(null);
+    logAudit("会計", `${label} ${yen(total + Math.floor(total * taxRate))}（税込・${t.customers.length}名)`);
   }
   function toggleMerge(g) {
     if ((mergeGroups[g] || []).some(id => ts[id]?.active)) { setModal({ type: "ng", msg: "結合する卓に客がいる間は変更できません。会計後にどうぞ。" }); return; }
@@ -405,7 +495,7 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
@@ -1444,7 +1534,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSa
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
@@ -1662,7 +1752,11 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         </div>
       </div>
 
-      <button onClick={() => { if (confirmReset) { resetNight(); setConfirmReset(false); } else setConfirmReset(true); }} style={{ background: confirmReset ? "#7a2222" : "#15151a", border: `1px solid ${confirmReset ? "#a13b3b" : "#2a2a32"}`, color: confirmReset ? "#fff" : "#999" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{confirmReset ? "⚠ もう一度タップで全卓クリア確定" : "営業リセット（全卓クリア・名簿は保持）"}</button>
+      <DataManagement {...{ exportData, importData, listAutoBackups, restoreAutoBackup }} />
+
+      <AuditLogView auditLog={auditLog} />
+
+      <button onClick={() => { if (confirmReset) { resetNight(); setConfirmReset(false); } else setConfirmReset(true); }} style={{ background: confirmReset ? "#7a2222" : "#15151a", border: `1px solid ${confirmReset ? "#a13b3b" : "#2a2a32"}`, color: confirmReset ? "#fff" : "#999" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{confirmReset ? "⚠ もう一度タップで全卓クリア確定" : "営業リセット（全卓クリア・名簿は保持・自動バックアップされます）"}</button>
 
       <button onClick={() => {
         if (confirm("この店舗のすべてのデータ（キャスト・卓・設定）を完全削除して初期状態に戻します。よろしいですか？")) {
@@ -1670,6 +1764,107 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
           location.reload();
         }
       }} style={{ background: "#3a1010", border: "1px solid #7a2222", color: "#ff8888" }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-2">🗑 完全リセット（この店舗の全データ削除）</button>
+    </div>
+  );
+}
+
+function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBackup }) {
+  const fileRef = useRef(null);
+  const [staged, setStaged] = useState(null); // { text, name, summary }
+  const [msg, setMsg] = useState(null); // { ok, msg }
+  const [bakConfirm, setBakConfirm] = useState(null); // 自動バックアップ復元の2度押し用 key
+  const [showBaks, setShowBaks] = useState(false);
+  const baks = showBaks ? listAutoBackups() : [];
+
+  function onFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      let summary = null;
+      try {
+        const d = JSON.parse(text);
+        summary = { store: d.store, exportedAt: (d.exportedAt || "").slice(0, 16).replace("T", " "), casts: (d.payload?.casts || []).length, customers: (d.payload?.customerBook || []).length, historyDays: (d.payload?.history || []).length };
+      } catch { /* importData 側でエラーにする */ }
+      setStaged({ text, name: f.name, summary });
+      setMsg(null);
+    };
+    reader.readAsText(f);
+    e.target.value = "";
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-bold mb-1">データ管理（バックアップ）</h2>
+      <p className="text-xs text-zinc-500 mb-3">端末の故障・ブラウザのデータ消去に備えて、全データ（キャスト・客名帳・売上履歴・キープ）をファイルに保存できます。営業リセット時にも自動でこの端末内に5世代保存されます。</p>
+
+      <div className="flex gap-2 mb-3">
+        <button onClick={exportData} style={{ background: GOLD, color: "#000" }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬇ 書き出す（ファイル保存）</button>
+        <button onClick={() => fileRef.current?.click()} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬆ 読み込む（復元）</button>
+        <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={onFile} />
+      </div>
+
+      {staged && (
+        <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-3 mb-3">
+          <div className="text-xs font-bold mb-1" style={{ color: "#e0a84a" }}>復元の確認 — 現在のデータは上書きされます</div>
+          <div className="text-[11px] text-zinc-400 mb-2">
+            {staged.name}
+            {staged.summary && <> ／ {staged.summary.store} ／ {staged.summary.exportedAt}<br />キャスト{staged.summary.casts}名・客名帳{staged.summary.customers}名・履歴{staged.summary.historyDays}日</>}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setStaged(null)} style={{ background: "#22222a", color: "#aaa" }} className="flex-1 rounded-lg py-2 text-xs">やめる</button>
+            <button onClick={() => { importData(staged.text, setMsg); setStaged(null); }} style={{ background: "#7a2222", color: "#fff" }} className="flex-1 rounded-lg py-2 text-xs font-bold">復元実行（上書き）</button>
+          </div>
+        </div>
+      )}
+
+      {msg && (
+        <div style={{ color: msg.ok ? "#7ae0a0" : "#ff8888", background: msg.ok ? "rgba(74,222,128,.08)" : "rgba(224,85,85,.08)", border: `1px solid ${msg.ok ? "#2a5a3a" : "#7a2222"}` }} className="rounded-lg p-2 text-xs mb-3">{msg.msg}</div>
+      )}
+
+      <button onClick={() => setShowBaks(s => !s)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showBaks ? "▲ 自動バックアップを閉じる" : "▼ 自動バックアップ一覧（営業リセット時に保存）"}</button>
+      {showBaks && (
+        <div className="space-y-1.5">
+          {baks.length === 0 && <p className="text-[11px] text-zinc-500">まだ自動バックアップがありません（営業リセットすると作られます）</p>}
+          {baks.map(b => (
+            <div key={b.key} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-lg p-2.5 flex items-center gap-2">
+              <div className="flex-1 min-w-0 text-[11px]">
+                <div className="font-bold">{(b.exportedAt || "?").slice(0, 16).replace("T", " ")}</div>
+                <div className="text-zinc-500">キャスト{b.casts ?? "?"}・客{b.customers ?? "?"}・履歴{b.historyDays ?? "?"}日</div>
+              </div>
+              {bakConfirm === b.key ? (
+                <button onClick={() => { restoreAutoBackup(b.key, setMsg); setBakConfirm(null); }} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">上書き確定</button>
+              ) : (
+                <button onClick={() => setBakConfirm(b.key)} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">復元</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuditLogView({ auditLog }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold">
+        {open ? "▲ 変更履歴を閉じる" : `▼ 変更履歴（監査ログ・${(auditLog || []).length}件）`}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1 max-h-80 overflow-y-auto">
+          {(auditLog || []).slice(0, 100).map((e, i) => (
+            <div key={i} style={{ background: "#141418", border: "1px solid #1c1c22" }} className="rounded-lg px-2.5 py-1.5 flex items-start gap-2 text-[11px]">
+              <span className="text-zinc-600 whitespace-nowrap">{new Date(e.t).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              <span style={{ color: GOLD }} className="font-bold whitespace-nowrap">{e.action}</span>
+              <span className="text-zinc-400 min-w-0 break-all">{e.detail}</span>
+            </div>
+          ))}
+          {(auditLog || []).length === 0 && <p className="text-[11px] text-zinc-500 py-2">まだ記録がありません</p>}
+        </div>
+      )}
     </div>
   );
 }
