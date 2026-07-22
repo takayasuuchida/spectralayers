@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "1.8.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.9.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -270,9 +270,17 @@ export default function App() {
     const tableCount = closed.length;
     const activeCount = activeRows.length;
     if (subtotal > 0 || tableCount > 0) {
+      // 卓別内訳（稼働率ヒートマップ用）
+      const byTable = {};
+      closed.forEach(r => { byTable[r.label] = (byTable[r.label] || 0) + (r.total || 0); });
+      Object.entries(ts).filter(([, t]) => t?.active).forEach(([id, t]) => {
+        const ref = tables.find(x => x.id === id);
+        const label = ref ? dispTable(ref).label : id;
+        byTable[label] = (byTable[label] || 0) + tableTotal(t);
+      });
       const entry = {
         businessDate: businessDateOfNow(),
-        subtotal, tax, grand, tableCount, activeCount,
+        subtotal, tax, grand, tableCount, activeCount, byTable,
         timestamp: Date.now(),
       };
       setHistory(h => [entry, ...h].slice(0, 365));
@@ -556,10 +564,11 @@ export default function App() {
     // 売上明細ログ（原価・粗利分析用）: セット + 各注文を確定記録
     {
       const bd = businessDateOfNow();
+      const hour = new Date().getHours();
       const entries = [
-        ...(t.customers.length > 0 ? [{ businessDate: bd, label: "セット", price: t.setType * t.customers.length, qty: 1, cost: 0, productId: null }] : []),
+        ...(t.customers.length > 0 ? [{ businessDate: bd, hour, label: "セット", price: t.setType * t.customers.length, qty: 1, cost: 0, productId: null }] : []),
         ...t.orders.map(o => ({
-          businessDate: bd, label: o.label, price: o.price, qty: o.qty,
+          businessDate: bd, hour, label: o.label, price: o.price, qty: o.qty,
           cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
           productId: o.productId || null,
         })),
@@ -598,7 +607,7 @@ export default function App() {
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
-      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
+      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }} />}
 
@@ -1527,20 +1536,189 @@ function SalaryLine({ l, v, cut }) {
   );
 }
 
-function Sales({ ts, dispTable, tables, tableTotal, closed, target, taxRate, history }) {
+function Sales({ ts, dispTable, tables, tableTotal, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
   const [tab, setTab] = useState("today");
+  const TabBtn = ({ k, children }) => (
+    <button onClick={() => setTab(k)} style={{ background: tab === k ? GOLD : "#141418", color: tab === k ? "#000" : "#888", border: `1px solid ${tab === k ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">{children}</button>
+  );
   return (
     <div className="p-4">
       <div className="flex gap-2 mb-4">
-        <button onClick={() => setTab("today")} style={{ background: tab === "today" ? GOLD : "#141418", color: tab === "today" ? "#000" : "#888", border: `1px solid ${tab === "today" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">今日</button>
-        <button onClick={() => setTab("history")} style={{ background: tab === "history" ? GOLD : "#141418", color: tab === "history" ? "#000" : "#888", border: `1px solid ${tab === "history" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">
-          <CalendarDays size={13} />履歴 {history?.length > 0 && <span className="text-[10px]">({history.length})</span>}
-        </button>
+        <TabBtn k="today">今日</TabBtn>
+        <TabBtn k="history"><CalendarDays size={13} />履歴</TabBtn>
+        <TabBtn k="bi">📊 分析</TabBtn>
       </div>
-      {tab === "today"
-        ? <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} closed={closed} target={target} taxRate={taxRate} />
-        : <SalesHistory history={history} />
-      }
+      {tab === "today" && <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} closed={closed} target={target} taxRate={taxRate} />}
+      {tab === "history" && <SalesHistory history={history} />}
+      {tab === "bi" && <AnalyticsView {...{ history, salesLog, salaryHistory, customerBook }} />}
+    </div>
+  );
+}
+
+// ============ Phase F: BI ダッシュボード ============
+function csvDownload(filename, head, rows) {
+  const csv = "﻿" + [head, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
+  const [range, setRange] = useState(30); // 7 / 30 / 90 / 9999 日
+  const cutoff = (() => { const d = new Date(); d.setDate(d.getDate() - range); return d.toISOString().slice(0, 10); })();
+  const hist = (history || []).filter(h => h.businessDate >= cutoff).sort((a, b) => a.businessDate.localeCompare(b.businessDate));
+  const logs = (salesLog || []).filter(r => r.businessDate >= cutoff);
+  const sals = (salaryHistory || []).filter(r => r.businessDate >= cutoff);
+
+  const totalSales = hist.reduce((s, h) => s + (h.subtotal || 0), 0);
+  const avgDay = hist.length ? Math.round(totalSales / hist.length) : 0;
+  const maxDay = Math.max(1, ...hist.map(h => h.subtotal || 0));
+
+  // 曜日別平均
+  const wd = [[], [], [], [], [], [], []];
+  hist.forEach(h => { const d = new Date(h.businessDate + "T12:00:00"); wd[d.getDay()].push(h.subtotal || 0); });
+  const wdAvg = wd.map(a => a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : 0);
+  const wdMax = Math.max(1, ...wdAvg);
+  const WD_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+  // 時間帯別（18時〜翌5時）
+  const hourly = {};
+  logs.forEach(r => { if (r.hour != null) hourly[r.hour] = (hourly[r.hour] || 0) + r.price * r.qty; });
+  const HOURS = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5];
+  const hourMax = Math.max(1, ...HOURS.map(h => hourly[h] || 0));
+
+  // キャスト別（給料履歴から: 純支給と指名数）
+  const castAgg = {};
+  sals.forEach(r => {
+    const a = castAgg[r.castName] || (castAgg[r.castName] = { net: 0, main: 0, dohan: 0, bottle: 0 });
+    a.net += r.net || 0; a.main += r.mainNominationCount || 0; a.dohan += r.dohanCount || 0; a.bottle += r.bottleSales || 0;
+  });
+  const castRows = Object.entries(castAgg).map(([name, a]) => ({ name, ...a })).sort((a, b) => b.bottle + b.net - (a.bottle + a.net)).slice(0, 10);
+  const castMax = Math.max(1, ...castRows.map(r => r.net));
+
+  // 卓稼働ヒートマップ（直近14日 × 卓、履歴の byTable から）
+  const heatDays = (history || []).filter(h => h.byTable).sort((a, b) => b.businessDate.localeCompare(a.businessDate)).slice(0, 14).reverse();
+  const heatTables = [...new Set(heatDays.flatMap(h => Object.keys(h.byTable || {})))];
+  const heatMax = Math.max(1, ...heatDays.flatMap(h => Object.values(h.byTable || {})));
+
+  // 顧客セグメント
+  const segs = { A: [], B: [], C: [], 休眠: [] };
+  const now = Date.now();
+  (customerBook || []).forEach(c => {
+    if ((c.visits || 0) === 0) return;
+    if (c.lastVisitAt && now - c.lastVisitAt >= 30 * 86400000) segs["休眠"].push(c);
+    else if ((c.totalSpent || 0) >= 100000) segs.A.push(c);
+    else if ((c.totalSpent || 0) >= 30000) segs.B.push(c);
+    else segs.C.push(c);
+  });
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {[[7, "7日"], [30, "30日"], [90, "90日"], [9999, "全部"]].map(([d, l]) => (
+          <button key={d} onClick={() => setRange(d)} style={{ background: range === d ? GOLD : "#141418", color: range === d ? "#000" : "#888", border: `1px solid ${range === d ? GOLD : "#22222a"}` }} className="text-[11px] rounded-full px-3 py-1 font-bold">{l}</button>
+        ))}
+        <span className="text-[10px] text-zinc-500 ml-auto">計{yen(totalSales)} / 平均{yen(avgDay)}/日</span>
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">売上推移（税抜/日）</p>
+        {hist.length === 0 ? <p className="text-[11px] text-zinc-600">データなし（営業リセットで日次が記録されます）</p> : (
+          <div className="overflow-x-auto pb-1">
+            <div className="flex items-end gap-1 h-28" style={{ minWidth: hist.length * 18 }}>
+              {hist.map((h, i) => (
+                <div key={i} className="flex flex-col items-center gap-0.5" style={{ width: 16 }}>
+                  <div style={{ height: Math.max(2, Math.round((h.subtotal || 0) / maxDay * 96)), width: 12, background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", borderRadius: 2 }} />
+                  <span className="text-[8px] text-zinc-600">{h.businessDate.slice(8)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">曜日別 平均売上</p>
+        <div className="space-y-1">
+          {WD_LABELS.map((l, i) => (
+            <MiniBar key={l} label={l} value={wdAvg[i]} max={wdMax} color={i === 5 || i === 6 ? GOLD : TEAL} />
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">時間帯別 売上（会計時刻ベース）</p>
+        {Object.keys(hourly).length === 0 ? <p className="text-[11px] text-zinc-600">データなし（会計すると記録されます）</p> : (
+          <div className="flex items-end gap-1 h-20">
+            {HOURS.map(h => (
+              <div key={h} className="flex-1 flex flex-col items-center gap-0.5">
+                <div style={{ height: Math.max(2, Math.round((hourly[h] || 0) / hourMax * 64)), width: "100%", maxWidth: 20, background: TEAL, borderRadius: 2, opacity: hourly[h] ? 1 : 0.15 }} />
+                <span className="text-[8px] text-zinc-600">{h}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">キャスト別（純支給と実績・期間内）</p>
+        {castRows.length === 0 ? <p className="text-[11px] text-zinc-600">データなし（退勤確定で記録されます）</p> : (
+          <div className="space-y-1.5">
+            {castRows.map(r => (
+              <div key={r.name}>
+                <MiniBar label={r.name} value={r.net} max={castMax} color={GOLD} />
+                <div className="text-[9px] text-zinc-600 pl-14">本指{r.main} / 同伴{r.dohan} / 🍾{yen(r.bottle)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">卓稼働ヒートマップ（直近14営業日）</p>
+        {heatTables.length === 0 ? <p className="text-[11px] text-zinc-600">データなし（営業リセット時に卓別内訳が記録されます）</p> : (
+          <div className="overflow-x-auto">
+            <table className="text-[9px]" style={{ borderCollapse: "separate", borderSpacing: 2 }}>
+              <thead><tr><th></th>{heatDays.map(h => <th key={h.businessDate} className="text-zinc-600 font-normal">{h.businessDate.slice(8)}</th>)}</tr></thead>
+              <tbody>
+                {heatTables.map(tl => (
+                  <tr key={tl}>
+                    <td className="text-zinc-500 pr-1 whitespace-nowrap">{tl}</td>
+                    {heatDays.map(h => {
+                      const v = (h.byTable || {})[tl] || 0;
+                      const alpha = v > 0 ? 0.15 + (v / heatMax) * 0.85 : 0;
+                      return <td key={h.businessDate}><div title={yen(v)} style={{ width: 18, height: 18, borderRadius: 3, background: v > 0 ? `rgba(201,166,78,${alpha})` : "#141418", border: "1px solid #1c1c22" }} /></td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">顧客セグメント（累計利用額）</p>
+        <div className="grid grid-cols-4 gap-2 mb-2">
+          {[["A", "10万〜", "#e0a84a"], ["B", "3万〜", TEAL], ["C", "〜3万", "#7aa7ff"], ["休眠", "30日〜", "#888"]].map(([k, sub, color]) => (
+            <div key={k} style={{ background: "#141418", border: `1px solid ${color}` }} className="rounded-xl p-2 text-center">
+              <div style={{ color }} className="text-lg font-bold">{segs[k].length}</div>
+              <div className="text-[9px] text-zinc-500">{k}ランク<br />{sub}</div>
+            </div>
+          ))}
+        </div>
+        {segs.A.length > 0 && (
+          <p className="text-[10px] text-zinc-500">A: {segs.A.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 5).map(c => `${c.name}(${yen(c.totalSpent || 0)})`).join("・")}</p>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
+        <button onClick={() => csvDownload(`顧客_${businessDateOfNow()}.csv`, "名前,来店回数,累計利用額,最終来店", (customerBook || []).map(c => [c.name, c.visits || 0, c.totalSpent || 0, c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : ""].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 顧客CSV</button>
+      </div>
     </div>
   );
 }
