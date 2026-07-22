@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake } from "lucide-react";
 
-const APP_VERSION = "1.6.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "1.7.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -132,6 +132,7 @@ export default function App() {
   const [auditLog, setAuditLog] = useState([]); // 監査ログ [{ t, action, detail }] 最新が先頭・最大1000件
   const [salaryHistory, setSalaryHistory] = useState([]); // 給料履歴（退勤確定ごと・最新が先頭・最大2000件）
   const [salaryAdjust, setSalaryAdjust] = useState({}); // 月次調整 { "YYYY-MM": { castId: { bonus, deduct, memo } } }
+  const [reservations, setReservations] = useState([]); // 来店予約 [{ id, customerBookId, date, time, memo }]
   const [pick, setPick] = useState(null); // {tableId, customerId}
   const [modal, setModal] = useState(null); // {type, msg, onOk}
   const [loaded, setLoaded] = useState(false);
@@ -157,6 +158,7 @@ export default function App() {
           setAuditLog(d.auditLog || []);
           setSalaryHistory(d.salaryHistory || []);
           setSalaryAdjust(d.salaryAdjust || {});
+          setReservations(d.reservations || []);
         } catch (e) { setTs({}); setServed({}); }
       } else { setTs({}); setServed({}); }
       setLoaded(true);
@@ -166,16 +168,16 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations]);
 
   // ---- 監査ログ ----
   const logAudit = (action, detail = "") =>
     setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
 
   // ---- バックアップ ----
-  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust });
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations });
 
   function exportData() {
     const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
@@ -206,6 +208,7 @@ export default function App() {
     setAuditLog(p.auditLog || []);
     setSalaryHistory(p.salaryHistory || []);
     setSalaryAdjust(p.salaryAdjust || {});
+    setReservations(p.reservations || []);
     setSel(null);
   }
 
@@ -420,8 +423,14 @@ export default function App() {
       return { ...t, casts: [...t.casts, { castId, customerId, at: Date.now() }], seats };
     });
     setServed(s => ({ ...s, [customerId]: [...new Set([...(s[customerId] || []), castId])] }));
-    const custName = ts[tableId]?.customers.find(c => c.id === customerId)?.name || "?";
-    logAudit("付け回し", `${castById[castId]?.name || "?"} → ${custName}`);
+    const cust = ts[tableId]?.customers.find(c => c.id === customerId);
+    // お気に入り自動検出: 付いた回数を客名帳に累積（多い順に自動お気に入り扱い）
+    if (cust?.customerBookId) {
+      setCustomerBook(cb => cb.map(c => c.id === cust.customerBookId
+        ? { ...c, castAffinity: { ...(c.castAffinity || {}), [castId]: ((c.castAffinity || {})[castId] || 0) + 1 } }
+        : c));
+    }
+    logAudit("付け回し", `${castById[castId]?.name || "?"} → ${cust?.name || "?"}`);
   }
   function tryAssign(tableId, castId, customerId) {
     const cust = ts[tableId].customers.find(c => c.id === customerId);
@@ -509,10 +518,22 @@ export default function App() {
     const t = ts[tableId]; const total = tableTotal(t);
     const tRef = tables.find(x => x.id === tableId);
     const label = tRef ? dispTable(tRef).label : tableId;
+    const grand = total + Math.floor(total * taxRate);
     setClosed(c => [...c, { label, total, n: t.customers.length }]);
+    // LTV: 客名帳連携済みのお客様に税込頭割り額を累積 + 来店履歴
+    if (t.customers.length > 0) {
+      const share = Math.round(grand / t.customers.length);
+      const bookIds = new Set(t.customers.filter(c => c.customerBookId).map(c => c.customerBookId));
+      if (bookIds.size > 0) {
+        const bd = businessDateOfNow();
+        setCustomerBook(cb => cb.map(c => bookIds.has(c.id)
+          ? { ...c, totalSpent: (c.totalSpent || 0) + share, visitLog: [{ date: bd, amount: share }, ...(c.visitLog || [])].slice(0, 100) }
+          : c));
+      }
+    }
     setTs(s => { const n = { ...s }; delete n[tableId]; return n; });
     setSel(null);
-    logAudit("会計", `${label} ${yen(total + Math.floor(total * taxRate))}（税込・${t.customers.length}名)`);
+    logAudit("会計", `${label} ${yen(grand)}（税込・${t.customers.length}名)`);
   }
   function toggleMerge(g) {
     if ((mergeGroups[g] || []).some(id => ts[id]?.active)) { setModal({ type: "ng", msg: "結合する卓に客がいる間は変更できません。会計後にどうぞ。" }); return; }
@@ -539,10 +560,10 @@ export default function App() {
         </div>
       </div>
 
-      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge }} />}
+      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history }} />}
-      {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }} />}
+      {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }} />}
 
       {sel && tables.find(x => x.id === sel) && (
@@ -656,10 +677,22 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
   );
 }
 
-function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge }) {
+function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations }) {
   const groupEntries = Object.entries(mergeGroups || {});
+  const bdToday = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 0);
+  const bdTomorrow = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 1);
+  const today = businessDateOfNow();
+  const resToday = (reservations || []).filter(r => r.date === today).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const custName = (id) => (customerBook || []).find(c => c.id === id)?.name || "?";
   return (
     <div className="p-3">
+      {(bdToday.length > 0 || bdTomorrow.length > 0 || resToday.length > 0) && (
+        <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-2.5 mb-3 space-y-1 text-[11px]">
+          {bdToday.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 本日誕生日:</span> {bdToday.map(c => c.name).join("・")}</div>}
+          {bdTomorrow.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
+          {resToday.length > 0 && <div><span style={{ color: TEAL }} className="font-bold">📅 本日予約:</span> {resToday.map(r => `${r.time || ""} ${custName(r.customerBookId)}`).join("・")}</div>}
+        </div>
+      )}
       {groupEntries.length > 0 && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-xs text-zinc-500">卓結合:</span>
@@ -698,6 +731,8 @@ function Detail(p) {
     (t?.customers || []).forEach(cu => {
       const cb = (customerBook || []).find(x => x.id === cu.customerBookId);
       (cb?.favoriteCastIds || []).forEach(id => s.add(id));
+      // 自動検出: よく付く子 TOP2 も先頭グループに含める
+      Object.entries(cb?.castAffinity || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).forEach(([id]) => s.add(id));
     });
     return s;
   }, [t?.customers, customerBook]);
@@ -1551,7 +1586,7 @@ function SalesHistory({ history }) {
   );
 }
 
-function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps }) {
+function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName, logAudit }) {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null); // customer object
   const nameRef = useRef(null);
@@ -1571,6 +1606,18 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
   const expiringKeeps = activeKeeps
     .filter(k => k.expiresAt && (k.expiresAt - now) <= 14 * 86400000)
     .sort((a, b) => a.expiresAt - b.expiresAt);
+
+  // ご無沙汰リスト（再来店提案）: 来店実績があり30日以上来ていない客
+  const ghosting = sorted
+    .filter(c => (c.visits || 0) > 0 && c.lastVisitAt && (now - c.lastVisitAt) >= 30 * 86400000)
+    .map(c => ({ c, days: Math.floor((now - c.lastVisitAt) / 86400000) }))
+    .sort((a, b) => b.days - a.days);
+
+  // 今後の予約（今日以降）
+  const today = businessDateOfNow();
+  const upcomingRes = (reservations || [])
+    .filter(r => r.date >= today)
+    .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
 
   function addNew() {
     const v = (nameRef.current?.value || "").trim();
@@ -1603,7 +1650,7 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
       )}
 
       {expiringKeeps.length > 0 && (
-        <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3 mb-4">
+        <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3 mb-3">
           <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#e08484" }}>
             🍾 期限が近いキープ本（14日以内）
           </div>
@@ -1618,6 +1665,41 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {upcomingRes.length > 0 && (
+        <div style={{ background: "rgba(63,182,176,.06)", border: `1px solid ${TEAL}` }} className="rounded-xl p-3 mb-3">
+          <div className="text-xs font-bold mb-2" style={{ color: TEAL }}>📅 来店予約</div>
+          <div className="space-y-1">
+            {upcomingRes.slice(0, 8).map(r => {
+              const cust = customerBook.find(x => x.id === r.customerBookId);
+              return (
+                <div key={r.id} className="flex items-center justify-between text-xs gap-2">
+                  <span className="min-w-0 truncate">
+                    <span className="text-zinc-400">{r.date === today ? "今日" : r.date.slice(5).replace("-", "/")} {r.time || ""}</span>{" "}
+                    <span className="font-bold">{cust?.name || "?"}</span>
+                    {r.memo && <span className="text-zinc-500"> / {r.memo}</span>}
+                  </span>
+                  <button onClick={() => setReservations(rs => rs.filter(x => x.id !== r.id))} className="shrink-0"><Trash2 size={12} color="#555" /></button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {ghosting.length > 0 && (
+        <div style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-xl p-3 mb-4">
+          <div className="text-xs font-bold mb-2 text-zinc-400">💤 ご無沙汰リスト（30日以上・再来店の声かけ推奨）</div>
+          <div className="space-y-1">
+            {ghosting.slice(0, 5).map(({ c, days }) => (
+              <button key={c.id} onClick={() => setEditing(c)} className="w-full flex items-center justify-between text-xs">
+                <span className="font-bold">{c.name}</span>
+                <span className="text-zinc-500">{days}日ぶり ・ 累計{yen(c.totalSpent || 0)}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -1638,12 +1720,13 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
             <button key={c.id} onClick={() => setEditing(c)} style={{ background: "#141418", border: `1px solid ${nearBd ? "#e0a84a" : "#22222a"}` }} className="w-full rounded-xl p-3 text-left">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 flex-wrap">
+                  {c.photo && <img src={c.photo} alt="" className="w-7 h-7 rounded-full object-cover" />}
                   <span className="font-bold text-sm">{c.name}</span>
                   {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22222a", color: "#000" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
                   {nearBd && <span style={{ color: "#e0a84a" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />{days === 0 ? "本日🎉" : `+${days}d`}</span>}
                   {keepCountByCust[c.id] > 0 && <span style={{ color: "#e8d29a", background: "rgba(201,166,78,.15)" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">🍾 {keepCountByCust[c.id]}本</span>}
                 </div>
-                <span className="text-[10px] text-zinc-500">{c.visits || 0}回 / {last}</span>
+                <span className="text-[10px] text-zinc-500 text-right">{c.visits || 0}回 / {last}<br />累計 {yen(c.totalSpent || 0)}</span>
               </div>
               {c.memo && <p className="text-[11px] text-zinc-500 truncate">📝 {c.memo}</p>}
               {c.favoriteCastIds?.length > 0 && (
@@ -1667,6 +1750,9 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
           casts={casts}
           bottleKeeps={bottleKeeps}
           setBottleKeeps={setBottleKeeps}
+          reservations={reservations}
+          setReservations={setReservations}
+          storeName={storeName}
           onSave={(next) => {
             setCustomerBook(cb => cb.map(c => c.id === next.id ? next : c));
             setEditing(null);
@@ -1685,13 +1771,80 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
   );
 }
 
-function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSave, onDelete, onClose }) {
+function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName, onSave, onDelete, onClose }) {
   const [c, setC] = useState(customer);
   const [newBottle, setNewBottle] = useState({ label: "", days: 90 });
+  const [newRes, setNewRes] = useState({ date: "", time: "", memo: "" });
+  const [dmText, setDmText] = useState(null);
+  const [dmCopied, setDmCopied] = useState(false);
+  const photoRef = useRef(null);
   const toggleFav = (id) => setC(x => ({ ...x, favoriteCastIds: (x.favoriteCastIds || []).includes(id) ? x.favoriteCastIds.filter(y => y !== id) : [...(x.favoriteCastIds || []), id] }));
 
   const myKeeps = (bottleKeeps || []).filter(k => k.customerBookId === customer.id).sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0));
   const now = Date.now();
+
+  // 自動お気に入り（付け回し回数の多い順 TOP3）
+  const autoFavs = Object.entries(c.castAffinity || {})
+    .sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([id, n]) => ({ cast: casts.find(x => x.id === id), n }))
+    .filter(x => x.cast);
+
+  const myRes = (reservations || []).filter(r => r.customerBookId === customer.id && r.date >= businessDateOfNow())
+    .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+
+  function addReservation() {
+    if (!newRes.date) return;
+    setReservations(rs => [...rs, { id: "rv" + Math.random().toString(36).slice(2, 8), customerBookId: customer.id, date: newRes.date, time: newRes.time, memo: newRes.memo }]);
+    setNewRes({ date: "", time: "", memo: "" });
+  }
+
+  function onPhoto(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const img = new Image();
+    const url = URL.createObjectURL(f);
+    img.onload = () => {
+      const max = 128;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      setC(x => ({ ...x, photo: cv.toDataURL("image/jpeg", 0.7) }));
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+    e.target.value = "";
+  }
+
+  function buildDm(kind) {
+    const favName = autoFavs[0]?.cast?.name || casts.find(x => (c.favoriteCastIds || []).includes(x.id))?.name || null;
+    const activeKeep = myKeeps.find(k => k.status !== "empty" && k.status !== "disposed");
+    const keepSoon = activeKeep?.expiresAt && (activeKeep.expiresAt - now) <= 14 * 86400000;
+    let text;
+    if (kind === "birthday") {
+      text = [
+        `${c.name}さん🎂`,
+        `お誕生日おめでとうございます！`,
+        `${storeName || "当店"}一同、${c.name}さんの一年が最高になるようにお祝いの準備をしてお待ちしてます🍾`,
+        favName ? `${favName}も会いたがってます！` : null,
+        activeKeep ? `キープ中の「${activeKeep.label}」も冷やしてあります✨` : null,
+        `ぜひ近いうちに顔出してください！`,
+      ].filter(Boolean).join("\n");
+    } else {
+      const days = c.lastVisitAt ? Math.floor((now - c.lastVisitAt) / 86400000) : null;
+      text = [
+        `${c.name}さん、お久しぶりです！`,
+        days ? `最後に来ていただいてから${days}日…寂しいです😢` : `最近お顔を見れてなくて寂しいです😢`,
+        activeKeep ? `キープボトル「${activeKeep.label}」がまだ残ってますよ🍾${keepSoon ? "（期限が近いのでお早めに！）" : ""}` : null,
+        favName ? `${favName}も「最近${c.name}さん来ないね」って言ってます。` : null,
+        `また顔見せてください！お待ちしてます✨`,
+      ].filter(Boolean).join("\n");
+    }
+    setDmText(text);
+    setDmCopied(false);
+    navigator.clipboard?.writeText(text).then(() => setDmCopied(true)).catch(() => {});
+  }
 
   function addBottle() {
     const label = newBottle.label.trim();
@@ -1714,7 +1867,17 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSa
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <h3 style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-xl font-bold">お客様情報</h3>
+          <div className="flex items-center gap-3">
+            <button onClick={() => photoRef.current?.click()} className="relative">
+              {c.photo ? (
+                <img src={c.photo} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: `2px solid ${GOLD}` }} />
+              ) : (
+                <div style={{ background: "#1c1c22", border: "2px dashed #3a3a42" }} className="w-12 h-12 rounded-full flex items-center justify-center text-[9px] text-zinc-500">写真<br />＋</div>
+              )}
+            </button>
+            <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
+            <h3 style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-xl font-bold">お客様情報</h3>
+          </div>
           <button onClick={onClose}><X size={20} color="#888" /></button>
         </div>
         <div className="space-y-3">
@@ -1749,8 +1912,66 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, onSa
               })}
             </div>
           </div>
-          <div className="text-[10px] text-zinc-500">
-            来店回数 {c.visits || 0}回 / 最終来店 {c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : "未来店"}
+          <div style={{ background: "rgba(201,166,78,.06)", border: "1px solid #3a3421" }} className="rounded-xl p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-zinc-500">累計利用額（LTV）</span>
+              <span style={{ color: GOLD }} className="text-lg font-bold">{yen(c.totalSpent || 0)}</span>
+            </div>
+            <div className="text-[10px] text-zinc-500 mb-1">
+              来店 {c.visits || 0}回 / 最終 {c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : "未来店"}
+            </div>
+            {(c.visitLog || []).length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {(c.visitLog || []).slice(0, 5).map((v, i) => (
+                  <span key={i} className="text-[10px] text-zinc-500">{v.date.slice(5).replace("-", "/")} {yen(v.amount)}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {autoFavs.length > 0 && (
+            <div>
+              <div className="text-[10px] text-zinc-500 mb-1">よく付く子（自動検出・付け回し回数順）</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {autoFavs.map(({ cast, n }) => (
+                  <span key={cast.id} style={{ background: "rgba(63,182,176,.12)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{cast.name} ×{n}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-[#22222a]">
+            <div className="text-[10px] text-zinc-500 mb-1.5">📅 来店予約</div>
+            {myRes.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {myRes.map(r => (
+                  <div key={r.id} className="flex items-center justify-between text-xs">
+                    <span>{r.date.slice(5).replace("-", "/")} {r.time || ""} {r.memo && <span className="text-zinc-500">/ {r.memo}</span>}</span>
+                    <button onClick={() => setReservations(rs => rs.filter(x => x.id !== r.id))}><Trash2 size={12} color="#555" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1.5 items-center">
+              <input type="date" value={newRes.date} onChange={e => setNewRes(x => ({ ...x, date: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-32" />
+              <input type="time" value={newRes.time} onChange={e => setNewRes(x => ({ ...x, time: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-24" />
+              <input value={newRes.memo} onChange={e => setNewRes(x => ({ ...x, memo: e.target.value }))} placeholder="メモ" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="rounded px-1.5 py-1.5 outline-none flex-1 min-w-0" />
+              <button onClick={addReservation} style={{ background: TEAL, color: "#000" }} className="px-2.5 py-1.5 rounded text-xs font-bold shrink-0">＋</button>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-[#22222a]">
+            <div className="text-[10px] text-zinc-500 mb-1.5">✉️ DM文生成（コピーして送るだけ）</div>
+            <div className="flex gap-2">
+              <button onClick={() => buildDm("birthday")} style={{ background: "rgba(224,168,74,.15)", border: "1px solid #e0a84a", color: "#e0a84a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">🎂 誕生日DM</button>
+              <button onClick={() => buildDm("comeback")} style={{ background: "rgba(63,182,176,.12)", border: `1px solid ${TEAL}`, color: TEAL }} className="flex-1 rounded-lg py-2 text-xs font-bold">💤 ご無沙汰DM</button>
+            </div>
+            {dmText && (
+              <div className="mt-2">
+                {dmCopied && <p className="text-[10px] mb-1" style={{ color: "#7ae0a0" }}>✅ コピーしました — LINEに貼り付けて送信</p>}
+                <textarea readOnly value={dmText} rows={5} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 outline-none" onFocus={e => e.target.select()} />
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-[#22222a]">
