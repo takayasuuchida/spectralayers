@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.0.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.1.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -10,7 +10,13 @@ const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
 
-const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false };
+const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false };
+
+// ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
+// share-endpoint-override は E2E テスト用フック（通常運用では未設定）
+const SHARE_BASE = (() => { try { return localStorage.getItem("share-endpoint-override") || "https://kngkckweonnnhfocfqan.supabase.co"; } catch { return "https://kngkckweonnnhfocfqan.supabase.co"; } })();
+const SHARE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ2tja3dlb25ubmhmb2NmcWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTQwODUsImV4cCI6MjA5NzU3MDA4NX0.lUeIniKLSh3wxjTL0JGB0PAamSv3X8JEidZtvKhO8-E"; // 公開前提の anon キー
+const shareHeaders = { apikey: SHARE_API_KEY, Authorization: `Bearer ${SHARE_API_KEY}` };
 const DEFAULT_CAST_PAY = {
   hourlyWage: 3000,
   drinkBack: 500,
@@ -116,6 +122,12 @@ function useNow(active) {
 
 export default function App() {
   const [view, setView] = useState("floor");
+  // 外用ビュー（キャッチ用・読み取り専用）。?watch=店コード or 設定から起動
+  const [watchCode, setWatchCode] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("watch") || localStorage.getItem("tsuke-watch-code") || "";
+    } catch { return ""; }
+  });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [tables, setTables] = useState(DEFAULT_TABLES);
   const [mergeGroups, setMergeGroups] = useState(DEFAULT_MERGE_GROUPS);
@@ -523,6 +535,36 @@ export default function App() {
     const rank = { act: 0, warn: 1, info: 2 };
     return out.sort((a, b) => rank[a.level] - rank[b.level]);
   }, [loaded, brainTick, ts, closed, history, salesLog, salaryHistory, customerBook, bottleKeeps, casts, served]);
+
+  // ---- 共有パブリッシャー: 卓状況スナップショット（客名・売上は一切含めない） ----
+  const sharePayload = useMemo(() => {
+    if (!loaded || !settings.shareEnabled) return null;
+    const nowMs = Date.now();
+    return {
+      at: nowMs,
+      tables: tables.filter(tt => !secMerged(tt.id)).map(tt => {
+        const disp = dispTable(tt);
+        const t = ts[tt.id];
+        if (!t?.active) return { label: disp.label, cap: disp.cap, busy: false };
+        const remainMin = Math.ceil((t.setStart + t.setDuration * 60000 - nowMs) / 60000);
+        const rotMs = (t.setDuration / 3) * 60000;
+        const rotOver = t.casts.some(a => (a.at ?? t.setStart) + rotMs - nowMs <= 0);
+        return { label: disp.label, cap: disp.cap, busy: true, guests: t.customers.length, remainMin, rotOver };
+      }),
+    };
+  }, [loaded, settings.shareEnabled, ts, tables, merges, brainTick]);
+
+  useEffect(() => {
+    if (!sharePayload) return;
+    const id = setTimeout(() => {
+      fetch(`${SHARE_BASE}/rest/v1/floor?on_conflict=key`, {
+        method: "POST",
+        headers: { ...shareHeaders, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify([{ key: "share:" + URL_STORE, data: sharePayload, updated_at: new Date().toISOString() }]),
+      }).catch(() => { /* 電波なしでも営業継続（オフラインファースト） */ });
+    }, 2000);
+    return () => clearTimeout(id);
+  }, [sharePayload]);
   function doAssign(tableId, castId, customerId) {
     upd(tableId, t => {
       const seats = [...t.seats];
@@ -683,6 +725,17 @@ export default function App() {
 
   const brandDisplay = (settings.storeName || "").split("").join(" ").toUpperCase();
 
+  function enterWatch(code) {
+    const c = (code || "").trim();
+    if (!c) return;
+    try { localStorage.setItem("tsuke-watch-code", c); } catch { /* noop */ }
+    setWatchCode(c);
+  }
+
+  if (watchCode) {
+    return <WatchView code={watchCode} onExit={() => { try { localStorage.removeItem("tsuke-watch-code"); } catch { /* noop */ } setWatchCode(""); }} />;
+  }
+
   if (!loaded) return (
     <div style={{ background: "#000", minHeight: "100vh" }} className="flex items-center justify-center">
       <span style={{ fontFamily: "Georgia,serif", letterSpacing: "0.35em", color: GOLD }} className="text-base">{brandDisplay}</span>
@@ -704,7 +757,7 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog, enterWatch }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
@@ -814,6 +867,95 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
         </>
       ) : <span className="text-[10px] text-zinc-600 mt-auto">定員 {disp.cap}名 ・ タップで開ける</span>}
     </button>
+  );
+}
+
+// ============ 外用ビュー（キャッチ用・読み取り専用・10秒ポーリング） ============
+function WatchView({ code, onExit }) {
+  const [state, setState] = useState(null); // { row, fetchedAt, error }
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("share:" + code)}&select=data,updated_at`, { headers: shareHeaders });
+        const rows = await res.json();
+        if (alive) setState({ row: Array.isArray(rows) ? rows[0] || null : null, fetchedAt: Date.now(), error: null });
+      } catch (e) {
+        if (alive) setState(s => ({ row: s?.row || null, fetchedAt: Date.now(), error: String(e?.message || e) }));
+      }
+    }
+    poll();
+    const id = setInterval(poll, 10000);
+    return () => { alive = false; clearInterval(id); };
+  }, [code]);
+
+  const d = state?.row?.data;
+  const stale = d?.at ? Date.now() - d.at > 3 * 60000 : false;
+  const freeTables = d ? d.tables.filter(t => !t.busy) : [];
+  const soonFree = d ? d.tables.filter(t => t.busy && (t.remainMin ?? 99) <= 15) : [];
+
+  return (
+    <div style={{ background: "#000", minHeight: "100vh", color: "#fff", fontFamily: "system-ui, sans-serif" }} className="pb-10">
+      <div style={{ borderBottom: "1px solid #1c1c22", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }} className="px-4 pb-3 flex items-center justify-between">
+        <div>
+          <div style={{ fontFamily: "Georgia,serif", letterSpacing: "0.3em", color: GOLD }} className="text-base">{(code || "").toUpperCase()}</div>
+          <div className="text-[10px] text-zinc-500">外用ビュー（読み取り専用）</div>
+        </div>
+        <button onClick={onExit} style={{ background: "#1c1c22", color: "#999" }} className="text-xs px-3 py-1.5 rounded-lg">終了</button>
+      </div>
+
+      <div className="p-4">
+        {!state && <p className="text-center text-zinc-500 py-16 text-sm">読み込み中…</p>}
+        {state && !d && (
+          <p className="text-center text-zinc-500 py-16 text-sm">
+            まだ共有データがありません。<br />
+            <span className="text-[11px]">店内の端末で 設定 →「リアルタイム共有」を ON にしてください{state.error ? `（通信エラー: 電波を確認）` : ""}</span>
+          </p>
+        )}
+        {d && (
+          <>
+            {stale && (
+              <div style={{ background: "rgba(224,85,85,.08)", border: "1px solid #a15050", color: "#e08484" }} className="rounded-xl p-2.5 mb-3 text-[11px] font-bold">
+                ⚠ 店側の更新が {Math.floor((Date.now() - d.at) / 60000)}分前 から止まっています（電波 or 共有OFFの可能性）
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div style={{ background: "rgba(63,182,176,.08)", border: `1px solid ${TEAL}` }} className="rounded-2xl p-4 text-center">
+                <div style={{ color: TEAL }} className="text-4xl font-bold">{freeTables.length}</div>
+                <div className="text-[11px] text-zinc-400 mt-1">今すぐ入れる卓</div>
+              </div>
+              <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #e0a84a" }} className="rounded-2xl p-4 text-center">
+                <div style={{ color: "#e0a84a" }} className="text-4xl font-bold">{soonFree.length}</div>
+                <div className="text-[11px] text-zinc-400 mt-1">15分以内に空きそう</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {d.tables.map((t, i) => (
+                <div key={i} style={{ background: t.busy ? "#141418" : "rgba(63,182,176,.06)", border: `1.5px solid ${t.busy ? ((t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#2a2a32") : TEAL}` }} className="rounded-2xl p-3 min-h-[80px] flex flex-col">
+                  <div className="flex items-center justify-between">
+                    <span style={{ fontFamily: "Georgia,serif" }} className="text-base font-bold">{t.label}</span>
+                    <span className="text-[10px] text-zinc-500">{t.cap}名卓</span>
+                  </div>
+                  {t.busy ? (
+                    <div className="mt-auto">
+                      <span style={{ color: (t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#999" }} className="text-sm font-bold">
+                        使用中{t.remainMin != null && t.remainMin > 0 ? ` 残${t.remainMin}分` : t.remainMin != null ? " 延長中" : ""}
+                      </span>
+                      <div className="text-[10px] text-zinc-500">{t.guests || 0}名{t.rotOver ? " ・♻交代中" : ""}</div>
+                    </div>
+                  ) : (
+                    <span style={{ color: TEAL }} className="text-lg font-bold mt-auto">空き ◎</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-[10px] text-zinc-600 mt-4">
+              最終更新 {d.at ? new Date(d.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "?"} ・ 10秒ごとに自動取得
+            </p>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -2396,7 +2538,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog, enterWatch }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
@@ -2628,6 +2770,24 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <CastAdminCard key={c.id} c={c} upd={upd} setCasts={setCasts} toggleGenre={toggleGenre} />
           ))}
         </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-bold mb-1">リアルタイム共有（外のキャッチ用）</h2>
+        <p className="text-xs text-zinc-500 mb-3">
+          ONにすると<b>卓の空き状況だけ</b>がクラウドに送られ、外のスタッフが携帯から見られます。
+          お客様の名前・客名帳・売上・給料は<b>一切送信されません</b>（この端末の中だけ）。
+        </p>
+        <label className="flex items-center gap-2 mb-3">
+          <input type="checkbox" checked={!!settings.shareEnabled} onChange={e => setSettings(s => ({ ...s, shareEnabled: e.target.checked }))} style={{ accentColor: GOLD }} />
+          <span className="text-sm font-bold">{settings.shareEnabled ? "🟢 共有中（卓状況のみ）" : "⚫ 共有OFF"}</span>
+        </label>
+        <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 text-[11px] text-zinc-400 mb-2">
+          <b className="text-zinc-300">外のスタッフの設定手順:</b><br />
+          ① 同じアプリのURLを開く → ② 設定タブ → ③ 下の「外用ビューを開く」<br />
+          （店コード: <b style={{ color: GOLD }}>{URL_STORE}</b>）
+        </div>
+        <button onClick={() => enterWatch(URL_STORE)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
       </div>
 
       <DataManagement {...{ exportData, importData, listAutoBackups, restoreAutoBackup }} />
