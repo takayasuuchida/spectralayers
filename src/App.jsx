@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.1.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.1.1"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -268,6 +268,44 @@ export default function App() {
       if (!raw) { onResult?.({ ok: false, msg: "バックアップが見つかりません" }); return; }
       importData(raw, onResult);
     } catch (e) { onResult?.({ ok: false, msg: String(e) }); }
+  }
+
+  // ---- 端末内レスキュー: 別キーに残っている保存データを探して復旧 ----
+  // （URLパラメータ違い・バージョン切替等で保存先が変わってしまった場合の救出用）
+  function listRescueData() {
+    const out = [];
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k === STORE_KEY) continue;
+        let d;
+        try { d = JSON.parse(localStorage.getItem(k)); } catch { continue; }
+        const payload = d?.payload || d; // 自動バックアップ形式 or 素の保存形式の両対応
+        if (!payload || typeof payload !== "object") continue;
+        const hasCasts = Array.isArray(payload.casts) && payload.casts.length > 0;
+        const hasBook = Array.isArray(payload.customerBook) && payload.customerBook.length > 0;
+        const hasTables = Array.isArray(payload.tables) && payload.tables.length > 0;
+        if (!hasCasts && !hasBook && !hasTables) continue;
+        out.push({
+          key: k,
+          casts: (payload.casts || []).length,
+          castNames: (payload.casts || []).slice(0, 8).map(c => c.name).join("・"),
+          customers: (payload.customerBook || []).length,
+          tables: (payload.tables || []).length,
+          exportedAt: d.exportedAt || null,
+        });
+      }
+    } catch { /* noop */ }
+    return out;
+  }
+  function restoreRescue(key, onResult) {
+    try {
+      const d = JSON.parse(localStorage.getItem(key));
+      const payload = d?.payload || d;
+      writeAutoBackup(); // 現状も念のため退避してから
+      applyPayload(payload);
+      setAuditLog(l => [{ t: Date.now(), action: "端末内データ復旧", detail: key }, ...l].slice(0, 1000));
+      onResult?.({ ok: true, msg: `復旧しました（${key} から）` });
+    } catch (e) { onResult?.({ ok: false, msg: "復旧失敗: " + String(e?.message || e) }); }
   }
 
   function resetNight() {
@@ -757,7 +795,7 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog, enterWatch }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
@@ -2538,7 +2576,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, auditLog, enterWatch }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
@@ -2790,7 +2828,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <button onClick={() => enterWatch(URL_STORE)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
       </div>
 
-      <DataManagement {...{ exportData, importData, listAutoBackups, restoreAutoBackup }} />
+      <DataManagement {...{ exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue }} />
 
       <AuditLogView auditLog={auditLog} />
 
@@ -2941,13 +2979,16 @@ function InventoryView({ products, setProducts, salesLog, logAudit }) {
   );
 }
 
-function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBackup }) {
+function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue }) {
   const fileRef = useRef(null);
   const [staged, setStaged] = useState(null); // { text, name, summary }
   const [msg, setMsg] = useState(null); // { ok, msg }
   const [bakConfirm, setBakConfirm] = useState(null); // 自動バックアップ復元の2度押し用 key
   const [showBaks, setShowBaks] = useState(false);
   const baks = showBaks ? listAutoBackups() : [];
+  const [showRescue, setShowRescue] = useState(false);
+  const [rescueConfirm, setRescueConfirm] = useState(null);
+  const rescues = showRescue ? listRescueData() : [];
 
   function onFile(e) {
     const f = e.target.files?.[0];
@@ -2994,6 +3035,31 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
 
       {msg && (
         <div style={{ color: msg.ok ? "#7ae0a0" : "#ff8888", background: msg.ok ? "rgba(74,222,128,.08)" : "rgba(224,85,85,.08)", border: `1px solid ${msg.ok ? "#2a5a3a" : "#7a2222"}` }} className="rounded-lg p-2 text-xs mb-3">{msg.msg}</div>
+      )}
+
+      <button onClick={() => setShowRescue(s => !s)} style={{ background: "rgba(224,168,74,.06)", border: "1px dashed #7a5a1a", color: "#e0a84a" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showRescue ? "▲ 閉じる" : "🔍 消えたデータを探す（端末内レスキュー）"}</button>
+      {showRescue && (
+        <div className="space-y-1.5 mb-3">
+          {rescues.length === 0 && <p className="text-[11px] text-zinc-500">この端末内に他の保存データは見つかりませんでした。</p>}
+          {rescues.map(r => (
+            <div key={r.key} style={{ background: "#141418", border: "1px solid #7a5a1a" }} className="rounded-lg p-2.5">
+              <div className="text-[11px] mb-1">
+                <span className="font-bold" style={{ color: "#e0a84a" }}>キャスト{r.casts}名</span>
+                <span className="text-zinc-500">・客名帳{r.customers}名・卓{r.tables}</span>
+                {r.exportedAt && <span className="text-zinc-600"> ・{String(r.exportedAt).slice(0, 16).replace("T", " ")}</span>}
+              </div>
+              {r.castNames && <div className="text-[11px] text-zinc-300 mb-1.5 break-all">{r.castNames}{r.casts > 8 ? " …" : ""}</div>}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[9px] text-zinc-600 font-mono truncate">{r.key}</span>
+                {rescueConfirm === r.key ? (
+                  <button onClick={() => { restoreRescue(r.key, setMsg); setRescueConfirm(null); setShowRescue(false); }} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold whitespace-nowrap shrink-0">このデータに戻す（確定）</button>
+                ) : (
+                  <button onClick={() => setRescueConfirm(r.key)} style={{ background: GOLD, color: "#000" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold whitespace-nowrap shrink-0">これに戻す</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <button onClick={() => setShowBaks(s => !s)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showBaks ? "▲ 自動バックアップを閉じる" : "▼ 自動バックアップ一覧（営業リセット時に保存）"}</button>
