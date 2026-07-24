@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.1.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.2.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -10,13 +10,34 @@ const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
 
-const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false };
+const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
 const SHARE_BASE = (() => { try { return localStorage.getItem("share-endpoint-override") || "https://kngkckweonnnhfocfqan.supabase.co"; } catch { return "https://kngkckweonnnhfocfqan.supabase.co"; } })();
 const SHARE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ2tja3dlb25ubmhmb2NmcWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTQwODUsImV4cCI6MjA5NzU3MDA4NX0.lUeIniKLSh3wxjTL0JGB0PAamSv3X8JEidZtvKhO8-E"; // 公開前提の anon キー
 const shareHeaders = { apikey: SHARE_API_KEY, Authorization: `Bearer ${SHARE_API_KEY}` };
+
+// ---- クラウド金庫: パスワード暗号化(AES-GCM)した全データバックアップ ----
+// パスワードを知らない限りサーバー側でも復号不可。パスワードを忘れると復元不可。
+const _b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const _un64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function vaultDeriveKey(pass, saltU8) {
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt: saltU8, iterations: 100000, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function vaultEncrypt(obj, pass) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await vaultDeriveKey(pass, salt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
+  return { salt: _b64(salt), iv: _b64(iv), ct: _b64(ct) };
+}
+async function vaultDecrypt(blob, pass) {
+  const key = await vaultDeriveKey(pass, _un64(blob.salt));
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: _un64(blob.iv) }, key, _un64(blob.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
 const DEFAULT_CAST_PAY = {
   hourlyWage: 3000,
   drinkBack: 500,
@@ -603,6 +624,65 @@ export default function App() {
     }, 2000);
     return () => clearTimeout(id);
   }, [sharePayload]);
+
+  // ---- クラウド金庫（暗号化自動バックアップ） ----
+  const [cloudPass, _setCloudPass] = useState(() => { try { return localStorage.getItem("tsuke-cloud-pass") || ""; } catch { return ""; } });
+  const setCloudPass = (v) => { _setCloudPass(v); try { localStorage.setItem("tsuke-cloud-pass", v); } catch { /* noop */ } };
+  const [cloudInfo, setCloudInfo] = useState({ lastPushAt: null, lastError: null, remote: null });
+
+  async function cloudPush() {
+    if (!settings.cloudBackup || !cloudPass) return;
+    try {
+      const blob = await vaultEncrypt(buildPayload(), cloudPass);
+      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?on_conflict=key`, {
+        method: "POST",
+        headers: { ...shareHeaders, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify([{ key: "vault:" + URL_STORE, data: { v: 1, at: Date.now(), meta: { casts: casts.length, customers: customerBook.length }, ...blob }, updated_at: new Date().toISOString() }]),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      setCloudInfo(i => ({ ...i, lastPushAt: Date.now(), lastError: null }));
+      return true;
+    } catch (e) {
+      setCloudInfo(i => ({ ...i, lastError: String(e?.message || e) }));
+      return false;
+    }
+  }
+  // データ変更の5秒後に自動保存（ON かつパスワード設定済みの時のみ）
+  useEffect(() => {
+    if (!loaded || !settings.cloudBackup || !cloudPass) return;
+    const id = setTimeout(cloudPush, 5000);
+    return () => clearTimeout(id);
+  }, [loaded, settings.cloudBackup, cloudPass, settings, tables, mergeGroups, casts, served, closed, history, customerBook, bottleKeeps, salaryHistory, salaryAdjust, reservations, products, salesLog]);
+
+  async function cloudCheck() {
+    try {
+      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + URL_STORE)}&select=data,updated_at`, { headers: shareHeaders });
+      const rows = await res.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      setCloudInfo(i => ({ ...i, remote: row ? { at: row.data?.at, casts: row.data?.meta?.casts, customers: row.data?.meta?.customers } : null, lastError: null }));
+      return row;
+    } catch (e) {
+      setCloudInfo(i => ({ ...i, lastError: String(e?.message || e) }));
+      return null;
+    }
+  }
+  async function cloudRestore(pass, onResult) {
+    try {
+      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + URL_STORE)}&select=data`, { headers: shareHeaders });
+      const rows = await res.json();
+      const blob = Array.isArray(rows) ? rows[0]?.data : null;
+      if (!blob) { onResult?.({ ok: false, msg: "クラウド上にバックアップが見つかりません" }); return; }
+      let payload;
+      try { payload = await vaultDecrypt(blob, pass); }
+      catch { onResult?.({ ok: false, msg: "パスワードが違います（復号できませんでした）" }); return; }
+      writeAutoBackup();
+      applyPayload(payload);
+      setAuditLog(l => [{ t: Date.now(), action: "クラウド金庫から復元", detail: new Date(blob.at || 0).toLocaleString("ja-JP") }, ...l].slice(0, 1000));
+      onResult?.({ ok: true, msg: `復元しました（${new Date(blob.at || 0).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 時点）` });
+    } catch (e) {
+      onResult?.({ ok: false, msg: "復元失敗: " + String(e?.message || e) });
+    }
+  }
   function doAssign(tableId, castId, customerId) {
     upd(tableId, t => {
       const seats = [...t.seats];
@@ -795,7 +875,7 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
@@ -2576,7 +2656,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
@@ -2828,6 +2908,8 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <button onClick={() => enterWatch(URL_STORE)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
       </div>
 
+      <CloudVault {...{ settings, setSettings, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />
+
       <DataManagement {...{ exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue }} />
 
       <AuditLogView auditLog={auditLog} />
@@ -2975,6 +3057,63 @@ function InventoryView({ products, setProducts, salesLog, logAudit }) {
           <textarea readOnly value={orderSheet} rows={6} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
         )}
       </div>
+    </div>
+  );
+}
+
+function CloudVault({ settings, setSettings, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }) {
+  const [msg, setMsg] = useState(null);
+  const [restoreConfirm, setRestoreConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { cloudCheck(); }, []); // 開いた時にクラウド上の状態を確認
+
+  return (
+    <div>
+      <h2 className="text-lg font-bold mb-1">☁️ クラウド金庫（自動バックアップ）</h2>
+      <p className="text-xs text-zinc-500 mb-3">
+        全データを<b>パスワードで暗号化してから</b>クラウドに自動保存します。パスワードを知らない限り、サーバー側でも誰にも読めません。
+        アプリの更新や端末の故障でデータが消えても、パスワード1つで全復元できます。
+        <b style={{ color: "#e0a84a" }}>※パスワードを忘れると誰にも復元できません。</b>
+      </p>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-zinc-500 w-20">パスワード</span>
+        <input type="text" value={cloudPass} onChange={e => setCloudPass(e.target.value)} placeholder="例: vivace2026（忘れない物に）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+      </div>
+      <label className="flex items-center gap-2 mb-3">
+        <input type="checkbox" checked={!!settings.cloudBackup} onChange={e => setSettings(s => ({ ...s, cloudBackup: e.target.checked }))} style={{ accentColor: GOLD }} />
+        <span className="text-sm font-bold">{settings.cloudBackup ? "🟢 自動保存ON（変更の5秒後に保存）" : "⚫ 自動保存OFF"}</span>
+      </label>
+
+      <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 mb-2 text-[11px] text-zinc-400 space-y-0.5">
+        <div>この端末からの最終保存: {cloudInfo.lastPushAt ? new Date(cloudInfo.lastPushAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "まだ"}</div>
+        <div>クラウド上のバックアップ: {cloudInfo.remote ? `${new Date(cloudInfo.remote.at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 時点（キャスト${cloudInfo.remote.casts ?? "?"}名・客名帳${cloudInfo.remote.customers ?? "?"}名）` : "なし"}</div>
+        {cloudInfo.lastError && <div style={{ color: "#e08484" }}>エラー: {cloudInfo.lastError}</div>}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={async () => { setBusy(true); setMsg(null); const ok = await cloudPush(); await cloudCheck(); setBusy(false); setMsg(ok ? { ok: true, msg: "保存しました" } : { ok: false, msg: "保存に失敗しました（電波を確認して再試行）" }); }}
+          disabled={busy || !cloudPass || !settings.cloudBackup}
+          style={{ background: (!cloudPass || !settings.cloudBackup) ? "#1c1c22" : GOLD, color: (!cloudPass || !settings.cloudBackup) ? "#555" : "#000" }}
+          className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬆ 今すぐ保存</button>
+        {restoreConfirm ? (
+          <button
+            onClick={async () => { setBusy(true); setMsg(null); await cloudRestore(cloudPass, setMsg); setBusy(false); setRestoreConfirm(false); await cloudCheck(); }}
+            disabled={busy || !cloudPass}
+            style={{ background: "#7a2222", color: "#fff" }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-bold">上書き復元（確定）</button>
+        ) : (
+          <button
+            onClick={() => setRestoreConfirm(true)}
+            disabled={busy || !cloudPass || !cloudInfo.remote}
+            style={{ background: "#22222a", color: (!cloudPass || !cloudInfo.remote) ? "#555" : TEAL, border: `1px solid ${(!cloudPass || !cloudInfo.remote) ? "#2a2a32" : TEAL}` }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬇ クラウドから復元</button>
+        )}
+      </div>
+      {msg && (
+        <div style={{ color: msg.ok ? "#7ae0a0" : "#ff8888" }} className="text-xs mt-2">{msg.msg}</div>
+      )}
     </div>
   );
 }
