@@ -32,6 +32,13 @@
 - `vite.config.standalone.js` — 1ファイル版ビルド（`npm run build:standalone`）
 - GitHub リポジトリ `takayasuuchida/spectralayers` は削除済で push 不可。成果物は Artifact URL（+必要時 ZIP）で配布
 
+## データ保全（v2.2.0〜）
+
+- **Artifact の再公開で端末の保存領域(localStorage)が切り替わり、入力データが失われる事故が発生した(2026-07-24)。** レスキュー機能でも救出不可だった
+- 対策として「☁️ クラウド金庫」を実装済み: パスワード暗号化(PBKDF2+AES-GCM)で全データを Supabase `floor` の `vault:<store>` へ自動保存。復元はパスワードのみで可能
+- **ユーザーに再入力させる前に必ずクラウド金庫の設定を先に案内する**こと
+- 再公開の頻度を最小限にする。公開前に「クラウド金庫ONか」をユーザーに確認するのが望ましい
+
 ## 環境の既知問題
 
 - Stop hook の「Unverified commit」警告は GPG 鍵なし環境のため対処不能。無視してよい
