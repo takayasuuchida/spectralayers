@@ -10,7 +10,7 @@
    - 更新手順: `npm run build:standalone` → `dist-standalone/index.html` を repo `takayasuuchida/spectralayers` の main に配置して push（git proxy 経由。過去の内容は履歴保持、force push 禁止）
    - このURLは恒久固定・ログイン不要・localStorage永続。クラウド金庫と外用ビューはここでのみ動作する（Artifact は CSP で外部通信不可）
    - リポジトリは Public。ビルド済み index.html のみ main に置く（ソースは claude/* ブランチ）
-2. **旧: Artifact 配布（現在は補助）。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
+2. **旧: Artifact 配布（廃止済み・2026-07-25に移転案内ページへ差し替え）。今後アプリ本体を Artifact に公開しない。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
    - 手順: `npm run build:standalone` → `dist-standalone/index.html` から `<style>` と `<script type="module">` を抽出して fragment 化（doctype/html/head/body を除去、`<title>` + `html,body{margin:0;padding:0;background:#000}` を付与）→ Artifact ツールで公開
    - **既存 Artifact URL**: https://claude.ai/code/artifact/365e61fe-c617-4ab0-83d1-ab0c1bce2e18
    - 更新時は**同じ URL を維持**すること（同一会話なら同じ file_path で再公開、別会話なら `url` パラメータに上記 URL を渡す。URL を見失ったら Artifact の `action: "list"` で探す）
@@ -34,7 +34,7 @@
   - 注意: この開発環境から supabase.co へは直接通信不可(プロキシ403)。共有機能の検証は scratchpad の mock-supabase.mjs (PostgREST互換モック) + localStorage "share-endpoint-override" で行う
 - `src/saas/` — SaaS 版（Supabase auth + マルチテナント）。プロジェクト `kngkckweonnnhfocfqan`、スキーマ `saas.*`（23テーブル + RLS 投入済）
 - `vite.config.standalone.js` — 1ファイル版ビルド（`npm run build:standalone`）
-- GitHub リポジトリ `takayasuuchida/spectralayers` は削除済で push 不可。成果物は Artifact URL（+必要時 ZIP）で配布
+- GitHub リポジトリ `takayasuuchida/spectralayers` は再作成済(Public)。main=配信用(index.htmlのみ)、claude/* ブランチ=ソース。git proxy 経由で push 可
 
 ## データ保全（v2.2.0〜）
 
