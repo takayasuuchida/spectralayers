@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.2.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.3.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -605,6 +605,7 @@ export default function App() {
         const disp = dispTable(tt);
         const t = ts[tt.id];
         if (!t?.active) return { label: disp.label, cap: disp.cap, busy: false };
+        if (!t.setStart) return { label: disp.label, cap: disp.cap, busy: true, preparing: true, guests: t.customers.length };
         const remainMin = Math.ceil((t.setStart + t.setDuration * 60000 - nowMs) / 60000);
         const rotMs = (t.setDuration / 3) * 60000;
         const rotOver = t.casts.some(a => (a.at ?? t.setStart) + rotMs - nowMs <= 0);
@@ -796,8 +797,15 @@ export default function App() {
     upd(tableId, t => ({ ...t, orders: t.orders.filter(o2 => o2.id !== oid) }));
   };
   function openTable(tableId) {
-    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: Date.now(), customers: [], casts: [], seats: [], orders: [] } }));
+    // setStart: null = 準備中。「▶ セット開始」ボタンでタイマー開始
+    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: null, customers: [], casts: [], seats: [], orders: [] } }));
     logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
+  }
+  function startTable(tableId) {
+    const now = Date.now();
+    // セット開始と同時に、既に付いているキャストの回転タイマーも開始
+    upd(tableId, t => ({ ...t, setStart: now, casts: t.casts.map(a => ({ ...a, at: now })) }));
+    logAudit("セット開始", tables.find(x => x.id === tableId)?.label || tableId);
   }
   function closeTable(tableId) {
     const t = ts[tableId]; const total = tableTotal(t);
@@ -880,7 +888,7 @@ export default function App() {
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
-          castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
+          castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
@@ -948,25 +956,30 @@ function Chip({ k, name, boss }) {
 
 function FloorCard({ tt, disp, t, castById, onClick }) {
   const active = !!t?.active;
-  const now = useNow(active);
-  const tstate = active ? tstateOf(t, now) : null;
+  const started = active && !!t.setStart;
+  const now = useNow(started);
+  const tstate = started ? tstateOf(t, now) : null;
   const red = tstate === "soon" || tstate === "over";
-  // 回転警告: 1回転 = セット時間÷3。いずれかのキャストが残3分以内/超過なら表示
-  const rotMs = active ? (t.setDuration / 3) * 60000 : 0;
-  const rotRemains = active ? t.casts.map(a => (a.at ?? t.setStart) + rotMs - now) : [];
+  // 回転警告: 1回転 = セット時間÷3。いずれかのキャストが残3分以内/超過なら表示（開始後のみ）
+  const rotMs = started ? (t.setDuration / 3) * 60000 : 0;
+  const rotRemains = started ? t.casts.map(a => (a.at ?? t.setStart) + rotMs - now) : [];
   const rotOver = rotRemains.some(r => r <= 0);
   const rotSoon = !rotOver && rotRemains.some(r => r <= 3 * 60000);
   return (
-    <button onClick={onClick} style={{ background: active ? "#141418" : "#0d0d10", border: `1.5px solid ${red ? "#a13b3b" : active ? GOLD : "#1c1c22"}`, boxShadow: red ? "0 0 14px rgba(180,60,60,.35)" : "none" }} className="rounded-2xl p-3 text-left min-h-[120px] flex flex-col">
+    <button onClick={onClick} style={{ background: active ? "#141418" : "#0d0d10", border: `1.5px solid ${red ? "#a13b3b" : active ? GOLD : "#1c1c22"}`, borderStyle: active && !started ? "dashed" : "solid", boxShadow: red ? "0 0 14px rgba(180,60,60,.35)" : "none" }} className="rounded-2xl p-3 text-left min-h-[120px] flex flex-col">
       <div className="flex items-center justify-between mb-1">
         <span style={{ color: active ? "#fff" : "#555", fontFamily: "Georgia,serif" }} className="text-lg font-bold">{disp.label}</span>
         {active ? (
-          <span className="flex items-center gap-1.5">
-            {(rotOver || rotSoon) && (
-              <span style={{ color: rotOver ? "#ff6a6a" : "#e0a84a" }} className="text-[10px] font-bold">♻{rotOver ? "交代!" : "まもなく"}</span>
-            )}
-            <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-[11px] font-bold flex items-center gap-0.5"><Clock size={11} />{tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}</span>
-          </span>
+          started ? (
+            <span className="flex items-center gap-1.5">
+              {(rotOver || rotSoon) && (
+                <span style={{ color: rotOver ? "#ff6a6a" : "#e0a84a" }} className="text-[10px] font-bold">♻{rotOver ? "交代!" : "まもなく"}</span>
+              )}
+              <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-[11px] font-bold flex items-center gap-0.5"><Clock size={11} />{tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}</span>
+            </span>
+          ) : (
+            <span style={{ color: "#e0a84a" }} className="text-[10px] font-bold">準備中 ▶押して開始</span>
+          )
         ) : <span className="text-[10px] text-zinc-600">空席</span>}
       </div>
       {active ? (
@@ -1056,8 +1069,8 @@ function WatchView({ code, onExit }) {
                   </div>
                   {t.busy ? (
                     <div className="mt-auto">
-                      <span style={{ color: (t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#999" }} className="text-sm font-bold">
-                        使用中{t.remainMin != null && t.remainMin > 0 ? ` 残${t.remainMin}分` : t.remainMin != null ? " 延長中" : ""}
+                      <span style={{ color: t.preparing ? "#e0a84a" : (t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#999" }} className="text-sm font-bold">
+                        {t.preparing ? "準備中" : `使用中${t.remainMin != null && t.remainMin > 0 ? ` 残${t.remainMin}分` : t.remainMin != null ? " 延長中" : ""}`}
                       </span>
                       <div className="text-[10px] text-zinc-500">{t.guests || 0}名{t.rotOver ? " ・♻交代中" : ""}</div>
                     </div>
@@ -1161,7 +1174,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan } = p;
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
   // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
@@ -1201,7 +1214,7 @@ function Detail(p) {
         <div className="flex items-center gap-3">
           <button onClick={close}><X size={22} color="#888" /></button>
           <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-xl font-bold">{disp.label}</span>
-          {active && <DetailClock t={t} />}
+          {active && (t.setStart ? <DetailClock t={t} /> : <span style={{ color: "#e0a84a" }} className="text-xs font-bold">準備中</span>)}
         </div>
         {active && <button onClick={() => closeTable(tableId)} style={{ background: "#1c1c22", color: GOLD }} className="text-xs px-3 py-1.5 rounded-lg font-bold">会計</button>}
       </div>
@@ -1213,6 +1226,11 @@ function Detail(p) {
         </div>
       ) : (
         <div className="p-4 space-y-5 pb-16">
+          {!t.setStart && (
+            <button onClick={() => startTable(tableId)} style={{ background: GOLD, color: "#000" }} className="w-full rounded-2xl py-4 text-base font-bold shadow-lg">
+              ▶ セット開始（タイマースタート）
+            </button>
+          )}
           <Section title="座席（誰の隣に誰）">
             <div className="flex items-stretch gap-1 overflow-x-auto pb-2">
               {t.seats.map((s, i) => {
@@ -1268,7 +1286,7 @@ function Detail(p) {
                         const c = castById[a.castId];
                         if (!c) return null;
                         return (
-                          <RotationChip key={a.castId} cast={c} at={a.at ?? t.setStart} rotMs={rotMs} onRemove={() => removeCast(tableId, c.id)} />
+                          <RotationChip key={a.castId} cast={c} at={a.at ?? t.setStart} rotMs={rotMs} started={!!t.setStart} onRemove={() => removeCast(tableId, c.id)} />
                         );
                       })}
                       {nextCast && (
@@ -1485,9 +1503,19 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
 
 // 「今 ○○」チップ + 回転残り時間。1回転 = セット時間÷3。
 // 残り3分で黄色、超過で赤「交代!」
-function RotationChip({ cast, at, rotMs, onRemove }) {
-  const now = useNow(true);
-  const remain = at + rotMs - now;
+function RotationChip({ cast, at, rotMs, started = true, onRemove }) {
+  const now = useNow(started);
+  if (!started || !at) {
+    // セット開始前: タイマーなしの待機チップ
+    return (
+      <span style={{ background: "rgba(63,182,176,.15)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
+        今 {cast.name}
+        <span className="text-[9px] opacity-70">待機</span>
+        <button onClick={onRemove}><X size={11} /></button>
+      </span>
+    );
+  }
+  const remain = Math.min(at + rotMs - now, rotMs); // now が at より最大1秒遅れても「残21分」と出ないように上限クランプ
   const over = remain <= 0;
   const soon = !over && remain <= 3 * 60000;
   const color = over ? "#ff6a6a" : soon ? "#e0a84a" : TEAL;
