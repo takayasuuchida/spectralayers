@@ -6,14 +6,18 @@
 
 **ユーザーは基本モバイル（携帯）で会話している。**
 
-1. **アプリの更新は必ず Artifact（URL）で届ける。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
+1. **本拠地URL: https://takayasuuchida.github.io/spectralayers/ （GitHub Pages・2026-07-25開通）**
+   - 更新手順: `npm run build:standalone` → `dist-standalone/index.html` を repo `takayasuuchida/spectralayers` の main に配置して push（git proxy 経由。過去の内容は履歴保持、force push 禁止）
+   - このURLは恒久固定・ログイン不要・localStorage永続。クラウド金庫と外用ビューはここでのみ動作する（Artifact は CSP で外部通信不可）
+   - リポジトリは Public。ビルド済み index.html のみ main に置く（ソースは claude/* ブランチ）
+2. **旧: Artifact 配布（現在は補助）。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
    - 手順: `npm run build:standalone` → `dist-standalone/index.html` から `<style>` と `<script type="module">` を抽出して fragment 化（doctype/html/head/body を除去、`<title>` + `html,body{margin:0;padding:0;background:#000}` を付与）→ Artifact ツールで公開
    - **既存 Artifact URL**: https://claude.ai/code/artifact/365e61fe-c617-4ab0-83d1-ab0c1bce2e18
    - 更新時は**同じ URL を維持**すること（同一会話なら同じ file_path で再公開、別会話なら `url` パラメータに上記 URL を渡す。URL を見失ったら Artifact の `action: "list"` で探す）
    - favicon は 🍾 固定
    - **【事故記録 2026-07】別会話が古いコードから再構築して同 URL を上書きし、採用済み機能（ジャンル6種等）が消えた。** 公開前に必ず `src/App.jsx` の APP_VERSION と GENRES（6種: 綺麗/可愛い/おもしろい/オタク系/ギャル系/ヤンキー系）を確認し、手元のコードが最新版系譜（v2.1.0以降）であることを確かめてから公開する。古いコードしか無い場合は公開せず、ユーザーに最新版の所在を確認する
-2. ZIP を渡すのはユーザーが「コードをいじりたい」「PC でやる」と明言した時だけ。その際コマンドは省略せず毎回全部書く（「いつもの3コマンド」等の省略は禁止）。
-3. リリースごとに `src/App.jsx` の `APP_VERSION` を上げる（画面右上に表示され、ユーザーがどのビルドか判別する唯一の手段）。
+3. ZIP を渡すのはユーザーが「コードをいじりたい」「PC でやる」と明言した時だけ。その際コマンドは省略せず毎回全部書く（「いつもの3コマンド」等の省略は禁止）。
+4. リリースごとに `src/App.jsx` の `APP_VERSION` を上げる（画面右上に表示され、ユーザーがどのビルドか判別する唯一の手段）。
 
 ## 開発ルール（ユーザーからの明示指示）
 
