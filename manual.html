@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍾 つけ回しツール 使い方ガイド</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-text-size-adjust: 100%; }
+  body { background: #0a0a0c; color: #e8e8ec; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; line-height: 1.9; padding-bottom: 80px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+  header { border-bottom: 1px solid #1c1c22; padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px 20px; text-align: center; }
+  header .brand { font-family: Georgia, serif; letter-spacing: .25em; color: #c9a64e; font-size: 20px; font-weight: bold; }
+  header .sub { color: #7a7a82; font-size: 12px; margin-top: 6px; }
+  a.applink { display: block; background: #c9a64e; color: #000; text-decoration: none; font-weight: bold; text-align: center; border-radius: 14px; padding: 14px; margin: 18px 0 6px; font-size: 15px; }
+  h2 { font-size: 18px; color: #c9a64e; border-left: 4px solid #c9a64e; padding-left: 10px; margin: 40px 0 14px; scroll-margin-top: 16px; }
+  h3 { font-size: 15px; color: #e8d29a; margin: 22px 0 8px; }
+  p, li { font-size: 14px; color: #c9c9d0; }
+  b { color: #fff; }
+  .card { background: #141418; border: 1px solid #22222a; border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+  .gold { color: #c9a64e; font-weight: bold; }
+  .teal { color: #3fb6b0; font-weight: bold; }
+  .warn { background: rgba(224,85,85,.08); border: 1px solid #a15050; border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: #f0b0b0; }
+  .tip { background: rgba(63,182,176,.07); border: 1px solid #2a6a66; border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: #a8e6e2; }
+  .btnlike { display: inline-block; background: #c9a64e; color: #000; border-radius: 8px; padding: 1px 8px; font-weight: bold; font-size: 13px; white-space: nowrap; }
+  .btnlike2 { display: inline-block; background: #22222a; color: #c9a64e; border: 1px solid #3a3a42; border-radius: 8px; padding: 1px 8px; font-weight: bold; font-size: 13px; white-space: nowrap; }
+  ol.steps { counter-reset: n; list-style: none; margin: 10px 0; }
+  ol.steps > li { position: relative; padding-left: 40px; margin-bottom: 14px; }
+  ol.steps > li::before { counter-increment: n; content: counter(n); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; background: #c9a64e; color: #000; font-weight: bold; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  ul li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { border: 1px solid #26262e; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #17171c; color: #c9a64e; white-space: nowrap; }
+  .toc { background: #101014; border: 1px solid #22222a; border-radius: 14px; padding: 14px 18px; margin: 20px 0; }
+  .toc a { color: #a8e6e2; text-decoration: none; font-size: 14px; display: block; padding: 5px 0; border-bottom: 1px dashed #1e1e26; }
+  .toc a:last-child { border-bottom: none; }
+  .faq-q { font-weight: bold; color: #e8d29a; margin-top: 16px; font-size: 14px; }
+  .faq-a { font-size: 13.5px; color: #c9c9d0; margin-top: 4px; }
+  footer { text-align: center; color: #55555c; font-size: 11px; margin-top: 50px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .flow span.step { background: #1c1c22; border: 1px solid #33333c; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: bold; color: #e8e8ec; }
+  .flow span.arr { color: #c9a64e; font-weight: bold; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🍾 つけ回しツール</div>
+  <div class="sub">使い方ガイド（v2.3.0 対応・初心者向け）</div>
+</header>
+
+<div class="wrap">
+
+<a class="applink" href="https://takayasuuchida.github.io/spectralayers/">▶ アプリを開く（タップ）</a>
+<p style="text-align:center;font-size:11px;color:#7a7a82;">↑ このURLをホーム画面に追加しておくと毎回1タップで開けます</p>
+
+<div class="toc">
+  <a href="#s0">0. アプリの開き方・ホーム画面に追加</a>
+  <a href="#s1">1.【最初に必ず】クラウド金庫でデータを守る</a>
+  <a href="#s2">2. 画面の見方（下の6つのタブ）</a>
+  <a href="#s3">3. 一晩の流れ（これだけ覚えればOK）</a>
+  <a href="#s4">4. 卓の操作（開ける → ▶セット開始 → 会計）</a>
+  <a href="#s5">5. 付け回し（自動で公平に回す仕組み）</a>
+  <a href="#s6">6. ドリンク・ボトル・シャンパン</a>
+  <a href="#s7">7. キャスト管理（出勤・指名カウント・給料）</a>
+  <a href="#s8">8. 客名帳（お客様データ・DM・予約）</a>
+  <a href="#s9">9. 売上・分析・アドバイザー</a>
+  <a href="#s10">10. 在庫・原価・発注書</a>
+  <a href="#s11">11. 設定（卓の編集・外用ビュー・バックアップ）</a>
+  <a href="#s12">12. 困ったときは（よくある質問）</a>
+</div>
+
+<h2 id="s0">0. アプリの開き方・ホーム画面に追加</h2>
+<div class="card">
+  <p>アプリのURLはこれ1つだけです。ずっと変わりません。</p>
+  <p style="word-break:break-all;" class="teal">https://takayasuuchida.github.io/spectralayers/</p>
+  <p style="margin-top:8px;">インストール不要・ログイン不要。開いた瞬間から使えます。データはこの携帯の中に自動保存されます。</p>
+</div>
+<h3>📱 ホーム画面に追加（おすすめ）</h3>
+<ul>
+  <li><b>iPhone（Safari）</b>: アプリを開く → 下の共有ボタン（□に↑）→「ホーム画面に追加」</li>
+  <li><b>Android（Chrome）</b>: アプリを開く → 右上の「⋮」→「ホーム画面に追加」</li>
+</ul>
+<div class="tip">💡 画面右上に小さく「v2.3.0」のようにバージョンが出ます。新しい機能が入ったのに表示が変わらない時は、ページを一度引っ張って再読み込みしてください。</div>
+<h3>🏪 店舗の切り替え</h3>
+<p>URLの後ろに <b>?store=店名</b> を付けると店舗ごとにデータを分けられます（例: <span class="teal">…/?store=anela</span>）。何も付けない場合はいつもの店舗データが開きます。</p>
+
+<h2 id="s1">1.【最初に必ず】クラウド金庫でデータを守る</h2>
+<div class="warn">⚠ <b>一番大事な設定です。</b>携帯の故障・ブラウザのデータ消去があると、入力したキャスト・売上・客名帳が消えてしまいます。クラウド金庫をONにしておけば、<b>パスワード1つで全部復元</b>できます。</div>
+<ol class="steps">
+  <li>下のタブの <span class="btnlike2">設定</span> を開く</li>
+  <li>「☁️ クラウド金庫（自動バックアップ）」まで下にスクロール</li>
+  <li>好きな<b>パスワード</b>を決めて入力（忘れないものに！）</li>
+  <li><span class="btnlike">⬆ 今すぐ保存</span> をタップ →「保存しました」と出れば完了</li>
+</ol>
+<p>以降は自動でクラウドに暗号化保存されます。復元したい時は同じ画面でパスワードを入れて <span class="btnlike2">⬇ クラウドから復元</span> をタップするだけです。</p>
+<div class="warn">⚠ パスワードは暗号化のカギです。<b>忘れると誰にも（開発者にも）復元できません。</b>メモして保管してください。</div>
+
+<h2 id="s2">2. 画面の見方（下の6つのタブ）</h2>
+<table>
+  <tr><th>タブ</th><th>できること</th></tr>
+  <tr><td><b>フロア</b></td><td>卓の一覧。接客は全部ここから。空席／準備中／使用中が一目でわかる</td></tr>
+  <tr><td><b>キャスト</b></td><td>出勤・退勤の打刻、本指名・場内・同伴・ドリンクのカウント、給料明細、月次集計</td></tr>
+  <tr><td><b>客名帳</b></td><td>お客様のデータ帳。累計利用額、来店履歴、DM文の自動作成、予約、ボトルキープ</td></tr>
+  <tr><td><b>売上（¥）</b></td><td>今日の売上（税込）、日別履歴、グラフ分析</td></tr>
+  <tr><td><b>在庫</b></td><td>商品マスタ、在庫数、原価・粗利、発注書の自動作成</td></tr>
+  <tr><td><b>設定</b></td><td>卓の編集、給料設定、外用ビュー共有、クラウド金庫、バックアップ、営業リセット</td></tr>
+</table>
+
+<h2 id="s3">3. 一晩の流れ（これだけ覚えればOK）</h2>
+<div class="card">
+  <div class="flow">
+    <span class="step">① キャスト出勤</span><span class="arr">→</span>
+    <span class="step">② 卓を開ける</span><span class="arr">→</span>
+    <span class="step">③ お客様を追加</span><span class="arr">→</span>
+    <span class="step">④ 付け回し</span><span class="arr">→</span>
+    <span class="step">⑤ ▶セット開始</span><span class="arr">→</span>
+    <span class="step">⑥ ドリンク入力</span><span class="arr">→</span>
+    <span class="step">⑦ 会計</span><span class="arr">→</span>
+    <span class="step">⑧ キャスト退勤</span><span class="arr">→</span>
+    <span class="step">⑨ 営業リセット</span>
+  </div>
+</div>
+<ul>
+  <li><b>①</b> キャストタブで来た子を「＋出勤」タップ</li>
+  <li><b>②〜⑦</b> はフロアタブ（詳しくは次の章）</li>
+  <li><b>⑧</b> キャストタブで「退勤」→ 給料明細を確認して「退勤確定」</li>
+  <li><b>⑨</b> 設定タブの一番下「営業リセット」で締め。売上が日別履歴に記録され、卓が全部空席に戻ります（客名帳・キャスト名簿は消えません）</li>
+</ul>
+
+<h2 id="s4">4. 卓の操作（開ける → ▶セット開始 → 会計）</h2>
+
+<h3>🪑 卓を開ける（この時点ではまだ時間は動きません）</h3>
+<ol class="steps">
+  <li>フロアで空いている卓（「タップで開ける」と表示）をタップ</li>
+  <li><span class="btnlike">卓を開ける</span> をタップ → 卓が<b>「準備中」</b>になる（枠が点線表示）</li>
+  <li>お客様の名前を入れて <span class="btnlike2">新規</span>、または <span class="btnlike2">名帳</span> から常連さんを選ぶ</li>
+  <li>女の子を付ける（<span class="btnlike">卓を自動付け回し</span> か、<span class="btnlike2">＋指名</span> で手動選択）</li>
+</ol>
+
+<h3>▶ セット開始（ここからタイマーが動く）</h3>
+<div class="card">
+  <p>準備ができたら、卓詳細の一番上にある金色の<br><span class="btnlike">▶ セット開始（タイマースタート）</span> をタップ。</p>
+  <p style="margin-top:8px;">この瞬間から<b>セット時間</b>と<b>全員の回転タイマー</b>が一斉にスタートします。押すまでは何分経っても時間はカウントされないので、席を整えてから落ち着いて開始できます。</p>
+</div>
+<div class="tip">💡 フロア画面では、開始前の卓に「準備中 ▶押して開始」と表示されます。これが残っていたら開始し忘れのサインです。</div>
+
+<h3>⏱ セット料金と時間</h3>
+<ul>
+  <li>「セット」欄で料金（¥4,000〜¥5,500）と時間（50分／60分）をタップで変更</li>
+  <li>残り時間は卓の右上に表示。<b>残り10分で赤く「ラスト」</b>表示 → 延長かお会計の声かけを</li>
+  <li>時間を過ぎると「+○○」と超過時間が赤で表示されます</li>
+</ul>
+
+<h3>💺 座席の並び</h3>
+<p>「座席（誰の隣に誰）」の欄で、◀▶ボタンを押すと席順を左右に動かせます。実際のテーブルの並びを再現できます。</p>
+
+<h3>💰 会計</h3>
+<ol class="steps">
+  <li>卓詳細の下部で「合計（税込）」を確認（セット×人数＋注文、消費税10%込み）</li>
+  <li>右上の <span class="btnlike2">会計</span> をタップ</li>
+  <li>卓が空席に戻り、売上に自動で記録。お客様が客名帳と繋がっていれば利用額も自動で累計されます</li>
+</ol>
+
+<h2 id="s5">5. 付け回し（自動で公平に回す仕組み）</h2>
+<div class="card">
+  <p><span class="btnlike">卓を自動付け回し</span> を押すと、アプリが自動で「誰に誰を付けるか」を決めます。ルールは:</p>
+  <ul style="margin-top:8px;">
+    <li><b>まだ良い子が付いていないお客様から優先</b>。ボス（太客）だけに良い子が集中しません。3名様なら3名に1人1回ずつ良い子が回ります</li>
+    <li>お客様の<b>「好み」ジャンル</b>（綺麗／可愛い／おもしろい／オタク系／ギャル系／ヤンキー系）を設定しておくと、それに合う子を優先</li>
+    <li>👑王冠マークをタップするとその人が<b>ボス</b>になり、同点のときはボス優先</li>
+  </ul>
+</div>
+<h3>♻ 回転（交代のタイミング）</h3>
+<ul>
+  <li>1回転 = セット時間の1/3（60分セットなら20分）</li>
+  <li>付いている子のチップに「今 ○○ <b>残○分</b>」と表示。<b>残り3分で黄色</b>、<b>時間が来ると赤く「交代!」</b></li>
+  <li>フロア画面の卓にも「♻まもなく」「♻交代!」と出るので、離れていても気付けます</li>
+  <li>お客様ごとに「<b>次▶ ○○</b>」と次に付ける子の候補が出ます。タップするだけで1タップ交代</li>
+</ul>
+<div class="tip">💡 ▶セット開始を押す前は、チップは「今 ○○ 待機」と表示されタイマーは動きません。</div>
+
+<h2 id="s6">6. ドリンク・ボトル・シャンパン</h2>
+<ol class="steps">
+  <li>卓詳細の「ドリンク・ボトル」欄で <span class="btnlike2">＋ドリンク ¥1,500</span> などをタップ</li>
+  <li><b>「誰につける？」</b>が出るので、飲んだ女の子を選ぶ（その子のドリンクバックに自動加算）。在卓中のお気に入りキャストが先頭に出ます</li>
+  <li>シャンパン等は名前と金額を入力して追加</li>
+</ol>
+<h3>🍾 ボトルキープ</h3>
+<ul>
+  <li>客名帳のお客様ページでキープボトルを登録（銘柄・期限）</li>
+  <li>残量は%ゲージで管理。<b>残り30%以下になるとアドバイザーが「そろそろ次の提案を」と教えてくれます</b></li>
+  <li>期限が近いボトルも自動でお知らせ</li>
+</ul>
+
+<h2 id="s7">7. キャスト管理（出勤・指名カウント・給料）</h2>
+<h3>🕗 出勤・退勤</h3>
+<ul>
+  <li>キャストタブ →「未出勤」の子をタップで<b>出勤打刻</b>。出勤予定時刻を設定していれば遅刻分も自動記録</li>
+  <li>帰るときは「退勤」→ 給料明細（時給×稼働時間＋各種バック−控除）が出る →「<b>退勤確定</b>」で給料履歴に記録</li>
+</ul>
+<h3>🔢 実績カウント</h3>
+<p>各キャストのカードで <b>本指名／場内指名／同伴</b> を＋−でカウント。1件ごとのバック金額はキャストごとに設定でき、給料に自動反映されます。ドリンク・ショットは卓の入力から自動で貯まります。</p>
+<h3>💴 給料集計（月次）</h3>
+<ul>
+  <li>キャストタブ上部の <span class="btnlike2">給料集計（月次）</span> で月ごとの合計（出勤日数・稼働時間・総支給・振込額）</li>
+  <li><b>振込CSV</b>を書き出せるので、銀行振込の一括データにも使えます</li>
+  <li>キャスト名をタップすると個人の内訳（本指名・場内・同伴のグラフ付き）</li>
+</ul>
+
+<h2 id="s8">8. 客名帳（お客様データ・DM・予約）</h2>
+<ul>
+  <li>お客様の名前・メモ・お気に入りキャストを登録。卓に付けると<b>来店回数・累計利用額（LTV）が自動で貯まります</b></li>
+  <li><b>DM文の自動作成</b>: お礼DM・💤ご無沙汰DM をタップすると文章ができるのでコピーして送るだけ</li>
+  <li><b>💤ご無沙汰リスト</b>: 30日以上来ていない常連を自動でリストアップ。声かけのチャンスを逃しません</li>
+  <li><b>予約</b>: 来店予定を登録するとフロア画面にも表示されます</li>
+</ul>
+
+<h2 id="s9">9. 売上・分析・アドバイザー</h2>
+<ul>
+  <li><b>今日</b>: 現在の税込売上・目標達成率・卓ごとの内訳</li>
+  <li><b>履歴</b>: 日別・月別の売上（営業リセットで1日分が確定記録）。CSV書き出し可</li>
+  <li><b>📊分析</b>: 曜日別グラフ、時間帯ヒートマップ、卓別、キャスト別、客単価など</li>
+  <li><b>🧠アドバイザー</b>: フロア画面の上部に、今やるべきことを自動で提案（「♻○○が回転超過」「🍾○○様のボトル残りわずか、今夜提案を」「💤常連の離脱リスク」など）</li>
+</ul>
+
+<h2 id="s10">10. 在庫・原価・発注書</h2>
+<ul>
+  <li>商品（ドリンク／ショット／ボトル等）を売値・原価・在庫数付きで登録</li>
+  <li>会計すると在庫が自動で減り、<b>今月の原価率・粗利</b>が自動計算</li>
+  <li>在庫が設定した数を下回ると低在庫アラート → <span class="btnlike2">📝 発注書を自動生成</span> でそのまま業者に送れる文面ができます</li>
+</ul>
+
+<h2 id="s11">11. 設定（卓の編集・外用ビュー・バックアップ）</h2>
+<h3>🪑 卓の編集</h3>
+<p>卓の名前・定員の変更、追加・削除、並び替え（↑↓）が自由にできます。隣どうしの卓をつなげて使う「卓結合グループ」も設定可能（客がいる間は変更不可）。</p>
+<h3>👀 リアルタイム共有（外のキャッチ用）</h3>
+<ol class="steps">
+  <li>店内の端末: 設定 →「リアルタイム共有」を<b>ON</b></li>
+  <li>外の人の携帯: 同じアプリURLを開く → 設定タブ →「外用ビューを開く」</li>
+  <li>「今すぐ入れる卓」「もうすぐ空く卓」が10秒ごとに自動更新で見られます</li>
+</ol>
+<div class="tip">🔒 外に出るのは卓の空き状況だけ。<b>お客様の名前・売上・給料は一切送信されません</b>（携帯の中だけに保存）。</div>
+<h3>💾 データ管理（バックアップ）</h3>
+<ul>
+  <li><b>⬇ 書き出す</b>: 全データをファイルに保存（機種変更時はこれを新しい携帯で「⬆ 読み込む」）</li>
+  <li><b>自動バックアップ</b>: 営業リセットのたびに端末内へ5世代自動保存。一覧から復元できます</li>
+  <li><b>🔍 消えたデータを探す</b>: 端末内レスキュー。データが見当たらない時の捜索ツール</li>
+  <li><b>変更履歴（監査ログ）</b>: 誰がいつ何をしたか（会計・打刻・リセット等）の記録</li>
+</ul>
+<h3>🌙 営業リセット</h3>
+<p>閉店時に1回タップ（確認のため<b>2度押し</b>）。売上が日別履歴に記録され、全卓が空席に戻ります。キャスト名簿・客名帳・設定はそのまま残ります。リセット前の状態は自動バックアップされるので安心です。</p>
+<div class="warn">⚠ 一番下の「🗑 完全リセット」は<b>全データ削除</b>です。通常は絶対に使いません。</div>
+
+<h2 id="s12">12. 困ったときは（よくある質問）</h2>
+<div class="card">
+  <p class="faq-q">Q. タイマーが動かない！</p>
+  <p class="faq-a">卓を開けただけでは動きません（v2.3.0からの仕様）。卓詳細の一番上の金色ボタン <b>「▶ セット開始（タイマースタート）」</b> を押してください。フロアに「準備中 ▶押して開始」と出ている卓は未スタートです。</p>
+
+  <p class="faq-q">Q. データが消えた気がする…</p>
+  <p class="faq-a">①設定→クラウド金庫でパスワードを入れて「⬇ クラウドから復元」 ②設定→データ管理→「🔍 消えたデータを探す」 ③「自動バックアップ一覧」から復元 — の順に試してください。</p>
+
+  <p class="faq-q">Q. クラウド金庫のパスワードを忘れた</p>
+  <p class="faq-a">申し訳ありませんが復元できない仕組みです（それだけ強い暗号化です）。新しいパスワードで「⬆ 今すぐ保存」し直してください。</p>
+
+  <p class="faq-q">Q. 新機能が入ったはずなのに画面が変わらない</p>
+  <p class="faq-a">ページを再読み込みしてください。右上のバージョン番号（v○.○.○）が最新か確認を。ホーム画面から開き直すのも有効です。</p>
+
+  <p class="faq-q">Q. 外用ビューに何も映らない</p>
+  <p class="faq-a">店内の端末で 設定→「リアルタイム共有」がONか確認。あとは電波状況です。「⚠更新が止まっています」と出たら店内端末のアプリが閉じられている可能性があります。</p>
+
+  <p class="faq-q">Q. 別の店舗（2店舗目）で使いたい</p>
+  <p class="faq-a">URLの後ろに <b>?store=店名</b> を付けて開くと、店舗ごとに完全に別のデータになります。</p>
+
+  <p class="faq-q">Q. 間違えて会計/リセットしそうで怖い</p>
+  <p class="faq-a">危ない操作は全部「2度押し確認」になっています。1回目のタップでは実行されないので安心してください。</p>
+</div>
+
+<a class="applink" href="https://takayasuuchida.github.io/spectralayers/">▶ アプリを開く</a>
+
+<footer>🍾 つけ回しツール — vivace / ANELA<br>このページはブックマーク推奨: …/spectralayers/manual.html</footer>
+
+</div>
+</body>
+</html>
