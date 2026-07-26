@@ -1,12 +1,28 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.0.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.0.1"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
 const URL_STORE = (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("store")) || "viverce";
-const STORE_KEY = URL_STORE + "-v1";
+// 保存領域の識別子。"vivace" と "viverce" は同じ店の綴り違いなので同じ領域に寄せる
+// （URLに ?store=vivace を付けても入力済みデータが行方不明にならないようにするため）。
+const STORE_ALIASES = { vivace: "viverce" };
+const STORE_ID = STORE_ALIASES[URL_STORE] || URL_STORE;
+const STORE_KEY = STORE_ID + "-v1";
+// 綴り違いで保存されていた場合の読み込みフォールバック（データを見失わないため）
+const LEGACY_STORE_KEYS = ["vivace-v1", "viverce-v1", URL_STORE + "-v1"].filter(k => k !== STORE_KEY);
+// 画面に出す店名の既定値。STORE_ID は保存キーなので変更禁止だが、表示名は別物として扱う。
+// 過去の綴り "viverce" は誤記なので "vivace" に直す。
+const STORE_NAME_FIX = { viverce: "vivace" };
+const DEFAULT_STORE_NAME = STORE_NAME_FIX[STORE_ID] || STORE_ID;
+// 店名は「ユーザーが入力した値」が最優先。空のときだけ既定値、既知の誤記だけ直す。
+const normalizeStoreName = (n) => {
+  const v = String(n ?? "").trim();
+  if (!v) return DEFAULT_STORE_NAME;
+  return STORE_NAME_FIX[v] || v;
+};
 const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
 
@@ -48,7 +64,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -152,7 +168,7 @@ const ANELA_SEED_CASTS = [
   status: "出勤",
 }));
 
-const SEED_CASTS = URL_STORE === "ANELA" ? ANELA_SEED_CASTS : DEFAULT_SEED_CASTS;
+const SEED_CASTS = STORE_ID === "ANELA" ? ANELA_SEED_CASTS : DEFAULT_SEED_CASTS;
 
 const yen = (n) => "¥" + (n || 0).toLocaleString("ja-JP");
 
@@ -224,11 +240,18 @@ export default function App() {
   // 永続化: 読み込み（保存データがあれば復元・無ければ空席スタート）
   useEffect(() => {
     (async () => {
-      const raw = await storeGet(STORE_KEY);
+      let raw = await storeGet(STORE_KEY);
+      // 綴り違い（vivace / viverce）の領域に保存されていたら拾って引き継ぐ
+      if (!raw) {
+        for (const k of LEGACY_STORE_KEYS) {
+          const alt = await storeGet(k);
+          if (alt) { raw = alt; break; }
+        }
+      }
       if (raw) {
         try {
           const d = JSON.parse(raw);
-          setSettings({ ...DEFAULT_SETTINGS, ...(d.settings || {}), storeName: URL_STORE });
+          setSettings({ ...DEFAULT_SETTINGS, ...(d.settings || {}), storeName: normalizeStoreName(d.settings?.storeName) });
           setTables(d.tables || DEFAULT_TABLES);
           setMergeGroups(d.mergeGroups || DEFAULT_MERGE_GROUPS);
           setCasts((d.casts || SEED_CASTS).map(mergeCastDefaults));
@@ -267,12 +290,12 @@ export default function App() {
   const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
 
   function exportData() {
-    const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
+    const data = { app: "tsukemawashi", version: APP_VERSION, store: STORE_ID, exportedAt: new Date().toISOString(), payload: buildPayload() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `tsukemawashi-${URL_STORE}-${businessDateOfNow()}.json`;
+    a.download = `tsukemawashi-${STORE_ID}-${businessDateOfNow()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -281,7 +304,7 @@ export default function App() {
   }
 
   function applyPayload(p) {
-    setSettings({ ...DEFAULT_SETTINGS, ...(p.settings || {}), storeName: URL_STORE });
+    setSettings({ ...DEFAULT_SETTINGS, ...(p.settings || {}), storeName: normalizeStoreName(p.settings?.storeName) });
     setTables(p.tables || DEFAULT_TABLES);
     setMergeGroups(p.mergeGroups || DEFAULT_MERGE_GROUPS);
     setCasts((p.casts || SEED_CASTS).map(mergeCastDefaults));
@@ -319,7 +342,7 @@ export default function App() {
   function writeAutoBackup() {
     try {
       const key = BAK_PREFIX + businessDateOfNow() + "-" + Date.now();
-      localStorage.setItem(key, JSON.stringify({ app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() }));
+      localStorage.setItem(key, JSON.stringify({ app: "tsukemawashi", version: APP_VERSION, store: STORE_ID, exportedAt: new Date().toISOString(), payload: buildPayload() }));
       const keys = Object.keys(localStorage).filter(k => k.startsWith(BAK_PREFIX)).sort().reverse();
       keys.slice(5).forEach(k => localStorage.removeItem(k));
     } catch (e) { /* 容量オーバー等は黙って諦める（本体保存を優先） */ }
@@ -830,7 +853,7 @@ export default function App() {
       fetch(`${SHARE_BASE}/rest/v1/floor?on_conflict=key`, {
         method: "POST",
         headers: { ...shareHeaders, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-        body: JSON.stringify([{ key: "share:" + URL_STORE, data: sharePayload, updated_at: new Date().toISOString() }]),
+        body: JSON.stringify([{ key: "share:" + STORE_ID, data: sharePayload, updated_at: new Date().toISOString() }]),
       }).catch(() => { /* 電波なしでも営業継続（オフラインファースト） */ });
     }, 2000);
     return () => clearTimeout(id);
@@ -848,7 +871,7 @@ export default function App() {
       const res = await fetch(`${SHARE_BASE}/rest/v1/floor?on_conflict=key`, {
         method: "POST",
         headers: { ...shareHeaders, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-        body: JSON.stringify([{ key: "vault:" + URL_STORE, data: { v: 1, at: Date.now(), meta: { casts: casts.length, customers: customerBook.length }, ...blob }, updated_at: new Date().toISOString() }]),
+        body: JSON.stringify([{ key: "vault:" + STORE_ID, data: { v: 1, at: Date.now(), meta: { casts: casts.length, customers: customerBook.length }, ...blob }, updated_at: new Date().toISOString() }]),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       setCloudInfo(i => ({ ...i, lastPushAt: Date.now(), lastError: null }));
@@ -867,7 +890,7 @@ export default function App() {
 
   async function cloudCheck() {
     try {
-      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + URL_STORE)}&select=data,updated_at`, { headers: shareHeaders });
+      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + STORE_ID)}&select=data,updated_at`, { headers: shareHeaders });
       const rows = await res.json();
       const row = Array.isArray(rows) ? rows[0] : null;
       setCloudInfo(i => ({ ...i, remote: row ? { at: row.data?.at, casts: row.data?.meta?.casts, customers: row.data?.meta?.customers } : null, lastError: null }));
@@ -879,7 +902,7 @@ export default function App() {
   }
   async function cloudRestore(pass, onResult) {
     try {
-      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + URL_STORE)}&select=data`, { headers: shareHeaders });
+      const res = await fetch(`${SHARE_BASE}/rest/v1/floor?key=eq.${encodeURIComponent("vault:" + STORE_ID)}&select=data`, { headers: shareHeaders });
       const rows = await res.json();
       const blob = Array.isArray(rows) ? rows[0]?.data : null;
       if (!blob) { onResult?.({ ok: false, msg: "クラウド上にバックアップが見つかりません" }); return; }
@@ -3277,7 +3300,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">店名</span>
-            <input value={settings.storeName} onChange={e => setSettings(s => ({ ...s, storeName: e.target.value }))} placeholder="viverce" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <input value={settings.storeName} onChange={e => setSettings(s => ({ ...s, storeName: e.target.value }))} placeholder="vivace" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">売上目標</span>
@@ -3442,9 +3465,9 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 text-[11px] text-zinc-400 mb-2">
           <b className="text-zinc-300">外のスタッフの設定手順:</b><br />
           ① 同じアプリのURLを開く → ② 設定タブ → ③ 下の「外用ビューを開く」<br />
-          （店コード: <b style={{ color: GOLD }}>{URL_STORE}</b>）
+          （店コード: <b style={{ color: GOLD }}>{STORE_ID}</b>）
         </div>
-        <button onClick={() => enterWatch(URL_STORE)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
+        <button onClick={() => enterWatch(STORE_ID)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
       </div>
 
       <CloudVault {...{ settings, setSettings, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />
