@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.4.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.0.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -9,6 +9,44 @@ const URL_STORE = (typeof window !== "undefined" && new URLSearchParams(window.l
 const STORE_KEY = URL_STORE + "-v1";
 const GENRES = ["綺麗", "可愛い", "おもしろい", "オタク系", "ギャル系", "ヤンキー系"];
 const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろい": "#f0b54a", "オタク系": "#a78bfa", "ギャル系": "#ff9f45", "ヤンキー系": "#4ade80" };
+
+// ============================================================
+// 付け回しの理念（黒服の教科書）を実装するための分類軸
+//   付け回しは「お客様」「お店」「キャバ嬢」の三者にとって意味を持つ業務。
+//   - お客様: 好みに合う子と出会える／色々な子と話せる／また来たくなる
+//   - お店  : 場内指名が増える／延長が増える／リピーターが増える
+//   - 嬢    : 自分の魅力を活かせる客と出会える／場内指名のチャンスが増える
+// ============================================================
+
+// 接客スタイル（異なるタイプを順に付けて「お客様の好み」を探るための軸）
+const STYLES = ["トーク", "聞き上手", "盛り上げ", "癒し"];
+const STYLE_COLOR = { "トーク": "#ffb347", "聞き上手": "#7aa7ff", "盛り上げ": "#ff6fa5", "癒し": "#5fd6a0" };
+const STYLE_DESC = {
+  "トーク": "会話力が高い・話題豊富",
+  "聞き上手": "お客様の話をじっくり聞ける",
+  "盛り上げ": "場を盛り上げるパフォーマンス型",
+  "癒し": "穏やかな雰囲気で癒しを提供",
+};
+// 接客レベル（1番目＝お店の顔／初回・太客への配置に使う）
+const RANKS = ["S", "A", "B", "新人"];
+const RANK_WEIGHT = { "S": 30, "A": 20, "B": 10, "新人": 0 };
+const RANK_COLOR = { "S": "#e8c96a", "A": "#a8e6e2", "B": "#8a8a92", "新人": "#7fdc8a" };
+// 得意な客層（年代）
+const AGE_BANDS = ["20代", "30代", "40代以上"];
+// 売上傾向・強み
+const STRENGTHS = ["延長に強い", "新規に強い", "団体OK", "同伴多い", "指名率高い"];
+
+// 交代の時間配分（教科書: 60分1セットなら 1人目=開始直後 / 2人目=15〜20分 / 3人目=35〜40分）
+// セット時間に対する割合で持つことで50分セットでも同じ考え方が使える。
+const ROT_RATIO = [0, 0.30, 0.65];
+const rotationSchedule = (setDuration) => ROT_RATIO.map(r => Math.round(setDuration * r));
+// n人目（0始まり）の担当時間が終わる「目安の分」。最後の子はセット終了まで。
+function rotWindowEndMin(setDuration, n) {
+  const sc = rotationSchedule(setDuration);
+  return n + 1 < sc.length ? sc[n + 1] : setDuration;
+}
+// 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
+const REACT_GOOD = 1, REACT_BAD = -1;
 
 const DEFAULT_SETTINGS = { storeName: URL_STORE, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
@@ -63,7 +101,15 @@ const DEFAULT_CAST_COUNTERS = {
   clockedInAt: null,
   lateMinutes: 0,
 };
-const mergeCastDefaults = (c) => ({ ...DEFAULT_CAST_PAY, ...DEFAULT_CAST_COUNTERS, ...c });
+// 付け回しの判断材料（教科書の「キャバ嬢の分類」）
+const DEFAULT_CAST_PROFILE = {
+  style: "トーク",       // 接客スタイル
+  rank: "B",             // 接客レベル S/A/B/新人
+  ageFit: [],            // 得意な客層（年代）
+  strengths: [],         // 延長に強い・新規に強い 等
+  ngCustomerIds: [],     // このキャストが「付きたくない」お客様（客名帳ID）。付け回しから完全除外
+};
+const mergeCastDefaults = (c) => ({ ...DEFAULT_CAST_PAY, ...DEFAULT_CAST_COUNTERS, ...DEFAULT_CAST_PROFILE, ...c });
 const DEFAULT_TABLES = [
   { id: "vip", label: "VIP", cap: 7 },
   { id: "t2", label: "卓2", cap: 4 },
@@ -80,18 +126,18 @@ const DEFAULT_TABLES = [
 const DEFAULT_MERGE_GROUPS = { A: ["t3", "t4"], B: ["t5", "t6"], C: ["t10", "t11", "t12"] };
 
 const DEFAULT_SEED_CASTS = [
-  { id: "c1", name: "リカ", score: 9, genres: ["綺麗"], status: "出勤" },
-  { id: "c2", name: "マオ", score: 8, genres: ["可愛い"], status: "出勤" },
-  { id: "c3", name: "ユイ", score: 7, genres: ["綺麗"], status: "出勤" },
-  { id: "c4", name: "アヤ", score: 6, genres: ["おもしろい"], status: "出勤" },
-  { id: "c5", name: "ミク", score: 6, genres: ["可愛い"], status: "出勤" },
-  { id: "c6", name: "ナナ", score: 5, genres: ["おもしろい"], status: "出勤" },
-  { id: "c7", name: "サキ", score: 7, genres: ["可愛い"], status: "出勤" },
-  { id: "c8", name: "レイ", score: 8, genres: ["綺麗"], status: "出勤" },
-  { id: "c9", name: "エマ", score: 4, genres: ["可愛い", "おもしろい"], status: "出勤" },
-  { id: "c10", name: "カナ", score: 5, genres: ["綺麗"], status: "出勤" },
-  { id: "c11", name: "ミナ", score: 6, genres: ["おもしろい"], status: "未出勤" },
-  { id: "c12", name: "ホノカ", score: 7, genres: ["可愛い"], status: "未出勤" },
+  { id: "c1", name: "リカ", score: 9, genres: ["綺麗"], status: "出勤", style: "トーク", rank: "S", strengths: ["延長に強い", "新規に強い"] },
+  { id: "c2", name: "マオ", score: 8, genres: ["可愛い"], status: "出勤", style: "盛り上げ", rank: "A", strengths: ["団体OK"] },
+  { id: "c3", name: "ユイ", score: 7, genres: ["綺麗"], status: "出勤", style: "聞き上手", rank: "A" },
+  { id: "c4", name: "アヤ", score: 6, genres: ["おもしろい"], status: "出勤", style: "盛り上げ", rank: "B" },
+  { id: "c5", name: "ミク", score: 6, genres: ["可愛い"], status: "出勤", style: "癒し", rank: "B" },
+  { id: "c6", name: "ナナ", score: 5, genres: ["おもしろい"], status: "出勤", style: "トーク", rank: "B" },
+  { id: "c7", name: "サキ", score: 7, genres: ["可愛い"], status: "出勤", style: "癒し", rank: "A", strengths: ["同伴多い"] },
+  { id: "c8", name: "レイ", score: 8, genres: ["綺麗"], status: "出勤", style: "聞き上手", rank: "S", strengths: ["延長に強い", "指名率高い"] },
+  { id: "c9", name: "エマ", score: 4, genres: ["可愛い", "おもしろい"], status: "出勤", style: "盛り上げ", rank: "新人" },
+  { id: "c10", name: "カナ", score: 5, genres: ["綺麗"], status: "出勤", style: "聞き上手", rank: "B" },
+  { id: "c11", name: "ミナ", score: 6, genres: ["おもしろい"], status: "未出勤", style: "トーク", rank: "B" },
+  { id: "c12", name: "ホノカ", score: 7, genres: ["可愛い"], status: "未出勤", style: "癒し", rank: "A" },
 ];
 
 const ANELA_SEED_CASTS = [
@@ -156,6 +202,9 @@ export default function App() {
   const [salaryModal, setSalaryModal] = useState(null); // { cast, breakdown }
   const [ts, setTs] = useState({});
   const [served, setServed] = useState({});
+  // お客様の反応記録 { [custId]: { [castId]: 1(◎相性良い) | -1(✗合わない) } }
+  // 教科書「お客様の反応を見極めて場内指名や延長に繋ぐ」の実装。3人目・延長の人選に使う。
+  const [reactions, setReactions] = useState({});
   const [merges, setMerges] = useState({});
   const [sel, setSel] = useState(null);
   const [closed, setClosed] = useState([]);
@@ -185,6 +234,7 @@ export default function App() {
           setCasts((d.casts || SEED_CASTS).map(mergeCastDefaults));
           setTs(d.ts || {});
           setServed(d.served || {});
+          setReactions(d.reactions || {});
           setMerges(d.merges || {});
           setClosed(d.closed || []);
           setHistory(d.history || []);
@@ -205,16 +255,16 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog]);
 
   // ---- 監査ログ ----
   const logAudit = (action, detail = "") =>
     setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
 
   // ---- バックアップ ----
-  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
 
   function exportData() {
     const data = { app: "tsukemawashi", version: APP_VERSION, store: URL_STORE, exportedAt: new Date().toISOString(), payload: buildPayload() };
@@ -237,6 +287,7 @@ export default function App() {
     setCasts((p.casts || SEED_CASTS).map(mergeCastDefaults));
     setTs(p.ts || {});
     setServed(p.served || {});
+    setReactions(p.reactions || {});
     setMerges(p.merges || {});
     setClosed(p.closed || []);
     setHistory(p.history || []);
@@ -479,18 +530,107 @@ export default function App() {
   const qualityReceived = (custId) =>
     Math.max(0, ...((served[custId] || []).map(id => castById[id]?.score || 0)));
 
+  // 客の属性を客名帳から解決（初回か・太客か・年代）
+  function custProfile(cust) {
+    const cb = cust?.customerBookId ? customerBook.find(c => c.id === cust.customerBookId) : null;
+    const visits = cb?.visits || 0;
+    const spent = cb?.totalSpent || 0;
+    return {
+      cb,
+      isFirst: visits <= 1,                 // 初回来店 → お店の第一印象を決める大事な機会
+      isVip: spent >= 100000 || visits >= 10, // 太客 → 高スキル・教養のあるベテランを
+      ageBand: cb?.ageBand || cust?.ageBand || "",
+      goodStyles: new Set(                   // 反応◎だった子のスタイル（好みの手がかり）
+        Object.entries(reactions[cust?.id] || {})
+          .filter(([, v]) => v === REACT_GOOD)
+          .map(([cid]) => castById[cid]?.style).filter(Boolean)),
+      badStyles: new Set(
+        Object.entries(reactions[cust?.id] || {})
+          .filter(([, v]) => v === REACT_BAD)
+          .map(([cid]) => castById[cid]?.style).filter(Boolean)),
+    };
+  }
+
+  // ---- 付け回しスコアリング（教科書のルールをそのまま点数化） ----
+  // nth = このお客様にとって何人目か（1始まり）
+  function castScore(cast, cust, t, nth, prof, nowH) {
+    let s = (cast.score || 5) * 10;                       // 基礎ランク
+    const prevStyles = new Set((served[cust.id] || []).map(id => castById[id]?.style).filter(Boolean));
+    const tableStyles = new Set((t?.casts || []).map(a => castById[a.castId]?.style).filter(Boolean));
+
+    // 好みのジャンル一致（お客様の好みに合った子を見つけやすく）
+    if (cust.pref && (cast.genres || []).includes(cust.pref)) s += 45;
+    // 年代の相性（会話の内容・接し方が大きく変わるため）
+    if (prof.ageBand && (cast.ageFit || []).includes(prof.ageBand)) s += 35;
+    else if (prof.ageBand && (cast.ageFit || []).length) s -= 20; // 得意層が明示されていて外れている
+
+    // 何人目かで役割が変わる
+    if (nth === 1) {
+      // 1番目 = お店の顔。見た目・接客スキル・情報収集力。初回客なら特にトップクラスを。
+      s += RANK_WEIGHT[cast.rank] ?? 10;
+      if (prof.isFirst) s += (RANK_WEIGHT[cast.rank] ?? 10) + ((cast.strengths || []).includes("新規に強い") ? 40 : 0);
+    } else if (nth === 2) {
+      // 2番目 = 1番目で得た情報を活かす。
+      //   反応◎ → 似たタイプで満足度を維持 / それ以外 → 対照的な魅力で新鮮さを演出
+      if (prof.goodStyles.size) { if (prof.goodStyles.has(cast.style)) s += 90; }
+      else if (!prevStyles.has(cast.style)) s += 35;
+      if (prof.badStyles.has(cast.style)) s -= 60;
+    } else {
+      // 3番目以降 = 最後の逆転チャンス。場内指名・延長・再来店を狙う。
+      if (prof.goodStyles.has(cast.style)) s += 50;
+      if (prof.badStyles.has(cast.style)) s -= 70;
+      if ((cast.strengths || []).includes("延長に強い")) s += 35;
+      if ((cast.strengths || []).includes("指名率高い")) s += 30;
+      s += (RANK_WEIGHT[cast.rank] ?? 10) / 2;
+    }
+
+    // 様々な出会いを作る: 既に同じスタイルが付いた/卓にいるなら減点
+    if (prevStyles.has(cast.style)) s -= 30;
+    if (tableStyles.has(cast.style)) s -= 15;
+
+    // 客層別
+    if (prof.isVip) s += (RANK_WEIGHT[cast.rank] ?? 10) * 1.5; // 太客には総合力の高い子
+    if ((t?.customers?.length || 1) >= 3) {                    // 団体客 → 場を盛り上げられる子
+      if (cast.style === "盛り上げ") s += 30;
+      if ((cast.strengths || []).includes("団体OK")) s += 30;
+    } else if ((t?.customers?.length || 1) === 1) {            // おひとり様 → 聞き上手・気配り
+      if (cast.style === "聞き上手") s += 35;
+      if (cast.style === "癒し") s += 20;
+    }
+
+    // 時間帯別（開店直後は明るく元気に／ラスト前は落ち着いたベテランで延長・再来店へ）
+    if (nowH >= 19 && nowH < 21) { if (cast.style === "盛り上げ" || cast.style === "トーク") s += 20; }
+    if (nowH >= 1 || nowH < 4) { if (cast.rank === "S" || cast.rank === "A") s += 15; }
+
+    // セット終盤に投入するなら延長に強い子を（終了5〜10分前の布石）
+    if (t?.setStart) {
+      const remainMin = (t.setStart + t.setDuration * 60000 - Date.now()) / 60000;
+      if (remainMin <= 12 && (cast.strengths || []).includes("延長に強い")) s += 45;
+    }
+
+    // ボスは同点時に優先（既存の考え方を維持）
+    if (cust.isBoss) s += 3;
+    return s;
+  }
+
+  // キャストが「付きたくない」と申告したお客様は付け回しから完全に外す（キャストが安心して働ける環境）
+  const isNgPair = (cast, cust) =>
+    !!(cust?.customerBookId && (cast?.ngCustomerIds || []).includes(cust.customerBookId));
+
   function fairDraft(targetCustomers, pool) {
     const order = [...targetCustomers].sort((a, b) =>
       qualityReceived(a.id) - qualityReceived(b.id) ||
       (b.isBoss ? 1 : 0) - (a.isBoss ? 1 : 0));
     let avail = [...pool];
     const plan = [];
+    const nowH = new Date().getHours();
     for (const cust of order) {
-      const cand = avail.filter(c => !(served[cust.id] || []).includes(c.id));
+      const t = Object.values(ts).find(x => x?.active && x.customers.some(c => c.id === cust.id));
+      const prof = custProfile(cust);
+      const nth = (served[cust.id] || []).length + 1;
+      const cand = avail.filter(c => !(served[cust.id] || []).includes(c.id) && !isNgPair(c, cust));
       if (!cand.length) continue;
-      const matched = cand.filter(c => cust.pref && c.genres.includes(cust.pref));
-      const base = matched.length ? matched : cand;
-      const pick = [...base].sort((a, b) => b.score - a.score)[0];
+      const pick = [...cand].sort((a, b) => castScore(b, cust, t, nth, prof, nowH) - castScore(a, cust, t, nth, prof, nowH))[0];
       plan.push([cust.id, pick.id]);
       avail = avail.filter(c => c.id !== pick.id);
     }
@@ -550,6 +690,52 @@ export default function App() {
           });
         }
       }
+    }
+
+    // 1-c) 理念に沿った接客ナビ（教科書のルールをその場の助言に）
+    Object.entries(ts).forEach(([tid, t]) => {
+      if (!t?.active || !t.setStart || !t.customers.length) return;
+      const label = tables.find(x => x.id === tid)?.label || tid;
+      const remainMin = (t.setStart + t.setDuration * 60000 - nowMs) / 60000;
+
+      // 延長クロージング: 終了5〜10分前にお気に入り／延長に強い子を入れる
+      if (remainMin > 0 && remainMin <= 10) {
+        const inT = new Set(t.casts.map(a => a.castId));
+        const favNames = [];
+        t.customers.forEach(cu => Object.entries(reactions[cu.id] || {}).forEach(([cid, v]) => {
+          if (v === REACT_GOOD && !inT.has(cid) && castById[cid]) favNames.push(castById[cid].name);
+        }));
+        const closers = available.filter(c => (c.strengths || []).includes("延長に強い")).map(c => c.name);
+        out.push({
+          icon: "⏰", level: "act",
+          title: `${label}: 残り${Math.ceil(remainMin)}分 — 延長クロージングの時間`,
+          detail: [favNames.length ? `反応◎: ${favNames.slice(0, 3).join("・")}を席へ` : null,
+          closers.length ? `延長に強い: ${closers.slice(0, 3).join("・")}` : null,
+          "ドリンクの残量を見てタイミングを計る"].filter(Boolean).join(" / "),
+        });
+      }
+
+      // まだ誰の反応も記録されていない → 好みを掴めていない
+      const anyReact = t.customers.some(cu => Object.keys(reactions[cu.id] || {}).length > 0);
+      const served2 = t.customers.some(cu => (served[cu.id] || []).length >= 2);
+      if (served2 && !anyReact && remainMin > 10) {
+        out.push({ icon: "👀", level: "info", title: `${label}: 反応がまだ記録されていません`, detail: "チップの ◎/✗ を押して反応を残すと、3人目と延長の人選が精度よく提案されます（場内指名の種）" });
+      }
+
+      // プラス付けの好機: 空きに余裕があり、初回客 or 太客 or 長時間滞在
+      const need = t.customers.filter(c => !new Set(t.casts.map(a => a.customerId)).has(c.id)).length;
+      if (available.length >= 2 && need === 0 && t.casts.length <= t.customers.length) {
+        const first = t.customers.some(cu => { const cb = customerBook.find(x => x.id === cu.customerBookId); return (cb?.visits || 0) <= 1; });
+        const vip = t.customers.some(cu => { const cb = customerBook.find(x => x.id === cu.customerBookId); return (cb?.totalSpent || 0) >= 100000; });
+        if (first || vip) {
+          out.push({ icon: "➕", level: "info", title: `${label}: プラス付けの好機（空き${available.length}名）`, detail: `${first ? "初めてのお客様" : "太客"}へのおもてなし。人数より多く付けると好みの子と出会う確率が上がり、場内指名に繋がります` });
+        }
+      }
+    });
+
+    // 1-d) 予備キャスト0 → 突然の団体客に対応できない（教科書の失敗例）
+    if (available.length === 0 && casts.some(c => c.status === "出勤")) {
+      out.push({ icon: "🈵", level: "warn", title: "予備キャスト0名", detail: "急な団体・新規のご来店に対応できません。どこかの卓から1名回せないか確認を（お客様を長く待たせるのが最悪の失敗）" });
     }
 
     // 2) 異常検知: 今日のドリンク単価 vs 平常
@@ -617,7 +803,7 @@ export default function App() {
     // act(今すぐ) → warn → info の順
     const rank = { act: 0, warn: 1, info: 2 };
     return out.sort((a, b) => rank[a.level] - rank[b.level]);
-  }, [loaded, brainTick, ts, closed, history, salesLog, salaryHistory, customerBook, bottleKeeps, casts, served]);
+  }, [loaded, brainTick, ts, closed, history, salesLog, salaryHistory, customerBook, bottleKeeps, casts, served, reactions]);
 
   // ---- 共有パブリッシャー: 卓状況スナップショット（客名・売上は一切含めない） ----
   const sharePayload = useMemo(() => {
@@ -726,11 +912,54 @@ export default function App() {
     }
     logAudit("付け回し", `${castById[castId]?.name || "?"} → ${cust?.name || "?"}`);
   }
+  // お客様の反応を記録（◎ / ✗ をもう一度押すと解除）。3人目・延長の人選に効く。
+  function setReaction(custId, castId, val) {
+    setReactions(r => {
+      const cur = r[custId] || {};
+      const next = { ...cur };
+      if (next[castId] === val) delete next[castId]; else next[castId] = val;
+      return { ...r, [custId]: next };
+    });
+    const cust = Object.values(ts).flatMap(t => t?.customers || []).find(c => c.id === custId);
+    // 反応◎はお気に入り検出にも反映（客名帳のお気に入り＝場内指名の候補）
+    if (val === REACT_GOOD && cust?.customerBookId) {
+      setCustomerBook(cb => cb.map(c => c.id === cust.customerBookId
+        ? { ...c, castAffinity: { ...(c.castAffinity || {}), [castId]: ((c.castAffinity || {})[castId] || 0) + 2 } }
+        : c));
+    }
+    logAudit("反応記録", `${cust?.name || "?"} → ${castById[castId]?.name || "?"} ${val === REACT_GOOD ? "◎" : "✗"}`);
+  }
+
   function tryAssign(tableId, castId, customerId) {
     const cust = ts[tableId].customers.find(c => c.id === customerId);
-    if ((served[customerId] || []).includes(castId)) { setModal({ type: "ng", msg: `🚫 ${cust.name}さんには既に「${castById[castId].name}」が付いています。同じお客様への重複は絶対NG。` }); return; }
-    if (ts[tableId].casts.some(a => a.castId === castId)) { setModal({ type: "warn", msg: `⚠️ 「${castById[castId].name}」はこの卓に既にいます。それでも付けますか？`, onOk: () => { doAssign(tableId, castId, customerId); setPick(null); } }); return; }
+    const cast = castById[castId];
+    if ((served[customerId] || []).includes(castId)) { setModal({ type: "ng", msg: `🚫 ${cust.name}さんには既に「${cast.name}」が付いています。同じお客様への重複は絶対NG。` }); return; }
+    // キャスト本人が「付きたくない」と申告している相手 → 強制配置しない（無視すると退職に繋がる）
+    if (isNgPair(cast, cust)) { setModal({ type: "ng", msg: `🚫 「${cast.name}」は ${cust.name}さんへの接客をNG登録しています。人手不足でも強制配置はしないでください（設定→キャスト設定で変更可）。` }); return; }
+    const prof = custProfile(cust);
+    // 年代のミスマッチ警告（落ち着いた年配客にハイテンションな新人 等の事故防止）
+    if (prof.ageBand && (cast.ageFit || []).length && !cast.ageFit.includes(prof.ageBand)) {
+      setModal({ type: "warn", msg: `⚠️ ${cust.name}さんは${prof.ageBand}、「${cast.name}」の得意層は ${cast.ageFit.join("・")} です。相性が合わない可能性があります。それでも付けますか？`, onOk: () => { doAssign(tableId, castId, customerId); setPick(null); } });
+      return;
+    }
+    if (ts[tableId].casts.some(a => a.castId === castId)) { setModal({ type: "warn", msg: `⚠️ 「${cast.name}」はこの卓に既にいます。それでも付けますか？`, onOk: () => { doAssign(tableId, castId, customerId); setPick(null); } }); return; }
     doAssign(tableId, castId, customerId); setPick(null);
+  }
+
+  // プラス付け: お客様の人数より多くキャストを付ける（暇な時間帯・新規・太客へのおもてなし）
+  function plusAssign(tableId) {
+    const t = ts[tableId];
+    if (!t?.customers.length) return;
+    const nowH = new Date().getHours();
+    // ボス（居なければ先頭）に、まだ付いていない中からいちばん合う子を1名追加
+    const cust = t.customers.find(c => c.isBoss) || t.customers[0];
+    const prof = custProfile(cust);
+    const nth = (served[cust.id] || []).length + 1;
+    const cand = available.filter(c => !(served[cust.id] || []).includes(c.id) && !isNgPair(c, cust));
+    if (!cand.length) { setModal({ type: "ng", msg: "プラス付けできる空きキャストがいません。" }); return; }
+    const pick = [...cand].sort((a, b) => castScore(b, cust, t, nth, prof, nowH) - castScore(a, cust, t, nth, prof, nowH))[0];
+    doAssign(tableId, pick.id, cust.id);
+    logAudit("プラス付け", `${pick.name} → ${cust.name}`);
   }
   function autoCustomer(tableId, cust) {
     const s = suggest(ts[tableId], cust);
@@ -973,13 +1202,14 @@ export default function App() {
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
-      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />}
+      {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, customerBook, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />}
 
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
+          reactions, setReaction, plusAssign, availCount: available.length,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
           nextPlan: ts[sel]?.active
@@ -1287,7 +1517,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount } = p;
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
   // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
@@ -1368,6 +1598,8 @@ function Detail(p) {
             </div>
           </Section>
 
+          {t.setStart && <RotationPlan t={t} plusAssign={() => plusAssign(tableId)} availCount={availCount} castById={castById} reactions={reactions} tryAssign={(castId, custId) => tryAssign(tableId, castId, custId)} />}
+
           <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#000" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
             <div className="space-y-2">
               {t.customers.map(cust => {
@@ -1377,7 +1609,7 @@ function Detail(p) {
                   .filter(id => !myCasts.some(c => c.id === id))
                   .map(id => castById[id]).filter(Boolean);
                 const nextCast = nextPlan?.[cust.id] ? castById[nextPlan[cust.id]] : null;
-                const rotMs = (t.setDuration / 3) * 60000;
+                const servedIds = served[cust.id] || [];
                 return (
                   <div key={cust.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -1398,8 +1630,16 @@ function Detail(p) {
                       {myAssigns.map(a => {
                         const c = castById[a.castId];
                         if (!c) return null;
+                        // 教科書の時間配分: 60分なら 1人目=0分 / 2人目=18分 / 3人目=39分 で交代。
+                        // 何人目かでその子の担当終了時刻が決まる（遅れて付いた子には最低10分を保証）。
+                        const n = Math.max(0, servedIds.indexOf(c.id));
+                        const at = a.at ?? t.setStart;
+                        const schedEnd = (t.setStart || at) + rotWindowEndMin(t.setDuration, n) * 60000;
+                        const end = Math.max(schedEnd, at + 10 * 60000);
                         return (
-                          <RotationChip key={a.castId} cast={c} at={a.at ?? t.setStart} rotMs={rotMs} started={!!t.setStart} onRemove={() => removeCast(tableId, c.id)} />
+                          <RotationChip key={a.castId} cast={c} at={at} rotMs={end - at} started={!!t.setStart}
+                            nth={n + 1} reaction={reactions?.[cust.id]?.[c.id]} onReact={(v) => setReaction(cust.id, c.id, v)}
+                            onRemove={() => removeCast(tableId, c.id)} />
                         );
                       })}
                       {nextCast && (
@@ -1616,14 +1856,87 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
 
 // 「今 ○○」チップ + 回転残り時間。1回転 = セット時間÷3。
 // 残り3分で黄色、超過で赤「交代!」
-function RotationChip({ cast, at, rotMs, started = true, onRemove }) {
+// 接客プラン: 教科書の時間配分（1人目0分/2人目15〜20分/3人目35〜40分）を可視化し、
+// セット終了5〜10分前の延長クロージングを促す。プラス付けもここから。
+function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssign }) {
+  const now = useNow(true);
+  const elapsedMin = Math.max(0, Math.floor((now - t.setStart) / 60000));
+  const remainMin = Math.ceil((t.setStart + t.setDuration * 60000 - now) / 60000);
+  const sched = rotationSchedule(t.setDuration);
+  const closing = remainMin <= 10 && remainMin > 0;   // 延長交渉の準備タイム
+  const urgent = remainMin <= 5 && remainMin > 0;     // 延長交渉そのもの
+  // 反応◎だった子（＝場内指名の最有力）で、今この卓にいない子
+  const inTable = new Set(t.casts.map(a => a.castId));
+  const favs = [];
+  t.customers.forEach(cu => {
+    Object.entries(reactions?.[cu.id] || {}).forEach(([cid, v]) => {
+      if (v === REACT_GOOD && !inTable.has(cid) && castById[cid]) favs.push({ cast: castById[cid], custId: cu.id, custName: cu.name });
+    });
+  });
+  const canPlus = availCount > 0;
+  return (
+    <div style={{ background: closing ? "rgba(224,168,74,.08)" : "#141418", border: `1px solid ${closing ? "#7a5a1a" : "#22222a"}` }} className="rounded-xl p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-bold text-zinc-400">接客プラン（交代の目安）</span>
+        <span className="text-[10px] text-zinc-500">経過 {elapsedMin}分 / 残り {remainMin > 0 ? `${remainMin}分` : "超過"}</span>
+      </div>
+      <div className="flex items-center gap-1 mb-2">
+        {sched.map((m, i) => {
+          const passed = elapsedMin >= m;
+          const isNow = passed && (i + 1 >= sched.length || elapsedMin < sched[i + 1]);
+          return (
+            <div key={i} className="flex-1 text-center">
+              <div style={{ height: 4, background: isNow ? GOLD : passed ? "#4a4a52" : "#22222a" }} className="rounded-full mb-1" />
+              <div style={{ color: isNow ? GOLD : "#6a6a72" }} className="text-[9px] font-bold">{i + 1}人目 {m}分〜</div>
+            </div>
+          );
+        })}
+      </div>
+      {closing && (
+        <div style={{ background: urgent ? "rgba(224,85,85,.12)" : "transparent", border: `1px dashed ${urgent ? "#a15050" : "#7a5a1a"}` }} className="rounded-lg p-2 mb-2">
+          <div style={{ color: urgent ? "#ff9a9a" : "#e0a84a" }} className="text-[11px] font-bold mb-1">
+            {urgent ? "⏰ 今すぐ延長交渉を！" : "⏰ 延長クロージングの時間です（残り10分）"}
+          </div>
+          <div className="text-[10px] text-zinc-400 leading-relaxed">
+            反応◎の子・延長に強い子を席に入れてから交渉。ドリンクの残量を見てタイミングを計ってください。
+          </div>
+          {favs.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {favs.slice(0, 4).map((f, i) => (
+                <button key={i} onClick={() => tryAssign(f.cast.id, f.custId)} style={{ background: "rgba(201,166,78,.15)", border: `1px solid ${GOLD}`, color: GOLD }} className="text-[10px] rounded-full px-2 py-0.5 font-bold">
+                  ◎ {f.cast.name} を {f.custName}さんへ
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <button onClick={plusAssign} disabled={!canPlus}
+        style={{ background: canPlus ? "#22222a" : "#141418", color: canPlus ? TEAL : "#4a4a52", border: `1px solid ${canPlus ? TEAL : "#2a2a32"}` }}
+        className="w-full rounded-lg py-2 text-[11px] font-bold">
+        ＋ プラス付け（客数より多く付ける）{canPlus ? `　空き${availCount}名` : "　空きなし"}
+      </button>
+    </div>
+  );
+}
+
+function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction, onReact }) {
   const now = useNow(started);
+  // 反応ボタン（◎/✗）— お客様の反応を見極めて場内指名・延長に繋ぐための記録
+  const React2 = () => onReact ? (
+    <>
+      <button onClick={() => onReact(REACT_GOOD)} style={{ opacity: reaction === REACT_GOOD ? 1 : 0.35 }} className="text-[10px] leading-none px-0.5" title="相性◎">◎</button>
+      <button onClick={() => onReact(REACT_BAD)} style={{ opacity: reaction === REACT_BAD ? 1 : 0.35 }} className="text-[10px] leading-none px-0.5" title="合わない">✗</button>
+    </>
+  ) : null;
+  const numBadge = nth ? <span className="text-[8px] opacity-60">{nth}人目</span> : null;
   if (!started || !at) {
     // セット開始前: タイマーなしの待機チップ
     return (
       <span style={{ background: "rgba(63,182,176,.15)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-        今 {cast.name}
+        今 {cast.name}{numBadge}
         <span className="text-[9px] opacity-70">待機</span>
+        <React2 />
         <button onClick={onRemove}><X size={11} /></button>
       </span>
     );
@@ -1631,13 +1944,15 @@ function RotationChip({ cast, at, rotMs, started = true, onRemove }) {
   const remain = Math.min(at + rotMs - now, rotMs); // now が at より最大1秒遅れても「残21分」と出ないように上限クランプ
   const over = remain <= 0;
   const soon = !over && remain <= 3 * 60000;
-  const color = over ? "#ff6a6a" : soon ? "#e0a84a" : TEAL;
-  const bg = over ? "rgba(224,85,85,.12)" : soon ? "rgba(224,168,74,.12)" : "rgba(63,182,176,.15)";
-  const fg = over ? "#ffb3b3" : soon ? "#f0cf9a" : "#a8e6e2";
+  const good = reaction === REACT_GOOD;
+  const color = over ? "#ff6a6a" : soon ? "#e0a84a" : good ? GOLD : TEAL;
+  const bg = over ? "rgba(224,85,85,.12)" : soon ? "rgba(224,168,74,.12)" : good ? "rgba(201,166,78,.18)" : "rgba(63,182,176,.15)";
+  const fg = over ? "#ffb3b3" : soon ? "#f0cf9a" : good ? "#e8d29a" : "#a8e6e2";
   return (
     <span style={{ background: bg, border: `1px solid ${color}`, color: fg }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-      今 {cast.name}
+      今 {cast.name}{numBadge}
       <span className="text-[9px] opacity-90">{over ? "交代!" : `残${Math.ceil(remain / 60000)}分`}</span>
+      <React2 />
       <button onClick={onRemove}><X size={11} /></button>
     </span>
   );
@@ -1675,23 +1990,32 @@ function CastPicker({ pick, close, available, tableCasts, served, castById, cast
             {pastNames.length > 0 && <span className="text-zinc-500">済: {pastNames.join("・")}</span>}
           </p>
         )}
-        <p className="text-[10px] text-zinc-600 mb-3">※ ランクは非表示。ジャンル一致を上に表示。</p>
+        <p className="text-[10px] text-zinc-600 mb-3">※ ジャンル一致を上に表示。接客スタイルは「済」と違うタイプを選ぶと新しい魅力を提示できます。</p>
         <div className="grid grid-cols-2 gap-2">
           {list.sort((a, b) => (b.genres.includes(cust?.pref) ? 1 : 0) - (a.genres.includes(cust?.pref) ? 1 : 0)).map(c => {
             const ng = (served[cust.id] || []).includes(c.id);
+            const ngPair = !!(cust?.customerBookId && (c.ngCustomerIds || []).includes(cust.customerBookId));
             const here = inTable.has(c.id);
             const match = c.genres.includes(cust?.pref);
+            const usedStyle = (served[cust.id] || []).some(id => casts.find(x => x.id === id)?.style === c.style);
+            const blocked = ng || ngPair;
             return (
-              <button key={c.id} onClick={() => tryAssign(pick.tableId, c.id, pick.customerId)} disabled={ng}
-                style={{ background: ng ? "#161013" : "#141418", border: `1px solid ${ng ? "#5a2222" : match ? TEAL : "#22222a"}`, opacity: ng ? 0.55 : 1 }} className="rounded-xl p-3 text-left">
+              <button key={c.id} onClick={() => tryAssign(pick.tableId, c.id, pick.customerId)} disabled={blocked}
+                style={{ background: blocked ? "#161013" : "#141418", border: `1px solid ${blocked ? "#5a2222" : match ? TEAL : "#22222a"}`, opacity: blocked ? 0.55 : 1 }} className="rounded-xl p-3 text-left">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm">{c.name}</span>
-                  {ng && <span style={{ color: "#e05555" }} className="text-[9px] font-bold">NG重複</span>}
-                  {!ng && here && <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">在卓⚠</span>}
+                  {ngPair ? <span style={{ color: "#e05555" }} className="text-[9px] font-bold">本人NG</span>
+                    : ng ? <span style={{ color: "#e05555" }} className="text-[9px] font-bold">NG重複</span>
+                      : here ? <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">在卓⚠</span> : null}
                 </div>
-                <div className="flex gap-1 mt-1 flex-wrap">
+                <div className="flex gap-1 mt-1 flex-wrap items-center">
+                  <span style={{ background: STYLE_COLOR[c.style] || "#333", color: "#000", opacity: usedStyle ? 0.4 : 1 }} className="text-[9px] rounded px-1 font-bold">{c.style}{usedStyle ? "(済)" : ""}</span>
+                  <span style={{ color: RANK_COLOR[c.rank] || "#888", border: `1px solid ${RANK_COLOR[c.rank] || "#444"}` }} className="text-[9px] rounded px-1 font-bold">{c.rank}</span>
                   {c.genres.map(g => <span key={g} style={{ color: GENRE_COLOR[g], border: `1px solid ${GENRE_COLOR[g]}` }} className="text-[9px] rounded px-1">{g}</span>)}
                 </div>
+                {(c.strengths || []).length > 0 && (
+                  <div className="text-[8px] text-zinc-500 mt-0.5">{c.strengths.join("・")}</div>
+                )}
               </button>
             );
           })}
@@ -1723,6 +2047,66 @@ function CastTabBar({ tab, setTab }) {
   );
 }
 
+// 開店前の情報整理: その日の出勤キャストをレベル別・タイプ別に並べて全体像を掴む
+// （教科書「開店前に出勤キャバ嬢の人数・タイプ・レベルを分類しておく」）
+function RosterBrief({ casts }) {
+  const [open, setOpen] = useState(false);
+  const on = casts.filter(c => c.status === "出勤");
+  if (!on.length) return null;
+  const byRank = RANKS.map(r => [r, on.filter(c => c.rank === r)]).filter(([, a]) => a.length);
+  const byStyle = STYLES.map(s => [s, on.filter(c => c.style === s)]).filter(([, a]) => a.length);
+  const missing = STYLES.filter(s => !on.some(c => c.style === s));
+  return (
+    <div className="mb-4">
+      <button onClick={() => setOpen(o => !o)} style={{ background: "#141418", border: "1px solid #22222a", color: GOLD }} className="w-full rounded-xl py-2 text-[11px] font-bold">
+        {open ? "▲ 閉じる" : `📋 開店前チェック — 出勤${on.length}名のタイプ構成を見る`}
+      </button>
+      {open && (
+        <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-xl p-3 mt-2 space-y-2.5">
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">接客レベル</div>
+            <div className="space-y-1">
+              {byRank.map(([r, arr]) => (
+                <div key={r} className="flex items-start gap-2">
+                  <span style={{ background: RANK_COLOR[r], color: "#000" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{r}</span>
+                  <span className="text-[11px] text-zinc-300">{arr.map(c => c.name).join("・")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">接客スタイル（異なるタイプを順に付けるための組み合わせ）</div>
+            <div className="space-y-1">
+              {byStyle.map(([s, arr]) => (
+                <div key={s} className="flex items-start gap-2">
+                  <span style={{ background: STYLE_COLOR[s], color: "#000" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{s}</span>
+                  <span className="text-[11px] text-zinc-300">{arr.map(c => c.name).join("・")}</span>
+                </div>
+              ))}
+            </div>
+            {missing.length > 0 && (
+              <div style={{ color: "#e0a84a" }} className="text-[10px] mt-1.5 font-bold">
+                ⚠ 今夜いないタイプ: {missing.join("・")} — 変化をつけた付け回しがしづらくなります
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">強み</div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {STRENGTHS.map(st => {
+                const arr = on.filter(c => (c.strengths || []).includes(st));
+                if (!arr.length) return null;
+                return <span key={st} className="text-[10px]"><span style={{ color: GOLD }} className="font-bold">{st}:</span> <span className="text-zinc-400">{arr.map(c => c.name).join("・")}</span></span>;
+              })}
+            </div>
+          </div>
+          <p className="text-[9px] text-zinc-600">※ レベル・スタイル・強みは 設定タブ →「キャスト設定」で編集できます</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTab }) {
   const working = casts.filter(c => c.clockedInAt);
   const notYet = casts.filter(c => !c.clockedInAt && c.status !== "退勤済");
@@ -1734,6 +2118,8 @@ function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTa
       <CastTabBar tab={tab} setTab={setTab} />
       <p className="text-xs text-zinc-500 mb-1">キャスト稼働・指名・給料</p>
       <h2 className="text-2xl font-bold mb-4" style={{ fontFamily: "Georgia,serif" }}>稼働中 {working.length}名</h2>
+
+      <RosterBrief casts={casts} />
 
       <div className="space-y-2 mb-6">
         {working.map(c => (
@@ -2657,6 +3043,14 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
               ))}
             </div>
           </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 mb-1">年代（付け回しの相性判定に使用）</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {AGE_BANDS.map(a => (
+                <button key={a} onClick={() => setC(x => ({ ...x, ageBand: x.ageBand === a ? "" : a }))} style={{ background: c.ageBand === a ? TEAL : "#1c1c22", color: c.ageBand === a ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{a}</button>
+              ))}
+            </div>
+          </div>
           <label className="block">
             <div className="text-[10px] text-zinc-500 mb-1">注意事項・メモ</div>
             <textarea value={c.memo || ""} onChange={e => setC(x => ({ ...x, memo: e.target.value }))} rows={3} placeholder="例: シャンパン強め、○○さんNG、深酒注意" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="w-full rounded px-3 py-2 outline-none" />
@@ -2797,7 +3191,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
   );
 }
 
-function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }) {
+function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, customerBook, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }) {
   const nameRef = useRef(null);
   const tblLabelRef = useRef(null);
   const tblCapRef = useRef(null);
@@ -3030,7 +3424,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         </div>
         <div className="space-y-2">
           {casts.map(c => (
-            <CastAdminCard key={c.id} c={c} upd={upd} setCasts={setCasts} toggleGenre={toggleGenre} />
+            <CastAdminCard key={c.id} c={c} upd={upd} setCasts={setCasts} toggleGenre={toggleGenre} customerBook={customerBook} />
           ))}
         </div>
       </div>
@@ -3392,7 +3786,9 @@ function AuditLogView({ auditLog }) {
   );
 }
 
-function CastAdminCard({ c, upd, setCasts, toggleGenre }) {
+function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
+  const [ngOpen, setNgOpen] = useState(false);
+  const toggleIn = (key, v) => upd(c.id, x => ({ ...x, [key]: (x[key] || []).includes(v) ? x[key].filter(y => y !== v) : [...(x[key] || []), v] }));
   const [open, setOpen] = useState(false);
   const num = (v) => +v || 0;
   return (
@@ -3415,6 +3811,52 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre }) {
           <button key={g} onClick={() => toggleGenre(c.id, g)} style={{ background: c.genres.includes(g) ? GENRE_COLOR[g] : "#1c1c22", color: c.genres.includes(g) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
         ))}
       </div>
+      {/* 付け回しの判断材料（教科書の「キャバ嬢の分類」） */}
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="text-[10px] text-zinc-500 w-12">レベル</span>
+        {RANKS.map(r => (
+          <button key={r} onClick={() => upd(c.id, x => ({ ...x, rank: r }))} style={{ background: c.rank === r ? RANK_COLOR[r] : "#1c1c22", color: c.rank === r ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{r}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="text-[10px] text-zinc-500 w-12">接客</span>
+        {STYLES.map(st => (
+          <button key={st} onClick={() => upd(c.id, x => ({ ...x, style: st }))} title={STYLE_DESC[st]} style={{ background: c.style === st ? STYLE_COLOR[st] : "#1c1c22", color: c.style === st ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="text-[10px] text-zinc-500 w-12">得意層</span>
+        {AGE_BANDS.map(a => (
+          <button key={a} onClick={() => toggleIn("ageFit", a)} style={{ background: (c.ageFit || []).includes(a) ? TEAL : "#1c1c22", color: (c.ageFit || []).includes(a) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{a}</button>
+        ))}
+        <span className="text-[9px] text-zinc-600">未選択=全年齢</span>
+      </div>
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="text-[10px] text-zinc-500 w-12">強み</span>
+        {STRENGTHS.map(st => (
+          <button key={st} onClick={() => toggleIn("strengths", st)} style={{ background: (c.strengths || []).includes(st) ? GOLD : "#1c1c22", color: (c.strengths || []).includes(st) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
+        ))}
+      </div>
+
+      <button onClick={() => setNgOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #7a2222", color: "#e08484" }} className="w-full rounded-lg py-1.5 text-[11px] font-bold mb-2">
+        {ngOpen ? "▲ 閉じる" : `🚫 付けたくないお客様${(c.ngCustomerIds || []).length ? `（${(c.ngCustomerIds || []).length}名）` : ""}`}
+      </button>
+      {ngOpen && (
+        <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
+          <p className="text-[10px] text-zinc-500 mb-1.5">本人から「このお客様は付きたくない」と相談があった相手を登録します。付け回しから完全に外れ、手動でも配置できなくなります。</p>
+          {(customerBook || []).length === 0 ? <p className="text-[10px] text-zinc-600">客名帳が空です</p> : (
+            <div className="flex flex-wrap gap-1">
+              {(customerBook || []).map(cu => {
+                const on = (c.ngCustomerIds || []).includes(cu.id);
+                return (
+                  <button key={cu.id} onClick={() => toggleIn("ngCustomerIds", cu.id)} style={{ background: on ? "#7a2222" : "#1c1c22", color: on ? "#fff" : "#888", border: `1px solid ${on ? "#a13b3b" : "#2a2a32"}` }} className="text-[10px] rounded-full px-2 py-0.5 font-bold">{on ? "🚫 " : ""}{cu.name}</button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <button onClick={() => setOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: GOLD }} className="w-full rounded-lg py-1.5 text-[11px] font-bold">{open ? "▲ 給料条件を閉じる" : "▼ 給料条件を編集"}</button>
       {open && (
         <div className="mt-3 pt-3 border-t border-[#22222a] space-y-2">
