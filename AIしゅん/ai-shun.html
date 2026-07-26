@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AIしゅん — 従業員相談デスク</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0807; --bg2:#12100e; --card:#17140f;
+    --gold:#d4af37; --gold2:#c9a961; --crimson:#dc143c;
+    --cream:#f5f3ee; --muted:#9a9287; --line:rgba(212,175,55,.16);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--cream);
+    font-family:'Noto Sans JP',-apple-system,BlinkMacSystemFont,sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  body::before{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root{position:relative;z-index:1}
+  .display{font-family:'Playfair Display',serif}
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--bg2));
+    border:1px solid var(--line); border-radius:16px;
+  }
+  .gold-line{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+  .crimson-line{height:1px;background:linear-gradient(90deg,var(--crimson),transparent)}
+  .input{
+    width:100%; background:rgba(0,0,0,.4); border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; color:var(--cream);
+    font-size:16px; font-family:inherit; line-height:1.7; outline:none;
+  }
+  .input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,175,55,.1)}
+  .input::placeholder{color:#6b645c}
+  .btn{
+    width:100%; padding:15px; border:none; border-radius:11px; cursor:pointer;
+    background:linear-gradient(135deg,var(--crimson),#a50f2d); color:var(--cream);
+    font-family:'Playfair Display',serif; font-size:17px; font-weight:700;
+    letter-spacing:.12em; display:flex; align-items:center; justify-content:center; gap:10px;
+    box-shadow:0 4px 24px rgba(220,20,60,.28); transition:transform .15s,box-shadow .15s;
+    min-height:52px;
+  }
+  .btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 30px rgba(220,20,60,.42)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-ghost{
+    background:transparent; border:1px solid var(--line); color:var(--gold);
+    box-shadow:none; font-size:14px; padding:11px 16px; min-height:44px; width:auto;
+  }
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:999px;
+    font-size:11px; font-weight:700; letter-spacing:.05em; white-space:nowrap;
+  }
+  .spin{
+    width:17px;height:17px;border:2px solid rgba(245,243,238,.3);
+    border-top-color:var(--cream);border-radius:50%;animation:sp .7s linear infinite;
+  }
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .fade{animation:fu .45s ease both}
+  @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  details>summary{cursor:pointer;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  textarea.input{resize:vertical}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:rgba(212,175,55,.22);border-radius:4px}
+  #boot{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;line-height:2}
+</style>
+</head>
+<body>
+<div id="root"><div id="boot">起動中…<br><span style="font-size:11px">10秒以上この表示が続く場合は通信環境を確認してください</span></div></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+/* ═══════════════ AIしゅん 人格コア ═══════════════ */
+const AISHUN_SYSTEM = `あなたは AIしゅん。FIRSTCLASS／FUCARS を経営する "しゅん（荒木俊介）" の思考・判断・温度を再現するAI。
+
+目的：
+従業員の相談を、しゅんの脳内で処理して、従業員の能力に合わせて翻訳して渡す。
+客とは絶対に直接話さない。従業員の裏方として動く。
+
+【鉄の掟】
+- 客に媚びない
+- 金額の確定約束はしない
+- データの捏造はしない
+- 従業員に"しゅん水準"を要求しない
+- 従業員の能力に合わせて翻訳する
+- 出力構造を絶対に崩さない
+
+【内部アルゴリズム（必ずこの順番で処理）】
+1. 入力解析：相談の種類／営業ステージ／温度／迷い／優先順位／行動粒度を抽出。
+2. 従業員ランク判定（①〜③）：語彙／構造化／状況把握／質問粒度／自走度／反応把握を高=2点／中=1点／低=0点で採点し、合計点でランク①〜③を決定。①=自走できる上位、②=手順があれば動ける中位、③=1つに絞らないと動けない下位。
+3. 客タイプ判定（9タイプ＋危険客2種）：見栄／安心／ステータス／こだわり／即決／相談／情報収集／感情／価格型 ＋ 値引き圧／他責クレーマー。
+4. 抽象化（7軸）：軸／優先順位／温度／迷い／価格態度／決断速度／感情揺れ → 一言で「問題の正体」を定義。
+5. 本質判断（しゅんの価値観）：情報を足すと迷う／軸がないと決められない／価値で選ばせる／見られ方は強い意思決定要因／価格型は切る／優先順位を整えれば迷いは消える／抽象→具体で整える／従業員の能力に合わせて翻訳する。
+6. 判断：客タイプ × ステージ × ランク で、しゅんならどう動くかを決定。
+7. 禁止水準チェック：DM／クレーム初動／納車後フォロー／企画案／判断選択肢／営業メッセージ → 該当すればテンプレを自動生成。
+8. 翻訳（ランク別）：ランク①=抽象で2〜3行／ランク②=3ステップ＋セリフ／ランク③=1アクション＋セリフ1つ。
+9. 出力テンプレ適用（しゅん化）：語彙・温度・構造を固定して最終出力。
+
+【出力テンプレ（絶対に崩さない）】
+【しゅんならこう見る】1行目=結論（断言）／2行目=理由（しゅんの視点）／3行目=危険ポイント（1つだけ）
+【あんたがやること】ランク①=抽象で2〜3行／ランク②=3ステップ＋セリフ／ランク③=1アクション＋セリフ1つ
+【やるな】1〜2行で断言。
+
+【語彙テンプレ（しゅんの声を固定）】
+「〜や」「〜で」「〜せん」「〜やろ」「〜だけや」「〜押せ」「〜拾え」「〜整えろ」「〜深追いすんな」
+
+【客タイプ翻訳ロジック】
+見栄＝見られ方／安心＝失敗しない理由／ステータス＝格／こだわり＝優先順位／即決＝情報減らす／相談＝2択／情報収集＝深追いしない／感情＝気持ち整理／価格型＝切る／値引き圧＝深追い禁止／他責＝初動だけ丁寧。
+
+【営業ステージ翻訳ロジック】
+初回接触／ニーズ探索／車種提案／価値説明／クロージング（迷い／予算／こだわり）／アフターフォロー。
+
+【禁止水準テンプレ】
+DM返信／クレーム初動／納車後フォロー／SNS企画案／イベント案／集客案／判断の選択肢提示／営業メッセージ。
+
+【最終ルール】
+出力は必ず「しゅんならこう見る → あんたがやること → やるな」の3段構成。
+内部アルゴリズムを必ず経由する。
+語彙・温度・構造を絶対に崩さない。
+
+出力はJSONのみ。コードフェンス・前置き一切なし。日本語。このキーのみ:
+{
+  "rank": "①/②/③ のいずれか1文字",
+  "rank_riyuu": "ランク判定の根拠を1行",
+  "kyaku_type": "客タイプ（該当なしなら空文字）",
+  "stage": "営業ステージ（該当なしなら空文字）",
+  "honshitsu": "問題の正体（一言で定義）",
+  "miru": { "ketsuron": "結論（断言）", "riyuu": "理由（しゅんの視点）", "kiken": "危険ポイント1つだけ" },
+  "yaru": ["ランク①=抽象2〜3行を配列 / ランク②=3ステップ / ランク③=1アクションのみ"],
+  "serifu": "そのまま口に出せるセリフ（ランク②③は必須、①は空文字可）",
+  "yaruna": "やるな。1〜2行で断言"
+}`;
+
+const MEM_KEY = 'aishun_memory', KEY_KEY = 'aishun_api_key';
+
+async function callClaude({ apiKey, system, user, maxTokens = 2000 }) {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    });
+    if (!res.ok) {
+      const b = await res.text();
+      throw new Error(`API ${res.status}: ${b.slice(0, 180)}`);
+    }
+    const d = await res.json();
+    const text = (d.content || []).map(c => c.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    try { return { ok: true, json: JSON.parse(clean) }; }
+    catch { return { ok: false, error: '応答の解析に失敗。もう一度押してくれ。', raw: text }; }
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) };
+  }
+}
+
+/* ═══════════════ API キー ═══════════════ */
+const KeyGate = ({ onSave }) => {
+  const [v, setV] = useState('');
+  return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px'}}>
+      <div className="card fade" style={{maxWidth:440,width:'100%',padding:'34px 26px'}}>
+        <div style={{textAlign:'center',marginBottom:22}}>
+          <div className="display" style={{fontSize:34,letterSpacing:'.02em'}}>AI<span style={{color:'var(--crimson)'}}>しゅん</span></div>
+          <div style={{fontSize:11,color:'var(--muted)',letterSpacing:'.28em',marginTop:6}}>EMPLOYEE DESK</div>
+        </div>
+        <div className="crimson-line" style={{marginBottom:22}}/>
+        <label style={{fontSize:12,color:'var(--muted)',display:'block',marginBottom:8}}>Anthropic API キー</label>
+        <input className="input" type="password" placeholder="sk-ant-..." value={v}
+          onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&v.trim())onSave(v.trim())}}/>
+        <button className="btn" style={{marginTop:16}} disabled={!v.trim()} onClick={()=>onSave(v.trim())}>入る</button>
+        <p style={{fontSize:11,color:'var(--muted)',marginTop:14,lineHeight:1.8}}>
+          キーは<span style={{color:'var(--gold)'}}>この端末のみ</span>に保存され、外部には送られへん。
+        </p>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════ 出力ブロック ═══════════════ */
+const Block = ({ title, accent, children }) => (
+  <div className="card fade" style={{padding:'20px 18px',borderColor:accent?'rgba(220,20,60,.32)':'var(--line)'}}>
+    <div className="display" style={{fontSize:19,color:accent?'#ff5c7a':'var(--gold)',marginBottom:12}}>{title}</div>
+    <div className={accent?'crimson-line':'gold-line'} style={{opacity:.5,marginBottom:14}}/>
+    {children}
+  </div>
+);
+
+const Line = ({ label, text, big }) => (
+  <div style={{marginBottom:13}}>
+    <div style={{fontSize:10,color:'var(--muted)',letterSpacing:'.2em',marginBottom:4}}>{label}</div>
+    <p style={{fontSize:big?17:15,lineHeight:1.85,fontWeight:big?700:400,whiteSpace:'pre-wrap'}}>{text}</p>
+  </div>
+);
+
+/* ═══════════════ 本体 ═══════════════ */
+const App = () => {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(KEY_KEY) || '');
+  const [soudan, setSoudan] = useState('');
+  const [rankOverride, setRankOverride] = useState('auto');
+  const [memory, setMemory] = useState(() => localStorage.getItem(MEM_KEY) || '');
+  const [memDraft, setMemDraft] = useState('');
+  const [memOpen, setMemOpen] = useState(false);
+  const [out, setOut] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const saveKey = k => { localStorage.setItem(KEY_KEY, k); setApiKey(k); };
+  const saveMem = () => {
+    if (!memDraft.trim()) return;
+    const next = (memory ? memory + '\n\n---\n\n' : '') + memDraft.trim();
+    localStorage.setItem(MEM_KEY, next); setMemory(next); setMemDraft('');
+  };
+  const clearMem = () => {
+    if (!confirm('覚えさせた分を全部消すで。ええか?')) return;
+    localStorage.removeItem(MEM_KEY); setMemory('');
+  };
+
+  const run = async () => {
+    if (!soudan.trim()) return;
+    setLoading(true); setErr(''); setOut(null);
+    let sys = AISHUN_SYSTEM;
+    if (memory) sys += `\n\n【しゅん本人が実際に語った言葉・判断（最優先で反映。一般論より必ずこっちを使う）】\n${memory.slice(-8000)}`;
+    if (rankOverride !== 'auto') sys += `\n\n【ランク指定】この従業員のランクは「${rankOverride}」で確定。ランク判定は飛ばして、このランクの翻訳形式で出力する。`;
+    const r = await callClaude({ apiKey, system: sys, user: `【従業員からの相談】\n${soudan.trim()}` });
+    if (r.ok) setOut(r.json); else setErr(r.error);
+    setLoading(false);
+  };
+
+  if (!apiKey) return <KeyGate onSave={saveKey}/>;
+
+  const rankColor = { '①':'#4ade80', '②':'var(--gold)', '③':'#ff9d5c' };
+
+  return (
+    <div style={{maxWidth:1180,margin:'0 auto',padding:'20px 16px 60px'}}>
+      {/* ヘッダー */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,gap:12}}>
+        <div>
+          <div className="display" style={{fontSize:30,lineHeight:1}}>AI<span style={{color:'var(--crimson)'}}>しゅん</span></div>
+          <div style={{fontSize:10,color:'var(--muted)',letterSpacing:'.24em',marginTop:5}}>FIRSTCLASS ／ FUCARS — 従業員相談デスク</div>
+        </div>
+        <button className="btn btn-ghost" onClick={()=>{localStorage.removeItem(KEY_KEY);setApiKey('')}}>キー変更</button>
+      </div>
+      <div className="crimson-line" style={{marginBottom:22}}/>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:18,alignItems:'start'}}>
+        {/* 左：入力 */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="card" style={{padding:'20px 18px'}}>
+            <div className="display" style={{fontSize:19,color:'var(--gold)',marginBottom:12}}>相談を投げる</div>
+            <div className="gold-line" style={{opacity:.5,marginBottom:16}}/>
+            <label style={{fontSize:11,color:'var(--muted)',display:'block',marginBottom:7}}>
+              従業員が困ってることを、そのまま書く
+            </label>
+            <textarea className="input" rows="7" value={soudan} onChange={e=>setSoudan(e.target.value)}
+              placeholder="例）ウルス見に来たお客さん、予算は出せそうなのに『もうちょっと考えます』で帰った。次どう連絡すればいいですか？"/>
+
+            <label style={{fontSize:11,color:'var(--muted)',display:'block',margin:'14px 0 7px'}}>
+              従業員のランク（自動判定でええ場合はそのまま）
+            </label>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {[['auto','自動判定'],['①','① 上位'],['②','② 中位'],['③','③ 下位']].map(([v,l])=>(
+                <button key={v} onClick={()=>setRankOverride(v)}
+                  style={{
+                    flex:'1 1 auto',padding:'10px 8px',borderRadius:9,cursor:'pointer',fontSize:13,
+                    fontFamily:'inherit',minHeight:44,
+                    border:`1px solid ${rankOverride===v?'var(--gold)':'var(--line)'}`,
+                    background:rankOverride===v?'rgba(212,175,55,.13)':'transparent',
+                    color:rankOverride===v?'var(--gold)':'var(--muted)',
+                    fontWeight:rankOverride===v?700:400,
+                  }}>{l}</button>
+              ))}
+            </div>
+
+            <button className="btn" style={{marginTop:18}} onClick={run} disabled={loading||!soudan.trim()}>
+              {loading ? <><span className="spin"/>しゅんが見とる…</> : 'しゅんに通す'}
+            </button>
+            {err && <div style={{marginTop:12,fontSize:12,color:'#ff5c7a',background:'rgba(220,20,60,.1)',border:'1px solid rgba(220,20,60,.3)',borderRadius:8,padding:10}}>{err}</div>}
+          </div>
+
+          {/* 記憶 */}
+          <div className="card" style={{padding:'18px'}}>
+            <div onClick={()=>setMemOpen(!memOpen)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',gap:10}}>
+              <div className="display" style={{fontSize:17,color:'var(--gold)'}}>しゅんの言葉を覚えさせる</div>
+              <span className="pill" style={{background:'rgba(212,175,55,.1)',color:'var(--gold)',border:'1px solid var(--line)'}}>
+                {memory ? `${memory.length}字` : '未登録'}
+              </span>
+            </div>
+            {memOpen && (
+              <div style={{marginTop:14}}>
+                <p style={{fontSize:11,color:'var(--muted)',lineHeight:1.8,marginBottom:10}}>
+                  しゅん本人の実際の判断・言い回し・過去の事例をここに貼っとくと、<span style={{color:'var(--gold)'}}>以後の回答全部に効く</span>。この端末だけに残る。
+                </p>
+                <textarea className="input" rows="4" value={memDraft} onChange={e=>setMemDraft(e.target.value)}
+                  placeholder="例）値引き聞いてくる客は深追いせん。『この値段で買える理由』だけ置いて引く。追いかけたら価値が下がるだけや。"/>
+                <div style={{display:'flex',gap:8,marginTop:10}}>
+                  <button className="btn" style={{flex:1,fontSize:14,padding:'11px',minHeight:44}} onClick={saveMem} disabled={!memDraft.trim()}>覚えさせる</button>
+                  {memory && <button className="btn btn-ghost" style={{color:'var(--crimson)',borderColor:'rgba(220,20,60,.35)'}} onClick={clearMem}>全消去</button>}
+                </div>
+                {memory && (
+                  <details style={{marginTop:12}}>
+                    <summary style={{fontSize:11,color:'var(--gold)'}}>覚えてる内容を見る</summary>
+                    <pre style={{marginTop:8,fontSize:11,color:'var(--muted)',whiteSpace:'pre-wrap',maxHeight:200,overflowY:'auto',background:'rgba(0,0,0,.35)',borderRadius:8,padding:12,fontFamily:'inherit',lineHeight:1.8}}>{memory}</pre>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 右：出力 */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {!out && !loading && (
+            <div className="card" style={{padding:'60px 24px',textAlign:'center'}}>
+              <div className="display" style={{fontSize:22,color:'var(--muted)',fontStyle:'italic'}}>持ってこい。</div>
+              <p style={{fontSize:13,color:'var(--muted)',marginTop:10,lineHeight:1.9}}>
+                悩んどる時間が一番もったいない。<br/>左に書いて、しゅんに通せ。
+              </p>
+            </div>
+          )}
+
+          {loading && (
+            <div className="card" style={{padding:'28px 20px'}}>
+              {[85,60,92,70].map((w,i)=>(
+                <div key={i} style={{height:12,width:w+'%',background:'rgba(212,175,55,.1)',borderRadius:6,marginBottom:12,animation:'sp 1.4s ease-in-out infinite alternate'}}/>
+              ))}
+            </div>
+          )}
+
+          {out && (
+            <React.Fragment>
+              {/* 判定バッジ */}
+              <div className="card fade" style={{padding:'16px 18px'}}>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                  <span className="pill" style={{background:'rgba(255,255,255,.05)',color:rankColor[out.rank]||'var(--gold)',border:'1px solid var(--line)'}}>
+                    従業員ランク {out.rank}
+                  </span>
+                  {out.kyaku_type && <span className="pill" style={{background:'rgba(220,20,60,.12)',color:'#ff8fa3',border:'1px solid rgba(220,20,60,.3)'}}>客: {out.kyaku_type}</span>}
+                  {out.stage && <span className="pill" style={{background:'rgba(212,175,55,.1)',color:'var(--gold)',border:'1px solid var(--line)'}}>{out.stage}</span>}
+                </div>
+                {out.rank_riyuu && <p style={{fontSize:11,color:'var(--muted)',lineHeight:1.7,marginBottom:10}}>{out.rank_riyuu}</p>}
+                {out.honshitsu && (
+                  <div style={{background:'rgba(0,0,0,.3)',borderRadius:9,padding:'12px 14px',borderLeft:'3px solid var(--gold)'}}>
+                    <div style={{fontSize:10,color:'var(--muted)',letterSpacing:'.2em',marginBottom:4}}>問題の正体</div>
+                    <p style={{fontSize:15,fontWeight:700,lineHeight:1.7}}>{out.honshitsu}</p>
+                  </div>
+                )}
+              </div>
+
+              <Block title="しゅんならこう見る">
+                <Line label="結論" text={out.miru?.ketsuron} big/>
+                <Line label="理由" text={out.miru?.riyuu}/>
+                <Line label="危険ポイント" text={out.miru?.kiken}/>
+              </Block>
+
+              <Block title="あんたがやること">
+                {(out.yaru||[]).map((t,i)=>(
+                  <div key={i} style={{display:'flex',gap:12,marginBottom:12,alignItems:'flex-start'}}>
+                    {(out.yaru||[]).length > 1 && (
+                      <span style={{
+                        flexShrink:0,width:24,height:24,borderRadius:'50%',background:'rgba(212,175,55,.14)',
+                        color:'var(--gold)',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',
+                        justifyContent:'center',marginTop:2,
+                      }}>{i+1}</span>
+                    )}
+                    <p style={{fontSize:15,lineHeight:1.85,flex:1,whiteSpace:'pre-wrap'}}>{t}</p>
+                  </div>
+                ))}
+                {out.serifu && (
+                  <div style={{marginTop:16,background:'rgba(212,175,55,.07)',border:'1px solid var(--line)',borderRadius:10,padding:'14px 16px'}}>
+                    <div style={{fontSize:10,color:'var(--gold)',letterSpacing:'.2em',marginBottom:7}}>そのまま使うセリフ</div>
+                    <p style={{fontSize:15,lineHeight:1.9,fontStyle:'italic'}}>「{out.serifu}」</p>
+                  </div>
+                )}
+              </Block>
+
+              <Block title="やるな" accent>
+                <p style={{fontSize:16,lineHeight:1.85,fontWeight:700,whiteSpace:'pre-wrap'}}>{out.yaruna}</p>
+              </Block>
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+try {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+} catch (e) {
+  document.getElementById('root').innerHTML =
+    '<div id="boot">起動に失敗しました<br><span style="font-size:11px;color:#ff5c7a">' + (e.message||e) + '</span></div>';
+}
+</script>
+</body>
+</html>
