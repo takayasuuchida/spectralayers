@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.1.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.2.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -64,7 +64,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -412,6 +412,8 @@ export default function App() {
     const subtotal = activeSubtotal + closedSubtotal;
     const tax = Math.floor(subtotal * taxRate);
     const grand = subtotal + tax;
+    const cardFee = closed.reduce((s2, r) => s2 + (r.fee || 0), 0)
+      + activeRows.reduce((s2, t) => s2 + tableCardFee(t), 0);
     const tableCount = closed.length;
     const activeCount = activeRows.length;
     if (subtotal > 0 || tableCount > 0) {
@@ -425,7 +427,7 @@ export default function App() {
       });
       const entry = {
         businessDate: businessDateOfNow(),
-        subtotal, tax, grand, tableCount, activeCount, byTable,
+        subtotal, tax, grand, cardFee, tableCount, activeCount, byTable,
         timestamp: Date.now(),
       };
       setHistory(h => [entry, ...h].slice(0, 365));
@@ -545,6 +547,11 @@ export default function App() {
   const taxRate = (settings.taxRate ?? 10) / 100;
   const tableTax = (t) => Math.floor(tableTotal(t) * taxRate);
   const tableGrand = (t) => tableTotal(t) + tableTax(t);
+  // カード払いの手数料。税込合計に対して設定の%（既定10%）を上乗せする。
+  const cardFeePct = settings.cardFeePct ?? 10;
+  const tableCardFee = (t) => (t?.payMethod === "card" ? Math.floor(tableGrand(t) * cardFeePct / 100) : 0);
+  const tablePayable = (t) => tableGrand(t) + tableCardFee(t); // 実際にお客様からいただく額
+  const setPayMethod = (tableId, m) => upd(tableId, t => ({ ...t, payMethod: m }));
 
   // ---- 付け回しロジック（公平ドラフト方式） ----
   // 客がこれまで受けた「質」= 付いたキャスト（現在含む）の最高ランク。
@@ -1241,7 +1248,7 @@ export default function App() {
   };
   function openTable(tableId) {
     // setStart: null = 準備中。「▶ セット開始」ボタンでタイマー開始
-    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: null, customers: [], casts: [], seats: [], orders: [] } }));
+    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", customers: [], casts: [], seats: [], orders: [] } }));
     logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
   }
   function startTable(tableId) {
@@ -1255,10 +1262,12 @@ export default function App() {
     const tRef = tables.find(x => x.id === tableId);
     const label = tRef ? dispTable(tRef).label : tableId;
     const grand = total + Math.floor(total * taxRate);
-    setClosed(c => [...c, { label, total, n: t.customers.length }]);
+    const fee = tableCardFee(t);                 // カード手数料（現金なら0）
+    const payable = grand + fee;                 // 実際にいただいた額
+    setClosed(c => [...c, { label, total, n: t.customers.length, fee, payMethod: t.payMethod || "cash" }]);
     // LTV: 客名帳連携済みのお客様に税込頭割り額を累積 + 来店履歴
     if (t.customers.length > 0) {
-      const share = Math.round(grand / t.customers.length);
+      const share = Math.round(payable / t.customers.length);
       const bookIds = new Set(t.customers.filter(c => c.customerBookId).map(c => c.customerBookId));
       if (bookIds.size > 0) {
         const bd = businessDateOfNow();
@@ -1278,12 +1287,13 @@ export default function App() {
           cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
           productId: o.productId || null,
         })),
+        ...(fee > 0 ? [{ businessDate: bd, hour, label: "カード手数料", price: fee, qty: 1, cost: 0, productId: null }] : []),
       ];
       if (entries.length) setSalesLog(sl => [...entries, ...sl].slice(0, 3000));
     }
     setTs(s => { const n = { ...s }; delete n[tableId]; return n; });
     setSel(null);
-    logAudit("会計", `${label} ${yen(grand)}（税込・${t.customers.length}名)`);
+    logAudit("会計", `${label} ${yen(payable)}（${t.payMethod === "card" ? `カード・手数料${yen(fee)}込` : "現金"}・${t.customers.length}名)`);
   }
   function toggleMerge(g) {
     if ((mergeGroups[g] || []).some(id => ts[id]?.active)) { setModal({ type: "ng", msg: "結合する卓に客がいる間は変更できません。会計後にどうぞ。" }); return; }
@@ -1324,7 +1334,7 @@ export default function App() {
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length, minusInfo }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
-      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
+      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, tableCardFee, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, customerBook, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />}
 
@@ -1334,6 +1344,7 @@ export default function App() {
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
+          tableCardFee, tablePayable, setPayMethod, cardFeePct,
           recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
@@ -1660,7 +1671,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct } = p;
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
@@ -1891,9 +1902,27 @@ function Detail(p) {
             <div className="border-t border-[#2a2a32] pt-2 space-y-1">
               <div className="flex justify-between text-xs text-zinc-400"><span>小計</span><span>{yen(tableTotal(t))}</span></div>
               <div className="flex justify-between text-xs text-zinc-500"><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-sm text-zinc-300 font-bold">合計（税込）</span>
-                <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tableGrand(t))}</span>
+              <div className="flex justify-between text-xs text-zinc-400"><span>税込</span><span>{yen(tableGrand(t))}</span></div>
+
+              {/* 支払い方法。カードは手数料を上乗せ */}
+              <div className="flex items-center gap-1.5 pt-2">
+                <span className="text-[10px] text-zinc-500 w-14">お支払い</span>
+                <button onClick={() => setPayMethod(tableId, "cash")}
+                  style={{ background: (t.payMethod || "cash") === "cash" ? GOLD : "#1c1c22", color: (t.payMethod || "cash") === "cash" ? "#000" : "#888" }}
+                  className="flex-1 rounded-lg py-1.5 text-xs font-bold">💴 現金</button>
+                <button onClick={() => setPayMethod(tableId, "card")}
+                  style={{ background: t.payMethod === "card" ? GOLD : "#1c1c22", color: t.payMethod === "card" ? "#000" : "#888" }}
+                  className="flex-1 rounded-lg py-1.5 text-xs font-bold">💳 カード（+{cardFeePct}%）</button>
+              </div>
+
+              {tableCardFee(t) > 0 && (
+                <div className="flex justify-between text-xs" style={{ color: "#e0a84a" }}>
+                  <span>カード手数料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1 border-t border-[#2a2a32] mt-1">
+                <span className="text-sm text-zinc-300 font-bold">{t.payMethod === "card" ? "カードご請求額" : "お会計（税込）"}</span>
+                <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tablePayable(t))}</span>
               </div>
             </div>
             <button onClick={() => setReceiptOpen(true)} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
@@ -1916,6 +1945,7 @@ function Detail(p) {
         <ReceiptModal
           t={t} label={disp.label} storeName={storeName} castById={castById}
           tableTotal={tableTotal} tableTax={tableTax} tableGrand={tableGrand} taxRate={taxRate}
+          tableCardFee={tableCardFee} tablePayable={tablePayable} cardFeePct={cardFeePct}
           onClose={() => setReceiptOpen(false)}
         />
       )}
@@ -2122,7 +2152,7 @@ function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById,
 }
 
 // 伝票印刷（サーマルレシート幅）。感熱紙 58mm / 80mm を切り替え可能。
-function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tableGrand, taxRate, onClose }) {
+function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tableGrand, taxRate, tableCardFee, tablePayable, cardFeePct, onClose }) {
   const [w, setW] = useState(58);
   const now = new Date();
   const stamp = now.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -2181,8 +2211,14 @@ function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tab
           <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
           <div style={line}><span>小計</span><span>{yen(tableTotal(t))}</span></div>
           <div style={line}><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
+          {tableCardFee(t) > 0 && (
+            <div style={line}><span>カード手数料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span></div>
+          )}
           <div style={{ ...line, fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", marginTop: "1mm", borderTop: "2px solid #000", paddingTop: "1mm" }}>
-            <span>合計</span><span>{yen(tableGrand(t))}</span>
+            <span>合計</span><span>{yen(tablePayable(t))}</span>
+          </div>
+          <div style={{ ...line, fontSize: "8pt" }}>
+            <span>お支払い</span><span>{t.payMethod === "card" ? "クレジットカード" : "現金"}</span>
           </div>
           {castNames.length > 0 && (
             <>
@@ -2801,7 +2837,7 @@ function SalaryLine({ l, v, cut }) {
   );
 }
 
-function Sales({ ts, dispTable, tables, tableTotal, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
+function Sales({ ts, dispTable, tables, tableTotal, tableCardFee, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
   const [tab, setTab] = useState("today");
   const TabBtn = ({ k, children }) => (
     <button onClick={() => setTab(k)} style={{ background: tab === k ? GOLD : "#141418", color: tab === k ? "#000" : "#888", border: `1px solid ${tab === k ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">{children}</button>
@@ -2813,7 +2849,7 @@ function Sales({ ts, dispTable, tables, tableTotal, closed, target, taxRate, his
         <TabBtn k="history"><CalendarDays size={13} />履歴</TabBtn>
         <TabBtn k="bi">📊 分析</TabBtn>
       </div>
-      {tab === "today" && <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} closed={closed} target={target} taxRate={taxRate} />}
+      {tab === "today" && <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} tableCardFee={tableCardFee} closed={closed} target={target} taxRate={taxRate} />}
       {tab === "history" && <SalesHistory history={history} />}
       {tab === "bi" && <AnalyticsView {...{ history, salesLog, salaryHistory, customerBook }} />}
     </div>
@@ -2981,14 +3017,14 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
+        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,カード手数料,お預り合計,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.cardFee || 0, h.grand + (h.cardFee || 0), h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
         <button onClick={() => csvDownload(`顧客_${businessDateOfNow()}.csv`, "名前,来店回数,累計利用額,最終来店", (customerBook || []).map(c => [c.name, c.visits || 0, c.totalSpent || 0, c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : ""].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 顧客CSV</button>
       </div>
     </div>
   );
 }
 
-function SalesToday({ ts, dispTable, tables, tableTotal, closed, target, taxRate }) {
+function SalesToday({ ts, dispTable, tables, tableTotal, tableCardFee, closed, target, taxRate }) {
   const rows = [
     ...Object.entries(ts).filter(([, t]) => t?.active).map(([id, t]) => {
       const ref = tables.find(x => x.id === id);
@@ -2999,12 +3035,19 @@ function SalesToday({ ts, dispTable, tables, tableTotal, closed, target, taxRate
   const total = rows.reduce((s, r) => s + r.total, 0);
   const totalTax = Math.floor(total * (taxRate ?? 10) / 100);
   const grand = total + totalTax;
+  // カード手数料（会計済み分＋接客中の卓でカードを選んでいる分）
+  const cardFee = closed.reduce((s, r) => s + (r.fee || 0), 0)
+    + Object.values(ts).filter(t => t?.active).reduce((s, t) => s + (tableCardFee ? tableCardFee(t) : 0), 0);
   const pct = target > 0 ? Math.min(100, Math.round(total / target * 100)) : 0;
   return (
     <>
       <p className="text-xs text-zinc-500 mb-1">本日の売上 ・ {new Date().toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" })}</p>
       <div style={{ background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }} className="text-5xl font-bold">{yen(total)}</div>
-      <p className="text-xs text-zinc-500 mb-4">税込 {yen(grand)}（内税 {yen(totalTax)}）</p>
+      <p className="text-xs text-zinc-500 mb-1">税込 {yen(grand)}（内税 {yen(totalTax)}）</p>
+      {cardFee > 0 && (
+        <p className="text-xs mb-4" style={{ color: "#e0a84a" }}>💳 カード手数料 {yen(cardFee)} ・ お預り合計 {yen(grand + cardFee)}</p>
+      )}
+      {cardFee === 0 && <div className="mb-4" />}
       <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">目標 {yen(target)}</span><span style={{ color: GOLD }} className="font-bold">{pct}%</span></div>
       <div style={{ background: "#1c1c22" }} className="h-2 rounded-full overflow-hidden mb-6">
         <div style={{ width: pct + "%", background: "linear-gradient(90deg,#f3e2a0,#c9a64e)" }} className="h-full" />
@@ -3630,6 +3673,17 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <input type="number" value={settings.target} onChange={e => setSettings(s => ({ ...s, target: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">円</span>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">消費税</span>
+            <input type="number" value={settings.taxRate ?? 10} onChange={e => setSettings(s => ({ ...s, taxRate: Math.max(0, +e.target.value || 0) }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <span className="text-xs text-zinc-500">%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">カード<br />手数料</span>
+            <input type="number" value={settings.cardFeePct ?? 10} onChange={e => setSettings(s => ({ ...s, cardFeePct: Math.max(0, +e.target.value || 0) }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <span className="text-xs text-zinc-500">%</span>
+          </div>
+          <p className="text-[10px] text-zinc-600">カード払いを選ぶと、税込合計にこの%を上乗せしてご請求します。</p>
         </div>
       </div>
 
