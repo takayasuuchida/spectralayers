@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.0.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.1.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -756,9 +756,40 @@ export default function App() {
       }
     });
 
-    // 1-d) 予備キャスト0 → 突然の団体客に対応できない（教科書の失敗例）
-    if (available.length === 0 && casts.some(c => c.status === "出勤")) {
-      out.push({ icon: "🈵", level: "warn", title: "予備キャスト0名", detail: "急な団体・新規のご来店に対応できません。どこかの卓から1名回せないか確認を（お客様を長く待たせるのが最悪の失敗）" });
+    // 1-d) マイナス営業 → 他卓から交代時間の近い子を回す
+    {
+      let need = 0;
+      const shorts = [];
+      Object.entries(ts).forEach(([tid, t]) => {
+        if (!t?.active) return;
+        const assigned = new Set(t.casts.map(a => a.customerId));
+        const n = t.customers.filter(c => !assigned.has(c.id)).length;
+        if (n > 0) shorts.push(`${tables.find(x => x.id === tid)?.label || tid}(待ち${n}名)`);
+        need += n;
+      });
+      if (need > available.length) {
+        // 抜きやすい子＝交代までの残りが少ない子を先に提示
+        const soon = [];
+        Object.entries(ts).forEach(([tid, t]) => {
+          if (!t?.active || !t.setStart) return;
+          t.casts.forEach(a => {
+            const at = a.at ?? t.setStart;
+            const n = Math.max(0, (served[a.customerId] || []).indexOf(a.castId));
+            const end = Math.max((t.setStart || at) + rotWindowEndMin(t.setDuration, n) * 60000, at + 10 * 60000);
+            if (nowMs - at >= 10 * 60000) soon.push({ name: castById[a.castId]?.name, remain: end - nowMs, label: tables.find(x => x.id === tid)?.label || tid });
+          });
+        });
+        soon.sort((a, b) => a.remain - b.remain);
+        out.push({
+          icon: "🈵", level: "act",
+          title: `マイナス営業 — 女の子待ち${need}名 / 空き${available.length}名`,
+          detail: [shorts.join("・"),
+          soon.length ? `回せる候補: ${soon.slice(0, 3).map(s => `${s.name}(${s.label}・交代まで${Math.max(0, Math.ceil(s.remain / 60000))}分)`).join("・")}` : "他卓もまだ交代時間に達していません",
+            "卓を開いて「🆘 他卓から応援を呼ぶ」"].filter(Boolean).join(" / "),
+        });
+      } else if (available.length === 0 && casts.some(c => c.status === "出勤")) {
+        out.push({ icon: "🈵", level: "warn", title: "予備キャスト0名", detail: "急な団体・新規のご来店に対応できません。どこかの卓から1名回せないか確認を（お客様を長く待たせるのが最悪の失敗）" });
+      }
     }
 
     // 2) 異常検知: 今日のドリンク単価 vs 平常
@@ -969,6 +1000,76 @@ export default function App() {
     doAssign(tableId, castId, customerId); setPick(null);
   }
 
+  // ---- マイナス営業のリカバリー（他卓からの応援リコール） ----
+  // 先に4名様、その後3名・3名と来て空きが尽きる＝マイナス営業。
+  // 実際の営業では「今いる子を外して人数合わせ」は無理なので、
+  // 他卓で回転の残り時間が少ない子（＝どのみち交代が近い子）を早めに抜いて新しい卓へ回す。
+  // 付けたばかりの子は候補の最後に回し、警告を出す。
+  const MIN_STAY_MS = 10 * 60000;
+
+  // その子が今の卓であと何ms担当予定か（教科書の時間配分に基づく）
+  function rotEndOf(t, a) {
+    const at = a.at ?? t.setStart;
+    const n = Math.max(0, (served[a.customerId] || []).indexOf(a.castId));
+    const schedEnd = (t.setStart || at) + rotWindowEndMin(t.setDuration, n) * 60000;
+    return Math.max(schedEnd, at + MIN_STAY_MS);
+  }
+
+  function recallCandidates(excludeTableId, forCust) {
+    const now = Date.now();
+    const out = [];
+    Object.entries(ts).forEach(([tid, t]) => {
+      if (!t?.active || tid === excludeTableId || !t.setStart) return;
+      t.casts.forEach(a => {
+        const cast = castById[a.castId];
+        if (!cast) return;
+        // 同じお客様への重複・本人NGは応援でも不可
+        if (forCust && ((served[forCust.id] || []).includes(a.castId) || isNgPair(cast, forCust))) return;
+        const at = a.at ?? t.setStart;
+        out.push({
+          castId: a.castId, name: cast.name, style: cast.style, rank: cast.rank,
+          fromTableId: tid,
+          fromLabel: tables.find(x => x.id === tid)?.label || tid,
+          fromCustName: t.customers.find(c => c.id === a.customerId)?.name || "",
+          rotRemainMs: rotEndOf(t, a) - now,           // 交代までの残り
+          tableRemainMs: t.setStart + t.setDuration * 60000 - now, // その卓の残り時間
+          satMs: now - at,                              // 着席してからの経過
+          fresh: now - at < MIN_STAY_MS,                // 付けたばかり＝抜くべきでない
+          lastOne: t.casts.length <= 1,                 // 抜くとその卓が女の子ゼロ
+          // 高額ドリンクを入れた直後に移動させない（教科書の失敗例）
+          bigDrink: (t.orders || []).some(o => o.castId === a.castId && (o.price || 0) >= 3000 && now - (o.at || 0) < 20 * 60000),
+        });
+      });
+    });
+    // 付けたばかりを後ろへ。それ以外は「交代までの残りが少ない順」＝抜きやすい順
+    return out.sort((a, b) =>
+      (a.fresh ? 1 : 0) - (b.fresh ? 1 : 0) ||
+      (a.lastOne ? 1 : 0) - (b.lastOne ? 1 : 0) ||
+      a.rotRemainMs - b.rotRemainMs);
+  }
+
+  // 応援を実行: 元の卓から外して新しい卓のお客様へ付ける
+  function recallTo(toTableId, cand, customerId) {
+    removeCast(cand.fromTableId, cand.castId);
+    doAssign(toTableId, cand.castId, customerId);
+    const toLabel = tables.find(x => x.id === toTableId)?.label || toTableId;
+    logAudit("応援リコール", `${cand.name}: ${cand.fromLabel} → ${toLabel}`);
+  }
+
+  // マイナス営業の判定: 全卓で女の子待ちの客数 > 空きキャスト
+  const minusInfo = useMemo(() => {
+    let need = 0;
+    const shortTables = [];
+    Object.entries(ts).forEach(([tid, t]) => {
+      if (!t?.active) return;
+      const assigned = new Set(t.casts.map(a => a.customerId));
+      const n = t.customers.filter(c => !assigned.has(c.id)).length;
+      if (n > 0) shortTables.push({ tid, label: tables.find(x => x.id === tid)?.label || tid, n });
+      need += n;
+    });
+    return { need, avail: available.length, isMinus: need > available.length, shortTables };
+  }, [ts, available, tables]);
+
   // プラス付け: お客様の人数より多くキャストを付ける（暇な時間帯・新規・太客へのおもてなし）
   function plusAssign(tableId) {
     const t = ts[tableId];
@@ -1116,7 +1217,7 @@ export default function App() {
     setProducts(ps => ps.map(p => p.id === productId ? { ...p, stock: Math.max(0, (p.stock || 0) + delta) } : p));
   };
   const addOrder = (tableId, o) => {
-    upd(tableId, t => ({ ...t, orders: [...t.orders, { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1 }] }));
+    upd(tableId, t => ({ ...t, orders: [...t.orders, { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1, at: Date.now() }] }));
     bumpStock(o.productId, -1); // リアルタイム在庫減算
     // カウンター自動加算（castId が付いていれば）
     if (o.castId) {
@@ -1220,7 +1321,7 @@ export default function App() {
         </div>
       </div>
 
-      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length }} />}
+      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length, minusInfo }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
@@ -1233,6 +1334,7 @@ export default function App() {
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
+          recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
           nextPlan: ts[sel]?.active
@@ -1474,7 +1576,7 @@ function AdvisorPanel({ advices }) {
   );
 }
 
-function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount }) {
+function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount, minusInfo }) {
   const groupEntries = Object.entries(mergeGroups || {});
   // 全卓の「まだ女の子が付いていない客」の総数。空きキャストが足りない＝バランス配分の出番
   const totalNeed = Object.values(ts).reduce((s, t) => {
@@ -1498,6 +1600,24 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
           {bdTomorrow.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
           {resToday.length > 0 && <div><span style={{ color: TEAL }} className="font-bold">📅 本日予約:</span> {resToday.map(r => `${r.time || ""} ${custName(r.customerBookId)}`).join("・")}</div>}
           {lowStock.length > 0 && <div><span style={{ color: "#e08484" }} className="font-bold">📦 在庫少:</span> {lowStock.map(p => `${p.name}(残${p.stock || 0})`).join("・")}</div>}
+        </div>
+      )}
+      {minusInfo?.isMinus && (
+        <div style={{ background: "rgba(224,85,85,.1)", border: "1px solid #a15050" }} className="rounded-xl p-3 mb-3">
+          <div style={{ color: "#ff9a9a" }} className="text-[12px] font-bold mb-1">
+            🈵 マイナス営業 — 女の子待ち {minusInfo.need}名 / 空き {minusInfo.avail}名
+          </div>
+          <p className="text-[10px] text-zinc-400 mb-2 leading-relaxed">
+            今いる子を外して人数合わせはしません。卓を開いて「🆘 他卓から応援を呼ぶ」で、
+            交代時間が近い子を早めに回してください。
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {minusInfo.shortTables.map(s => (
+              <button key={s.tid} onClick={() => setSel(s.tid)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold">
+                {s.label} 待ち{s.n}名 ▶
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {totalNeed > 0 && activeTableCount >= 1 && (
@@ -1540,7 +1660,9 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName } = p;
+  const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
+  const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
   const [bookPickOpen, setBookPickOpen] = useState(false);
   // この卓のお客様たちのお気に入りキャストID（客名帳から）→ ドリンクピッカーで先頭表示
@@ -1620,6 +1742,26 @@ function Detail(p) {
               {t.seats.length === 0 && <span className="text-xs text-zinc-600 py-3">まだ誰もいません</span>}
             </div>
           </Section>
+
+          {/* マイナス営業: 空きが尽きている時は他卓から応援を呼ぶ（今いる子を外して人数合わせはしない） */}
+          {(() => {
+            const assigned = new Set(t.casts.map(a => a.customerId));
+            const waiting = t.customers.filter(c => !assigned.has(c.id));
+            if (!waiting.length) return null;
+            return (
+              <div style={{ background: availCount > 0 ? "#141418" : "rgba(224,85,85,.08)", border: `1px solid ${availCount > 0 ? "#22222a" : "#a15050"}` }} className="rounded-xl p-3">
+                <div className="text-[11px] font-bold mb-1" style={{ color: availCount > 0 ? "#e0a84a" : "#ff9a9a" }}>
+                  {availCount > 0 ? `女の子待ちのお客様 ${waiting.length}名（空き${availCount}名）` : `🈵 マイナス営業 — 女の子待ち ${waiting.length}名・空きキャスト0名`}
+                </div>
+                <p className="text-[10px] text-zinc-400 mb-2 leading-relaxed">
+                  {availCount > 0 ? "「卓を自動付け回し」で配置できます。" : "他の卓から、交代時間が近い子を早めに抜いて回します。付けたばかりの子は候補の最後に並びます。"}
+                </p>
+                <button onClick={() => setRecallOpen(true)} style={{ background: "#7a2222", color: "#fff" }} className="w-full rounded-lg py-2.5 text-sm font-bold">
+                  🆘 他卓から応援を呼ぶ
+                </button>
+              </div>
+            );
+          })()}
 
           {t.setStart && <RotationPlan t={t} plusAssign={() => plusAssign(tableId)} availCount={availCount} castById={castById} reactions={reactions} tryAssign={(castId, custId) => tryAssign(tableId, castId, custId)} />}
 
@@ -1754,8 +1896,28 @@ function Detail(p) {
                 <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tableGrand(t))}</span>
               </div>
             </div>
+            <button onClick={() => setReceiptOpen(true)} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
+              🧾 伝票を印刷する
+            </button>
           </div>
         </div>
+      )}
+
+      {recallOpen && (
+        <RecallPicker
+          t={t} tableId={tableId} label={disp.label}
+          recallCandidates={recallCandidates} recallTo={recallTo}
+          castById={castById} served={served}
+          onClose={() => setRecallOpen(false)}
+        />
+      )}
+
+      {receiptOpen && (
+        <ReceiptModal
+          t={t} label={disp.label} storeName={storeName} castById={castById}
+          tableTotal={tableTotal} tableTax={tableTax} tableGrand={tableGrand} taxRate={taxRate}
+          onClose={() => setReceiptOpen(false)}
+        />
       )}
 
       {drinkPick && (
@@ -1879,6 +2041,167 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
 
 // 「今 ○○」チップ + 回転残り時間。1回転 = セット時間÷3。
 // 残り3分で黄色、超過で赤「交代!」
+// 他卓からの応援リコール（マイナス営業のリカバリー）
+// 交代時間が近い子＝どのみち抜ける子から順に並べる。付けたばかりの子は最後＋警告。
+function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById, served, onClose }) {
+  useNow(true); // 残り時間を毎秒更新
+  const [warn, setWarn] = useState(null); // 確認待ちの候補
+  const assigned = new Set(t.casts.map(a => a.customerId));
+  // 付ける相手＝まだ女の子が付いていない客のうち、これまでの「質」がいちばん低い人（公平ドラフトと同じ考え方）
+  const waiting = t.customers.filter(c => !assigned.has(c.id));
+  const qual = (c) => Math.max(0, ...((served[c.id] || []).map(id => castById[id]?.score || 0)));
+  const target = [...waiting].sort((a, b) => qual(a) - qual(b) || (b.isBoss ? 1 : 0) - (a.isBoss ? 1 : 0))[0];
+  const cands = target ? recallCandidates(tableId, target) : [];
+  const mins = (ms) => Math.max(0, Math.ceil(ms / 60000));
+
+  function go(c) {
+    if ((c.fresh || c.lastOne || c.bigDrink) && warn !== c.castId) { setWarn(c.castId); return; }
+    recallTo(tableId, c, target.id);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-t-2xl p-4 w-full max-w-md max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-bold">🆘 {label} へ応援を呼ぶ</h3>
+          <button onClick={onClose}><X size={18} color="#888" /></button>
+        </div>
+        {!target ? (
+          <p className="text-xs text-zinc-500 py-6 text-center">この卓は全員に女の子が付いています。</p>
+        ) : (
+          <>
+            <p className="text-[11px] text-zinc-400 mb-3">
+              <span style={{ color: GOLD }} className="font-bold">{target.name}さん</span> に付けます。
+              交代時間が近い子（＝どのみち抜ける子）から順に並んでいます。
+            </p>
+            {cands.length === 0 ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">他の卓にも回せる子がいません。</p>
+            ) : (
+              <div className="space-y-2">
+                {cands.map(c => {
+                  const risky = c.fresh || c.lastOne || c.bigDrink;
+                  const confirming = warn === c.castId;
+                  return (
+                    <button key={c.castId} onClick={() => go(c)}
+                      style={{
+                        background: confirming ? "#7a2222" : risky ? "#161013" : "#0d0d10",
+                        border: `1px solid ${confirming ? "#a13b3b" : risky ? "#5a4422" : TEAL}`,
+                      }} className="w-full rounded-xl p-3 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm">{c.name}
+                          <span style={{ color: STYLE_COLOR[c.style] }} className="text-[10px] ml-1.5">{c.style}</span>
+                          <span style={{ color: RANK_COLOR[c.rank] }} className="text-[10px] ml-1">{c.rank}</span>
+                        </span>
+                        <span style={{ color: c.rotRemainMs <= 0 ? "#ff6a6a" : c.rotRemainMs <= 5 * 60000 ? "#e0a84a" : "#8a8a92" }} className="text-[11px] font-bold">
+                          {c.rotRemainMs <= 0 ? "交代時間 超過" : `交代まで ${mins(c.rotRemainMs)}分`}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">
+                        {c.fromLabel} の {c.fromCustName}さんに着席中 ・ 着席 {mins(c.satMs)}分 ・ 卓の残り {mins(c.tableRemainMs)}分
+                      </div>
+                      {risky && (
+                        <div style={{ color: confirming ? "#fff" : "#e0a84a" }} className="text-[10px] font-bold mt-1">
+                          {confirming ? "⚠ もう一度タップで確定" : [
+                            c.fresh ? "付けたばかり" : null,
+                            c.lastOne ? "抜くとその卓が女の子ゼロ" : null,
+                            c.bigDrink ? "高額ドリンクを入れた直後" : null,
+                          ].filter(Boolean).join(" / ")}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 伝票印刷（サーマルレシート幅）。感熱紙 58mm / 80mm を切り替え可能。
+function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tableGrand, taxRate, onClose }) {
+  const [w, setW] = useState(58);
+  const now = new Date();
+  const stamp = now.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const castNames = [...new Set(t.casts.map(a => castById[a.castId]?.name).filter(Boolean))];
+  const line = { display: "flex", justifyContent: "space-between", gap: "2mm" };
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(0,0,0,.85)" }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #receipt-paper, #receipt-paper * { visibility: visible !important; }
+          #receipt-paper { position: absolute !important; left: 0; top: 0; margin: 0 !important; box-shadow: none !important; }
+          @page { size: ${w}mm auto; margin: 3mm; }
+        }
+      `}</style>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: "#0a0a0c", borderBottom: "1px solid #1c1c22" }}>
+        <button onClick={onClose}><X size={22} color="#888" /></button>
+        <div className="flex gap-2">
+          {[58, 80].map(v => (
+            <button key={v} onClick={() => setW(v)} style={{ background: w === v ? GOLD : "#1c1c22", color: w === v ? "#000" : "#888" }} className="text-xs px-3 py-1.5 rounded-lg font-bold">{v}mm</button>
+          ))}
+        </div>
+        <button onClick={() => window.print()} style={{ background: GOLD, color: "#000" }} className="text-sm px-4 py-1.5 rounded-lg font-bold">🖨 印刷</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 flex justify-center">
+        <div id="receipt-paper" style={{
+          width: `${w}mm`, background: "#fff", color: "#000", padding: "4mm 3mm",
+          fontFamily: '"Hiragino Sans", system-ui, sans-serif', fontSize: w === 58 ? "9pt" : "10pt", lineHeight: 1.5,
+        }}>
+          <div style={{ textAlign: "center", fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", letterSpacing: "0.1em", marginBottom: "2mm" }}>
+            {storeName || "当店"}
+          </div>
+          <div style={{ textAlign: "center", fontSize: "8pt", marginBottom: "2mm" }}>領 収 書</div>
+          <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
+          <div style={line}><span>{label}</span><span>{t.customers.length}名様</span></div>
+          <div style={{ fontSize: "8pt" }}>{stamp}</div>
+          {t.customers.length > 0 && (
+            <div style={{ fontSize: "8pt", marginTop: "1mm" }}>{t.customers.map(c => c.name).join(" / ")} 様</div>
+          )}
+          <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
+          <div style={line}>
+            <span>セット {yen(t.setType)}×{t.customers.length}</span>
+            <span>{yen(t.setType * t.customers.length)}</span>
+          </div>
+          {t.orders.map(o => (
+            <div key={o.id}>
+              <div style={line}>
+                <span>{o.label}{o.qty > 1 ? ` ×${o.qty}` : ""}</span>
+                <span>{yen(o.price * o.qty)}</span>
+              </div>
+              {o.castId && castById[o.castId] && (
+                <div style={{ fontSize: "7pt", paddingLeft: "2mm" }}>（{castById[o.castId].name}）</div>
+              )}
+            </div>
+          ))}
+          <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
+          <div style={line}><span>小計</span><span>{yen(tableTotal(t))}</span></div>
+          <div style={line}><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
+          <div style={{ ...line, fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", marginTop: "1mm", borderTop: "2px solid #000", paddingTop: "1mm" }}>
+            <span>合計</span><span>{yen(tableGrand(t))}</span>
+          </div>
+          {castNames.length > 0 && (
+            <>
+              <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
+              <div style={{ fontSize: "8pt" }}>担当: {castNames.join(" / ")}</div>
+            </>
+          )}
+          <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
+          <div style={{ textAlign: "center", fontSize: "8pt" }}>ありがとうございました</div>
+          <div style={{ textAlign: "center", fontSize: "7pt", marginTop: "1mm" }}>またのご来店をお待ちしております</div>
+        </div>
+      </div>
+      <p className="text-[10px] text-zinc-500 text-center pb-3 px-4">
+        「🖨 印刷」で端末の印刷画面が開きます。用紙サイズは上のボタンで感熱紙の幅に合わせてください。
+      </p>
+    </div>
+  );
+}
+
 // 接客プラン: 教科書の時間配分（1人目0分/2人目15〜20分/3人目35〜40分）を可視化し、
 // セット終了5〜10分前の延長クロージングを促す。プラス付けもここから。
 function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssign }) {
