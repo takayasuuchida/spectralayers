@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.3.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.3.1"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -2760,6 +2760,10 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
 
   return (
     <div className="p-4 space-y-6">
+      <a href="https://takayasuuchida.github.io/spectralayers/manual.html" target="_blank" rel="noreferrer"
+        style={{ background: "rgba(201,166,78,.1)", border: `1px solid ${GOLD}`, color: GOLD }}
+        className="block w-full rounded-xl py-3 text-center text-sm font-bold">📖 使い方ガイド（説明書）を開く</a>
+
       <div>
         <h2 className="text-lg font-bold mb-1">店舗設定</h2>
         <p className="text-xs text-zinc-500 mb-3">店名・売上目標。すべて自動保存されます。</p>
