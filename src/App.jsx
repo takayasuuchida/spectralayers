@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "2.3.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "2.4.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -528,6 +528,30 @@ export default function App() {
       }
     });
 
+    // 1-b) 付け回しの偏り検知: 手薄な卓と余裕のある卓が同時に存在する
+    {
+      const rows = Object.entries(ts)
+        .filter(([, t]) => t?.active && t.customers.length > 0)
+        .map(([tid, t]) => ({
+          label: tables.find(x => x.id === tid)?.label || tid,
+          cust: t.customers.length, cast: t.casts.length,
+          ratio: t.casts.length / t.customers.length,
+        }));
+      if (rows.length >= 2) {
+        const thin = rows.filter(r => r.ratio < 0.5 && r.cust - r.cast >= 2); // 客2人以上に対し女の子が半分未満
+        const rich = rows.filter(r => r.ratio >= 1);
+        if (thin.length && (rich.length || available.length)) {
+          out.push({
+            icon: "⚖️", level: "act",
+            title: `付け回しが偏っています: ${thin.map(r => `${r.label}(客${r.cust}・嬢${r.cast})`).join("・")}`,
+            detail: available.length
+              ? `空き${available.length}名います。フロア上部の「⚖️ 全卓バランス付け回し」で均等に配れます`
+              : `${rich.map(r => r.label).join("・")}は足りています。1名回して均衡させると全卓の満足度が上がります`,
+          });
+        }
+      }
+    }
+
     // 2) 異常検知: 今日のドリンク単価 vs 平常
     const drinkLogs = (salesLog || []).filter(r => r.label !== "セット");
     const todayDr = drinkLogs.filter(r => r.businessDate === today);
@@ -725,11 +749,77 @@ export default function App() {
     return { nowStage, all: [...nowStage, ...nextStage] };
   }
 
+  // ---- 全卓バランス（卓ごとの割当上限） ----
+  // 空きキャストが全卓の必要数に足りない時、先に付け回した卓が独り占めすると
+  // 後の卓が「客3人に女の子1人」になってしまう。
+  // そこで空き分を1人ずつ、「客数に対していちばん女の子が足りない卓」へ順番に配って
+  // 卓ごとの上限（quota）を決める。例) 空き4名／卓A客2・卓B客3 → A2名・B2名。
+  function castQuotas(poolSize) {
+    const state = Object.entries(ts)
+      .filter(([, t]) => t?.active && t.customers.length > 0)
+      .map(([id, t]) => {
+        const assigned = new Set(t.casts.map(a => a.customerId));
+        return {
+          id,
+          need: t.customers.filter(c => !assigned.has(c.id)).length, // まだ誰も付いていない客の数
+          have: t.casts.length,
+          cust: t.customers.length,
+          quota: 0,
+        };
+      });
+    let left = poolSize;
+    while (left > 0) {
+      const cand = state.filter(s => s.quota < s.need);
+      if (!cand.length) break;
+      // 手薄な卓（客1人あたりの女の子が少ない卓）から1人ずつ。同率なら大きい卓を優先
+      cand.sort((a, b) =>
+        ((a.have + a.quota) / a.cust) - ((b.have + b.quota) / b.cust) ||
+        b.cust - a.cust);
+      cand[0].quota++;
+      left--;
+    }
+    return Object.fromEntries(state.map(s => [s.id, s.quota]));
+  }
+
   function autoTable(tableId) {
     const t = ts[tableId];
-    const ops = draftPlan(t, available).nowStage;
-    if (!ops.length) { setModal({ type: "ng", msg: "全員アサイン済み、または空き不足です。" }); return; }
+    const full = draftPlan(t, available).nowStage;
+    if (!full.length) { setModal({ type: "ng", msg: "全員アサイン済み、または空き不足です。" }); return; }
+    const quota = castQuotas(available.length)[tableId] ?? full.length;
+    const ops = full.slice(0, quota);
+    if (!ops.length) {
+      setModal({ type: "ng", msg: `空きキャストは他卓の分として確保されています（他卓の方が手薄）。この卓に付けるなら「指名」から手動で選んでください。` });
+      return;
+    }
     ops.forEach(([cu, ca]) => doAssign(tableId, ca, cu));
+    if (ops.length < full.length) {
+      setModal({ type: "warn", msg: `⚖️ ${ops.length}名だけ付けました。空きキャストが全卓分に足りないため、残りは他卓へ確保しています（1卓が独占して他が「客3人に1人」になるのを防止）。` });
+    }
+  }
+
+  // フロアの「⚖️ 全卓バランス付け回し」: 空いている子を全卓へ均等に配る
+  function autoAllTables() {
+    const quotas = castQuotas(available.length);
+    let pool = [...available];
+    let assigned = 0;
+    const lines = [];
+    // 手薄な卓から順に処理（同じプールを奪い合うので順序が結果に効く）
+    const order = Object.keys(quotas).sort((a, b) =>
+      (ts[a].casts.length / ts[a].customers.length) - (ts[b].casts.length / ts[b].customers.length));
+    for (const tid of order) {
+      const q = quotas[tid];
+      if (!q) continue;
+      const ops = draftPlan(ts[tid], pool).nowStage.slice(0, q);
+      if (!ops.length) continue;
+      ops.forEach(([cu, ca]) => doAssign(tid, ca, cu));
+      pool = pool.filter(c => !ops.some(([, ca]) => ca === c.id));
+      assigned += ops.length;
+      const label = tables.find(x => x.id === tid)?.label || tid;
+      lines.push(`${label}: ${ops.map(([, ca]) => castById[ca]?.name).join("・")}`);
+    }
+    if (!assigned) { setModal({ type: "ng", msg: "配れる空きキャストがいません（全員在卓中 or 未出勤）。" }); return; }
+    logAudit("全卓バランス付け回し", `${assigned}名を配置`);
+    setModal({ type: "warn", msg: `⚖️ ${assigned}名を各卓へ均等に配置しました。\n\n${lines.join("\n")}` });
   }
   function removeCast(tableId, castId) { upd(tableId, t => ({ ...t, casts: t.casts.filter(a => a.castId !== castId), seats: t.seats.filter(s => !(s.k === "cast" && s.id === castId)) })); }
   function moveSeat(tableId, idx, dir) { upd(tableId, t => { const a = [...t.seats]; const j = idx + dir; if (j < 0 || j >= a.length) return t; [a[idx], a[j]] = [a[j], a[idx]]; return { ...t, seats: a }; }); }
@@ -878,7 +968,7 @@ export default function App() {
         </div>
       </div>
 
-      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices }} />}
+      {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
@@ -992,7 +1082,12 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
             })}
           </div>
           <div className="mt-auto flex items-center justify-between text-[11px]">
-            <span className="text-zinc-500">{t.customers.length}名</span>
+            <span className="text-zinc-500">
+              客{t.customers.length}
+              <span style={{ color: t.casts.length < t.customers.length ? "#e0a84a" : "#71717a" }} className={t.casts.length < t.customers.length ? "font-bold" : ""}>
+                {" / 嬢"}{t.casts.length}{t.casts.length < t.customers.length ? " 手薄" : ""}
+              </span>
+            </span>
             <span style={{ color: GOLD }} className="font-bold">{yen(t.setType * t.customers.length + t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</span>
           </div>
         </>
@@ -1126,8 +1221,15 @@ function AdvisorPanel({ advices }) {
   );
 }
 
-function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices }) {
+function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount }) {
   const groupEntries = Object.entries(mergeGroups || {});
+  // 全卓の「まだ女の子が付いていない客」の総数。空きキャストが足りない＝バランス配分の出番
+  const totalNeed = Object.values(ts).reduce((s, t) => {
+    if (!t?.active) return s;
+    const assigned = new Set(t.casts.map(a => a.customerId));
+    return s + t.customers.filter(c => !assigned.has(c.id)).length;
+  }, 0);
+  const activeTableCount = Object.values(ts).filter(t => t?.active && t.customers.length > 0).length;
   const bdToday = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 0);
   const bdTomorrow = (customerBook || []).filter(c => daysToBirthday(c.birthday) === 1);
   const today = businessDateOfNow();
@@ -1143,6 +1245,17 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
           {bdTomorrow.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
           {resToday.length > 0 && <div><span style={{ color: TEAL }} className="font-bold">📅 本日予約:</span> {resToday.map(r => `${r.time || ""} ${custName(r.customerBookId)}`).join("・")}</div>}
           {lowStock.length > 0 && <div><span style={{ color: "#e08484" }} className="font-bold">📦 在庫少:</span> {lowStock.map(p => `${p.name}(残${p.stock || 0})`).join("・")}</div>}
+        </div>
+      )}
+      {totalNeed > 0 && activeTableCount >= 1 && (
+        <div className="mb-3">
+          <button onClick={autoAllTables} style={{ background: GOLD, color: "#000" }} className="w-full rounded-xl py-2.5 text-sm font-bold flex items-center justify-center gap-1.5">
+            <Wand2 size={15} />⚖️ 全卓バランス付け回し
+          </button>
+          <div className="text-[10px] text-zinc-500 mt-1 text-center">
+            空き {availCount}名 / 女の子待ちのお客様 {totalNeed}名
+            {availCount < totalNeed && activeTableCount >= 2 && <span style={{ color: "#e0a84a" }} className="font-bold">　※足りないので均等に配分します</span>}
+          </div>
         </div>
       )}
       {groupEntries.length > 0 && (
