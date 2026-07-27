@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.2.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.3.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -221,6 +221,8 @@ export default function App() {
   // お客様の反応記録 { [custId]: { [castId]: 1(◎相性良い) | -1(✗合わない) } }
   // 教科書「お客様の反応を見極めて場内指名や延長に繋ぐ」の実装。3人目・延長の人選に使う。
   const [reactions, setReactions] = useState({});
+  // 伝票記録（印刷しても会計しても金額がデータとして残る）。最新が先頭・最大2000件
+  const [receipts, setReceipts] = useState([]);
   const [merges, setMerges] = useState({});
   const [sel, setSel] = useState(null);
   const [closed, setClosed] = useState([]);
@@ -258,6 +260,7 @@ export default function App() {
           setTs(d.ts || {});
           setServed(d.served || {});
           setReactions(d.reactions || {});
+          setReceipts(d.receipts || []);
           setMerges(d.merges || {});
           setClosed(d.closed || []);
           setHistory(d.history || []);
@@ -278,16 +281,16 @@ export default function App() {
   // 永続化: 保存（500msデバウンス）
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog })); }, 500);
+    const id = setTimeout(() => { storeSet(STORE_KEY, JSON.stringify({ settings, tables, mergeGroups, casts, ts, served, reactions, receipts, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog })); }, 500);
     return () => clearTimeout(id);
-  }, [loaded, settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog]);
+  }, [loaded, settings, tables, mergeGroups, casts, ts, served, reactions, receipts, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog]);
 
   // ---- 監査ログ ----
   const logAudit = (action, detail = "") =>
     setAuditLog(l => [{ t: Date.now(), action, detail }, ...l].slice(0, 1000));
 
   // ---- バックアップ ----
-  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, reactions, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
+  const buildPayload = () => ({ settings, tables, mergeGroups, casts, ts, served, reactions, receipts, merges, closed, history, customerBook, bottleKeeps, auditLog, salaryHistory, salaryAdjust, reservations, products, salesLog });
 
   function exportData() {
     const data = { app: "tsukemawashi", version: APP_VERSION, store: STORE_ID, exportedAt: new Date().toISOString(), payload: buildPayload() };
@@ -311,6 +314,7 @@ export default function App() {
     setTs(p.ts || {});
     setServed(p.served || {});
     setReactions(p.reactions || {});
+    setReceipts(p.receipts || []);
     setMerges(p.merges || {});
     setClosed(p.closed || []);
     setHistory(p.history || []);
@@ -410,7 +414,7 @@ export default function App() {
     const activeSubtotal = activeRows.reduce((s, t) => s + tableTotal(t), 0);
     const closedSubtotal = closed.reduce((s, r) => s + (r.total || 0), 0);
     const subtotal = activeSubtotal + closedSubtotal;
-    const tax = Math.floor(subtotal * taxRate);
+    const tax = Math.round(subtotal * taxRate);
     const grand = subtotal + tax;
     const cardFee = closed.reduce((s2, r) => s2 + (r.fee || 0), 0)
       + activeRows.reduce((s2, t) => s2 + tableCardFee(t), 0);
@@ -545,11 +549,11 @@ export default function App() {
 
   const tableTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
   const taxRate = (settings.taxRate ?? 10) / 100;
-  const tableTax = (t) => Math.floor(tableTotal(t) * taxRate);
+  const tableTax = (t) => Math.round(tableTotal(t) * taxRate);
   const tableGrand = (t) => tableTotal(t) + tableTax(t);
   // カード払いの手数料。税込合計に対して設定の%（既定10%）を上乗せする。
   const cardFeePct = settings.cardFeePct ?? 10;
-  const tableCardFee = (t) => (t?.payMethod === "card" ? Math.floor(tableGrand(t) * cardFeePct / 100) : 0);
+  const tableCardFee = (t) => (t?.payMethod === "card" ? Math.round(tableGrand(t) * cardFeePct / 100) : 0);
   const tablePayable = (t) => tableGrand(t) + tableCardFee(t); // 実際にお客様からいただく額
   const setPayMethod = (tableId, m) => upd(tableId, t => ({ ...t, payMethod: m }));
 
@@ -1248,7 +1252,7 @@ export default function App() {
   };
   function openTable(tableId) {
     // setStart: null = 準備中。「▶ セット開始」ボタンでタイマー開始
-    setTs(s => ({ ...s, [tableId]: { active: true, setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", customers: [], casts: [], seats: [], orders: [] } }));
+    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", customers: [], casts: [], seats: [], orders: [] } }));
     logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
   }
   function startTable(tableId) {
@@ -1257,12 +1261,53 @@ export default function App() {
     upd(tableId, t => ({ ...t, setStart: now, casts: t.casts.map(a => ({ ...a, at: now })) }));
     logAudit("セット開始", tables.find(x => x.id === tableId)?.label || tableId);
   }
+  // ---- 伝票記録 ----
+  // 印刷しても会計しても金額が残るように、その時点の明細をまるごと保存する。
+  // 同じ卓の同じセッションは上書き更新（印刷を何度押しても増えない）。
+  function buildReceipt(tableId, opts = {}) {
+    const t = ts[tableId];
+    if (!t?.active) return null;
+    const ref = tables.find(x => x.id === tableId);
+    const label = ref ? dispTable(ref).label : tableId;
+    const subtotal = tableTotal(t);
+    const tax = tableTax(t);
+    const grand = subtotal + tax;
+    const fee = tableCardFee(t);
+    return {
+      id: "rc" + Math.random().toString(36).slice(2, 9),
+      sessionId: t.sessionId || `${tableId}-${t.setStart || 0}`,
+      at: Date.now(),
+      businessDate: businessDateOfNow(),
+      storeName: settings.storeName,
+      tableLabel: label,
+      customerNames: t.customers.map(c => c.name),
+      castNames: [...new Set(t.casts.map(a => castById[a.castId]?.name).filter(Boolean))],
+      setPrice: t.setType, setCount: t.customers.length, setAmount: t.setType * t.customers.length,
+      orders: t.orders.map(o => ({ label: o.label, qty: o.qty, price: o.price, castName: castById[o.castId]?.name || "" })),
+      subtotal, taxRate: settings.taxRate ?? 10, tax, grand,
+      cardFeePct, cardFee: fee, payable: grand + fee,
+      payMethod: t.payMethod || "cash",
+      settled: !!opts.settled, // 会計済みか（印刷しただけならfalse）
+    };
+  }
+  function saveReceipt(tableId, opts = {}) {
+    const r = buildReceipt(tableId, opts);
+    if (!r) return null;
+    setReceipts(list => {
+      const i = list.findIndex(x => x.sessionId === r.sessionId);
+      if (i >= 0) { const n = [...list]; n[i] = { ...r, id: list[i].id }; return n; }
+      return [r, ...list].slice(0, 2000);
+    });
+    return r;
+  }
+
   function closeTable(tableId) {
     const t = ts[tableId]; const total = tableTotal(t);
+    saveReceipt(tableId, { settled: true }); // 会計しても金額はデータとして残す
     const tRef = tables.find(x => x.id === tableId);
     const label = tRef ? dispTable(tRef).label : tableId;
-    const grand = total + Math.floor(total * taxRate);
-    const fee = tableCardFee(t);                 // カード手数料（現金なら0）
+    const grand = total + Math.round(total * taxRate);
+    const fee = tableCardFee(t);                 // カード決済サービス料（現金なら0）
     const payable = grand + fee;                 // 実際にいただいた額
     setClosed(c => [...c, { label, total, n: t.customers.length, fee, payMethod: t.payMethod || "cash" }]);
     // LTV: 客名帳連携済みのお客様に税込頭割り額を累積 + 来店履歴
@@ -1287,13 +1332,13 @@ export default function App() {
           cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
           productId: o.productId || null,
         })),
-        ...(fee > 0 ? [{ businessDate: bd, hour, label: "カード手数料", price: fee, qty: 1, cost: 0, productId: null }] : []),
+        ...(fee > 0 ? [{ businessDate: bd, hour, label: "カード決済サービス料", price: fee, qty: 1, cost: 0, productId: null }] : []),
       ];
       if (entries.length) setSalesLog(sl => [...entries, ...sl].slice(0, 3000));
     }
     setTs(s => { const n = { ...s }; delete n[tableId]; return n; });
     setSel(null);
-    logAudit("会計", `${label} ${yen(payable)}（${t.payMethod === "card" ? `カード・手数料${yen(fee)}込` : "現金"}・${t.customers.length}名)`);
+    logAudit("会計", `${label} ${yen(payable)}（${t.payMethod === "card" ? `カード・決済サービス料${yen(fee)}込` : "現金"}・${t.customers.length}名)`);
   }
   function toggleMerge(g) {
     if ((mergeGroups[g] || []).some(id => ts[id]?.active)) { setModal({ type: "ng", msg: "結合する卓に客がいる間は変更できません。会計後にどうぞ。" }); return; }
@@ -1334,7 +1379,7 @@ export default function App() {
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length, minusInfo }} />}
       {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
-      {view === "sales" && <Sales {...{ ts, dispTable, tables, tableTotal, tableCardFee, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
+      {view === "sales" && <Sales {...{ receipts, ts, dispTable, tables, tableTotal, tableCardFee, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
       {view === "admin" && <Admin {...{ casts, setCasts, resetNight, settings, setSettings, tables, setTables, mergeGroups, setMergeGroups, ts, customerBook, exportData, importData, listAutoBackups, restoreAutoBackup, listRescueData, restoreRescue, auditLog, enterWatch, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />}
 
@@ -1344,7 +1389,7 @@ export default function App() {
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
-          tableCardFee, tablePayable, setPayMethod, cardFeePct,
+          tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt,
           recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
@@ -1671,7 +1716,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt } = p;
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
@@ -1917,7 +1962,7 @@ function Detail(p) {
 
               {tableCardFee(t) > 0 && (
                 <div className="flex justify-between text-xs" style={{ color: "#e0a84a" }}>
-                  <span>カード手数料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span>
+                  <span>カード決済サービス料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-1 border-t border-[#2a2a32] mt-1">
@@ -1925,9 +1970,10 @@ function Detail(p) {
                 <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tablePayable(t))}</span>
               </div>
             </div>
-            <button onClick={() => setReceiptOpen(true)} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
+            <button onClick={() => { const r = saveReceipt(tableId); if (r) setReceiptOpen(r); }} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
               🧾 伝票を印刷する
             </button>
+            <p className="text-[10px] text-zinc-600 mt-1.5 text-center">印刷しても金額は保存されます（売上タブ →「🧾 伝票」）</p>
           </div>
         </div>
       )}
@@ -1941,14 +1987,7 @@ function Detail(p) {
         />
       )}
 
-      {receiptOpen && (
-        <ReceiptModal
-          t={t} label={disp.label} storeName={storeName} castById={castById}
-          tableTotal={tableTotal} tableTax={tableTax} tableGrand={tableGrand} taxRate={taxRate}
-          tableCardFee={tableCardFee} tablePayable={tablePayable} cardFeePct={cardFeePct}
-          onClose={() => setReceiptOpen(false)}
-        />
-      )}
+      {receiptOpen && <ReceiptModal r={receiptOpen} onClose={() => setReceiptOpen(false)} />}
 
       {drinkPick && (
         <DrinkCastPicker
@@ -2152,11 +2191,73 @@ function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById,
 }
 
 // 伝票印刷（サーマルレシート幅）。感熱紙 58mm / 80mm を切り替え可能。
-function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tableGrand, taxRate, tableCardFee, tablePayable, cardFeePct, onClose }) {
+// 伝票の記録一覧。印刷しても会計しても金額は残り、ここから見直し・再印刷できる。
+function ReceiptHistory({ receipts }) {
+  const [open, setOpen] = useState(null);
+  const list = receipts || [];
+  const byDate = {};
+  list.forEach(r => { (byDate[r.businessDate] = byDate[r.businessDate] || []).push(r); });
+  const dates = Object.keys(byDate).sort().reverse();
+
+  function csv() {
+    const head = "日時,営業日,卓,人数,お客様,小計,消費税,税込,カード決済サービス料,お預り合計,支払方法,担当,状態";
+    const rows = list.map(r => [
+      new Date(r.at).toLocaleString("ja-JP"), r.businessDate, r.tableLabel, r.setCount,
+      `"${r.customerNames.join(" / ")}"`, r.subtotal, r.tax, r.grand, r.cardFee, r.payable,
+      r.payMethod === "card" ? "カード" : "現金", `"${r.castNames.join(" / ")}"`,
+      r.settled ? "会計済" : "接客中",
+    ].join(","));
+    csvDownload(`伝票_${businessDateOfNow()}.csv`, head, rows);
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-lg font-bold">伝票の記録</h2>
+          <p className="text-[11px] text-zinc-500">印刷・会計した伝票が全部残ります（{list.length}件）</p>
+        </div>
+        {list.length > 0 && (
+          <button onClick={csv} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="text-xs px-3 py-2 rounded-lg font-bold">📄 CSV</button>
+        )}
+      </div>
+      {list.length === 0 && (
+        <p className="text-center text-zinc-600 text-sm py-12">まだ伝票がありません。<br />卓の「🧾 伝票を印刷する」か会計をすると記録されます。</p>
+      )}
+      {dates.map(d => (
+        <div key={d} className="mb-4">
+          <div className="text-[11px] text-zinc-500 mb-1.5">{d}（{byDate[d].length}件 / 合計 {yen(byDate[d].reduce((s, r) => s + r.payable, 0))}）</div>
+          <div className="space-y-2">
+            {byDate[d].sort((a, b) => b.at - a.at).map(r => (
+              <button key={r.id} onClick={() => setOpen(r)} style={{ background: "#141418", border: `1px solid ${r.settled ? "#22222a" : "#7a5a1a"}` }} className="w-full rounded-xl p-3 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-base font-bold">{r.tableLabel}</span>
+                    <span className="text-[11px] text-zinc-500">{new Date(r.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })} ・ {r.setCount}名</span>
+                    {!r.settled && <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">接客中</span>}
+                  </span>
+                  <span style={{ color: GOLD }} className="text-lg font-bold">{yen(r.payable)}</span>
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  {r.customerNames.join(" / ") || "（お客様名なし）"}
+                  {r.payMethod === "card" && <span style={{ color: "#e0a84a" }}> ・💳カード（サービス料 {yen(r.cardFee)}）</span>}
+                </div>
+                {r.castNames.length > 0 && <div className="text-[10px] text-zinc-600 mt-0.5">担当: {r.castNames.join("・")}</div>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {open && <ReceiptModal r={open} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
+// 伝票（サーマルレシート幅 58mm/80mm）。保存済みの伝票記録 r をそのまま描画するので、
+// 印刷後・会計後でも同じ内容を何度でも出し直せる。
+function ReceiptModal({ r, onClose }) {
   const [w, setW] = useState(58);
-  const now = new Date();
-  const stamp = now.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const castNames = [...new Set(t.casts.map(a => castById[a.castId]?.name).filter(Boolean))];
+  const stamp = new Date(r.at).toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const line = { display: "flex", justifyContent: "space-between", gap: "2mm" };
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(0,0,0,.85)" }}>
@@ -2183,47 +2284,45 @@ function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tab
           fontFamily: '"Hiragino Sans", system-ui, sans-serif', fontSize: w === 58 ? "9pt" : "10pt", lineHeight: 1.5,
         }}>
           <div style={{ textAlign: "center", fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", letterSpacing: "0.1em", marginBottom: "2mm" }}>
-            {storeName || "当店"}
+            {r.storeName || "当店"}
           </div>
           <div style={{ textAlign: "center", fontSize: "8pt", marginBottom: "2mm" }}>領 収 書</div>
           <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
-          <div style={line}><span>{label}</span><span>{t.customers.length}名様</span></div>
+          <div style={line}><span>{r.tableLabel}</span><span>{r.setCount}名様</span></div>
           <div style={{ fontSize: "8pt" }}>{stamp}</div>
-          {t.customers.length > 0 && (
-            <div style={{ fontSize: "8pt", marginTop: "1mm" }}>{t.customers.map(c => c.name).join(" / ")} 様</div>
+          {r.customerNames.length > 0 && (
+            <div style={{ fontSize: "8pt", marginTop: "1mm" }}>{r.customerNames.join(" / ")} 様</div>
           )}
           <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
           <div style={line}>
-            <span>セット {yen(t.setType)}×{t.customers.length}</span>
-            <span>{yen(t.setType * t.customers.length)}</span>
+            <span>セット {yen(r.setPrice)}×{r.setCount}</span>
+            <span>{yen(r.setAmount)}</span>
           </div>
-          {t.orders.map(o => (
-            <div key={o.id}>
+          {r.orders.map((o, i) => (
+            <div key={i}>
               <div style={line}>
                 <span>{o.label}{o.qty > 1 ? ` ×${o.qty}` : ""}</span>
                 <span>{yen(o.price * o.qty)}</span>
               </div>
-              {o.castId && castById[o.castId] && (
-                <div style={{ fontSize: "7pt", paddingLeft: "2mm" }}>（{castById[o.castId].name}）</div>
-              )}
+              {o.castName && <div style={{ fontSize: "7pt", paddingLeft: "2mm" }}>（{o.castName}）</div>}
             </div>
           ))}
           <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
-          <div style={line}><span>小計</span><span>{yen(tableTotal(t))}</span></div>
-          <div style={line}><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
-          {tableCardFee(t) > 0 && (
-            <div style={line}><span>カード手数料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span></div>
+          <div style={line}><span>小計</span><span>{yen(r.subtotal)}</span></div>
+          <div style={line}><span>消費税 {r.taxRate}%</span><span>{yen(r.tax)}</span></div>
+          {r.cardFee > 0 && (
+            <div style={line}><span>カード決済サービス料 {r.cardFeePct}%</span><span>{yen(r.cardFee)}</span></div>
           )}
           <div style={{ ...line, fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", marginTop: "1mm", borderTop: "2px solid #000", paddingTop: "1mm" }}>
-            <span>合計</span><span>{yen(tablePayable(t))}</span>
+            <span>合計</span><span>{yen(r.payable)}</span>
           </div>
           <div style={{ ...line, fontSize: "8pt" }}>
-            <span>お支払い</span><span>{t.payMethod === "card" ? "クレジットカード" : "現金"}</span>
+            <span>お支払い</span><span>{r.payMethod === "card" ? "クレジットカード" : "現金"}</span>
           </div>
-          {castNames.length > 0 && (
+          {r.castNames.length > 0 && (
             <>
               <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
-              <div style={{ fontSize: "8pt" }}>担当: {castNames.join(" / ")}</div>
+              <div style={{ fontSize: "8pt" }}>担当: {r.castNames.join(" / ")}</div>
             </>
           )}
           <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
@@ -2232,7 +2331,7 @@ function ReceiptModal({ t, label, storeName, castById, tableTotal, tableTax, tab
         </div>
       </div>
       <p className="text-[10px] text-zinc-500 text-center pb-3 px-4">
-        「🖨 印刷」で端末の印刷画面が開きます。用紙サイズは上のボタンで感熱紙の幅に合わせてください。
+        この伝票は保存されています。売上タブ →「🧾 伝票」からいつでも見直し・再印刷できます。
       </p>
     </div>
   );
@@ -2837,7 +2936,7 @@ function SalaryLine({ l, v, cut }) {
   );
 }
 
-function Sales({ ts, dispTable, tables, tableTotal, tableCardFee, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
+function Sales({ receipts, ts, dispTable, tables, tableTotal, tableCardFee, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
   const [tab, setTab] = useState("today");
   const TabBtn = ({ k, children }) => (
     <button onClick={() => setTab(k)} style={{ background: tab === k ? GOLD : "#141418", color: tab === k ? "#000" : "#888", border: `1px solid ${tab === k ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">{children}</button>
@@ -2847,10 +2946,12 @@ function Sales({ ts, dispTable, tables, tableTotal, tableCardFee, closed, target
       <div className="flex gap-2 mb-4">
         <TabBtn k="today">今日</TabBtn>
         <TabBtn k="history"><CalendarDays size={13} />履歴</TabBtn>
+        <TabBtn k="receipt">🧾 伝票</TabBtn>
         <TabBtn k="bi">📊 分析</TabBtn>
       </div>
       {tab === "today" && <SalesToday ts={ts} dispTable={dispTable} tables={tables} tableTotal={tableTotal} tableCardFee={tableCardFee} closed={closed} target={target} taxRate={taxRate} />}
       {tab === "history" && <SalesHistory history={history} />}
+      {tab === "receipt" && <ReceiptHistory receipts={receipts} />}
       {tab === "bi" && <AnalyticsView {...{ history, salesLog, salaryHistory, customerBook }} />}
     </div>
   );
@@ -3017,7 +3118,7 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,カード手数料,お預り合計,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.cardFee || 0, h.grand + (h.cardFee || 0), h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
+        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,カード決済サービス料,お預り合計,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.cardFee || 0, h.grand + (h.cardFee || 0), h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
         <button onClick={() => csvDownload(`顧客_${businessDateOfNow()}.csv`, "名前,来店回数,累計利用額,最終来店", (customerBook || []).map(c => [c.name, c.visits || 0, c.totalSpent || 0, c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : ""].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 顧客CSV</button>
       </div>
     </div>
@@ -3033,9 +3134,9 @@ function SalesToday({ ts, dispTable, tables, tableTotal, tableCardFee, closed, t
     ...closed.map(c => ({ ...c, live: false })),
   ].sort((a, b) => b.total - a.total);
   const total = rows.reduce((s, r) => s + r.total, 0);
-  const totalTax = Math.floor(total * (taxRate ?? 10) / 100);
+  const totalTax = Math.round(total * (taxRate ?? 10) / 100);
   const grand = total + totalTax;
-  // カード手数料（会計済み分＋接客中の卓でカードを選んでいる分）
+  // カード決済サービス料（会計済み分＋接客中の卓でカードを選んでいる分）
   const cardFee = closed.reduce((s, r) => s + (r.fee || 0), 0)
     + Object.values(ts).filter(t => t?.active).reduce((s, t) => s + (tableCardFee ? tableCardFee(t) : 0), 0);
   const pct = target > 0 ? Math.min(100, Math.round(total / target * 100)) : 0;
@@ -3045,7 +3146,7 @@ function SalesToday({ ts, dispTable, tables, tableTotal, tableCardFee, closed, t
       <div style={{ background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }} className="text-5xl font-bold">{yen(total)}</div>
       <p className="text-xs text-zinc-500 mb-1">税込 {yen(grand)}（内税 {yen(totalTax)}）</p>
       {cardFee > 0 && (
-        <p className="text-xs mb-4" style={{ color: "#e0a84a" }}>💳 カード手数料 {yen(cardFee)} ・ お預り合計 {yen(grand + cardFee)}</p>
+        <p className="text-xs mb-4" style={{ color: "#e0a84a" }}>💳 カード決済サービス料 {yen(cardFee)} ・ お預り合計 {yen(grand + cardFee)}</p>
       )}
       {cardFee === 0 && <div className="mb-4" />}
       <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">目標 {yen(target)}</span><span style={{ color: GOLD }} className="font-bold">{pct}%</span></div>
