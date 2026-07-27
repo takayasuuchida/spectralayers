@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.3.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.4.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -64,7 +64,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -111,6 +111,10 @@ const DEFAULT_CAST_COUNTERS = {
   drinkCount: 0,
   shotCount: 0,
   bottleSales: 0,
+  // ボトルは銘柄ごとにバック率が違うので、注文した瞬間に実額を積む。
+  // bottleSalesBacked = そのうち実額計算済みの売上（旧方式との二重計上を防ぐため）
+  bottleBackYen: 0,
+  bottleSalesBacked: 0,
   dohanCount: 0,
   fieldNominationCount: 0,
   mainNominationCount: 0,
@@ -489,7 +493,7 @@ export default function App() {
         dohanBack: b.dohanBack, fieldBack: b.fieldBack, mainBack: b.mainBack,
         gross: b.gross, hairMake: b.hairMake, transOut: b.transOut, transBack: b.transBack,
         latePenalty: b.latePenalty || 0, overhead: b.overhead, net: b.net,
-        drinkCount: c.drinkCount || 0, shotCount: c.shotCount || 0, bottleSales: c.bottleSales || 0,
+        drinkCount: c.drinkCount || 0, shotCount: c.shotCount || 0, bottleSales: c.bottleSales || 0, bottleBackYen: b.bottleBack || 0,
         dohanCount: c.dohanCount || 0, fieldNominationCount: c.fieldNominationCount || 0, mainNominationCount: c.mainNominationCount || 0,
       }, ...h].slice(0, 2000));
       logAudit("退勤確定", `${c.name} 給料${yen(b?.net || 0)}`);
@@ -504,7 +508,10 @@ export default function App() {
     const wage = Math.round(c.hourlyWage * hours);
     const drinkBack = (c.drinkCount || 0) * c.drinkBack;
     const shotBack = (c.shotCount || 0) * c.shotBack;
-    const bottleBack = Math.round((c.bottleSales || 0) * c.bottleBackPct / 100);
+    // ボトルは銘柄ごとに率が違うので、注文時に積んだ実額を使う。
+    // 実額計算されていない分（旧データ）だけキャストの既定率で計算して合算する。
+    const legacySales = Math.max(0, (c.bottleSales || 0) - (c.bottleSalesBacked || 0));
+    const bottleBack = (c.bottleBackYen || 0) + Math.round(legacySales * c.bottleBackPct / 100);
     const dohanBack = (c.dohanCount || 0) * c.dohanBack;
     const fieldBack = (c.fieldNominationCount || 0) * c.fieldNominationBack;
     const mainBack = (c.mainNominationCount || 0) * c.mainNominationBack;
@@ -1227,27 +1234,58 @@ export default function App() {
     if (!productId || !delta) return;
     setProducts(ps => ps.map(p => p.id === productId ? { ...p, stock: Math.max(0, (p.stock || 0) + delta) } : p));
   };
+  const isBottleKind = (k) => k === "champagne" || k === "bottle";
+  // ボトルのバック率: 注文に付いた率 → 商品マスタの率 → キャストの既定率 の順で決まる
+  const resolveBackPct = (o, cast) => {
+    if (o?.backPct != null) return o.backPct;
+    const pr = products.find(p => p.id === o?.productId);
+    if (pr?.backPct != null) return pr.backPct;
+    return cast?.bottleBackPct ?? 0;
+  };
+  // 注文の増減に合わせてキャストのカウンター・ボトルバック実額を増減する
+  function applyOrderCounters(o, unit) {
+    if (!o?.castId || !unit) return;
+    setCasts(cs => cs.map(c => {
+      if (c.id !== o.castId) return c;
+      if (o.kind === "drink") return { ...c, drinkCount: Math.max(0, (c.drinkCount || 0) + unit) };
+      if (o.kind === "shot") return { ...c, shotCount: Math.max(0, (c.shotCount || 0) + unit) };
+      if (isBottleKind(o.kind)) {
+        const pct = resolveBackPct(o, c);
+        const sales = (o.price || 0) * unit;
+        return {
+          ...c,
+          bottleSales: Math.max(0, (c.bottleSales || 0) + sales),
+          bottleSalesBacked: Math.max(0, (c.bottleSalesBacked || 0) + sales),
+          bottleBackYen: Math.max(0, (c.bottleBackYen || 0) + Math.round(sales * pct / 100)),
+        };
+      }
+      return c;
+    }));
+  }
   const addOrder = (tableId, o) => {
-    upd(tableId, t => ({ ...t, orders: [...t.orders, { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1, at: Date.now() }] }));
+    // 注文時点のバック率を確定して保存（あとで設定を変えても過去の伝票は動かない）
+    const cast = o.castId ? castById[o.castId] : null;
+    const entry = { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1, at: Date.now() };
+    if (isBottleKind(o.kind)) entry.backPct = resolveBackPct(o, cast);
+    upd(tableId, t => ({ ...t, orders: [...t.orders, entry] }));
     bumpStock(o.productId, -1); // リアルタイム在庫減算
-    // カウンター自動加算（castId が付いていれば）
-    if (o.castId) {
-      if (o.kind === "drink") bumpCastCounter(o.castId, "drinkCount", 1);
-      else if (o.kind === "shot") bumpCastCounter(o.castId, "shotCount", 1);
-      else if (o.kind === "champagne" || o.kind === "bottle") setCasts(cs => cs.map(c => c.id === o.castId ? { ...c, bottleSales: (c.bottleSales || 0) + (o.price || 0) } : c));
-    }
+    applyOrderCounters(entry, 1);
   };
   const ordQty = (tableId, oid, d) => {
     const o = ts[tableId]?.orders.find(x => x.id === oid);
     if (o) {
       const delta = Math.max(1, o.qty + d) - o.qty; // 下限1でクランプした実変化量
       bumpStock(o.productId, -delta);
+      applyOrderCounters(o, delta); // 本数を変えたらバック額も連動
     }
     upd(tableId, t => ({ ...t, orders: t.orders.map(o2 => o2.id === oid ? { ...o2, qty: Math.max(1, o2.qty + d) } : o2) }));
   };
   const delOrder = (tableId, oid) => {
     const o = ts[tableId]?.orders.find(x => x.id === oid);
-    if (o) bumpStock(o.productId, o.qty); // 在庫を戻す
+    if (o) {
+      bumpStock(o.productId, o.qty); // 在庫を戻す
+      applyOrderCounters(o, -o.qty); // 取り消した分のバック・カウントも戻す
+    }
     upd(tableId, t => ({ ...t, orders: t.orders.filter(o2 => o2.id !== oid) }));
   };
   function openTable(tableId) {
@@ -1377,7 +1415,7 @@ export default function App() {
       </div>
 
       {view === "floor" && <Floor {...{ visibleTables, dispTable, tables, ts, castById, setSel, merges, mergeGroups, toggleMerge, customerBook, reservations, products, advices, autoAllTables, availCount: available.length, minusInfo }} />}
-      {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit }} />}
+      {view === "stock" && <InventoryView {...{ products, setProducts, salesLog, logAudit, backPresets: settings.bottleBackPresets || [20, 25, 35] }} />}
       {view === "cast" && <CastView {...{ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHistory, salaryAdjust, setSalaryAdjust, settings }} />}
       {view === "sales" && <Sales {...{ receipts, ts, dispTable, tables, tableTotal, tableCardFee, closed, target: settings.target, taxRate: settings.taxRate ?? 10, history, salesLog, salaryHistory, customerBook }} />}
       {view === "book" && <CustomerBookView {...{ customerBook, setCustomerBook, casts, bottleKeeps, setBottleKeeps, reservations, setReservations, storeName: settings.storeName, logAudit }} />}
@@ -1390,6 +1428,7 @@ export default function App() {
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
           tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt,
+          backPresets: settings.bottleBackPresets || [20, 25, 35],
           recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
           customerBook, bottleKeeps, products,
@@ -1716,7 +1755,8 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets } = p;
+  const [chBack, setChBack] = useState(null); // 手入力ボトルのバック率（null=既定）
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
   const [drinkPick, setDrinkPick] = useState(null); // { label, price, kind } — キャスト選択待ちのドリンク
@@ -1747,7 +1787,7 @@ function Detail(p) {
     const l = (chLabelRef.current?.value || "").trim();
     const pr = (chPriceRef.current?.value || "").replace(/[^0-9]/g, "");
     if (!l || !pr) return;
-    setDrinkPick({ label: l, price: +pr, kind: "champagne" });
+    setDrinkPick({ label: l, price: +pr, kind: "champagne", backPct: chBack });
     if (chLabelRef.current) chLabelRef.current.value = "";
     if (chPriceRef.current) chPriceRef.current.value = "";
   };
@@ -1912,23 +1952,33 @@ function Detail(p) {
             {(products || []).length > 0 && (
               <div className="grid grid-cols-2 gap-2 mb-2">
                 {products.slice(0, 8).map(pr => (
-                  <button key={pr.id} onClick={() => setDrinkPick({ label: pr.name, price: pr.price, kind: pr.category || "drink", productId: pr.id })} style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-lg py-2 px-2 text-[11px] font-bold text-left">
+                  <button key={pr.id} onClick={() => setDrinkPick({ label: pr.name, price: pr.price, kind: pr.category || "drink", productId: pr.id, backPct: pr.backPct ?? null })} style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-lg py-2 px-2 text-[11px] font-bold text-left">
                     <span className="block truncate">{pr.name}</span>
                     <span className="text-zinc-500">{yen(pr.price)}</span>
+                    {pr.backPct != null && <span style={{ color: GOLD }}> ・バック{pr.backPct}%</span>}
                     {pr.lowStockAt != null && (pr.stock || 0) <= pr.lowStockAt && <span style={{ color: "#e0a84a" }}> 残{pr.stock || 0}</span>}
                   </button>
                 ))}
               </div>
             )}
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2 mb-1.5">
               <input ref={chLabelRef} placeholder="シャンパン等" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-2 py-2 outline-none min-w-0" />
               <input ref={chPriceRef} placeholder="価格" inputMode="numeric" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitChampagne(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-24 rounded-lg px-2 py-2 outline-none" />
               <button onClick={submitChampagne} style={{ background: "#22222a", color: GOLD }} className="px-3 rounded-lg text-xs font-bold">追加</button>
             </div>
+            {/* 銘柄ごとにバック率が違うので、その場で選べるようにする */}
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+              <span className="text-[10px] text-zinc-500">バック</span>
+              <button onClick={() => setChBack(null)} style={{ background: chBack == null ? GOLD : "#1c1c22", color: chBack == null ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">既定</button>
+              {(backPresets || []).map(v => (
+                <button key={v} onClick={() => setChBack(v)} style={{ background: chBack === v ? GOLD : "#1c1c22", color: chBack === v ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{v}%</button>
+              ))}
+              <span className="text-[9px] text-zinc-600">よく出す銘柄は 在庫タブの商品マスタに登録すると率が自動で入ります</span>
+            </div>
             <div className="space-y-1.5">
               {t.orders.map(o => (
                 <div key={o.id} className="flex items-center gap-2 text-sm">
-                  <span className="flex-1 truncate">{o.label} <span className="text-zinc-500 text-xs">{yen(o.price)}</span></span>
+                  <span className="flex-1 truncate">{o.label} <span className="text-zinc-500 text-xs">{yen(o.price)}</span>{o.backPct != null && <span style={{ color: GOLD }} className="text-[10px] ml-1">バック{o.backPct}%</span>}</span>
                   <button onClick={() => ordQty(tableId, o.id, -1)} style={{ background: "#1c1c22" }} className="w-7 h-7 rounded text-zinc-400">−</button>
                   <span className="w-5 text-center text-sm">{o.qty}</span>
                   <button onClick={() => ordQty(tableId, o.id, 1)} style={{ background: "#1c1c22" }} className="w-7 h-7 rounded text-zinc-400">＋</button>
@@ -2096,7 +2146,11 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
                     <span className="font-bold text-sm">{c.name}</span>
                     {isFav && <span style={{ color: GOLD }} className="text-[10px] font-bold">⭐ お気に入り</span>}
                   </div>
-                  <div className="text-[10px] text-zinc-500">バック ¥{(drink.kind === "shot" ? c.shotBack : c.drinkBack) || 0}</div>
+                  <div className="text-[10px] text-zinc-500">
+                    {drink.kind === "champagne" || drink.kind === "bottle"
+                      ? (() => { const pct = drink.backPct ?? c.bottleBackPct ?? 0; return `バック ${pct}% = ¥${Math.round((drink.price || 0) * pct / 100).toLocaleString("ja-JP")}`; })()
+                      : `バック ¥${(drink.kind === "shot" ? c.shotBack : c.drinkBack) || 0}`}
+                  </div>
                 </button>
               );
             })}
@@ -2863,7 +2917,7 @@ function WorkingCastCard({ c, busy, onToggle, expanded, clockOut, bumpCastCounte
           <div className="flex items-center gap-2 text-sm">
             <span className="w-16 text-xs text-zinc-500">ボトル売上</span>
             <span style={{ color: GOLD }} className="flex-1 text-right font-bold">¥{(c.bottleSales || 0).toLocaleString("ja-JP")}</span>
-            <span className="text-[10px] text-zinc-500">×{c.bottleBackPct}%</span>
+            <span className="text-[10px]" style={{ color: GOLD }}>→ バック ¥{(((c.bottleBackYen || 0) + Math.round(Math.max(0, (c.bottleSales || 0) - (c.bottleSalesBacked || 0)) * c.bottleBackPct / 100))).toLocaleString("ja-JP")}</span>
           </div>
         </div>
       )}
@@ -2898,7 +2952,7 @@ function SalaryModal({ cast, breakdown, overheadPct, onConfirm, onClose }) {
           <SalaryLine l={`時給 ¥${cast.hourlyWage.toLocaleString()} × ${b.hours.toFixed(2)}h`} v={b.wage} />
           {b.drinkBack > 0 && <SalaryLine l={`ドリンクバック ¥${cast.drinkBack} × ${cast.drinkCount}杯`} v={b.drinkBack} />}
           {b.shotBack > 0 && <SalaryLine l={`ショットバック ¥${cast.shotBack} × ${cast.shotCount}杯`} v={b.shotBack} />}
-          {b.bottleBack > 0 && <SalaryLine l={`ボトルバック ${cast.bottleBackPct}% × ¥${(cast.bottleSales||0).toLocaleString()}`} v={b.bottleBack} />}
+          {b.bottleBack > 0 && <SalaryLine l={`ボトルバック（売上 ¥${(cast.bottleSales || 0).toLocaleString()}・銘柄ごとの率で計算）`} v={b.bottleBack} />}
           {b.mainBack > 0 && <SalaryLine l={`本指名 ¥${cast.mainNominationBack} × ${cast.mainNominationCount}`} v={b.mainBack} />}
           {b.fieldBack > 0 && <SalaryLine l={`場内指名 ¥${cast.fieldNominationBack} × ${cast.fieldNominationCount}`} v={b.fieldBack} />}
           {b.dohanBack > 0 && <SalaryLine l={`同伴 ¥${cast.dohanBack} × ${cast.dohanCount}`} v={b.dohanBack} />}
@@ -3785,6 +3839,14 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <span className="text-xs text-zinc-500">%</span>
           </div>
           <p className="text-[10px] text-zinc-600">カード払いを選ぶと、税込合計にこの%を上乗せしてご請求します。</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">ボトル<br />バック候補</span>
+            <input value={(settings.bottleBackPresets || [20, 25, 35]).join(",")}
+              onChange={e => setSettings(s2 => ({ ...s2, bottleBackPresets: e.target.value.split(",").map(v => Math.max(0, parseInt(v, 10) || 0)).filter(v => v > 0).slice(0, 6) }))}
+              placeholder="20,25,35" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <span className="text-xs text-zinc-500">%</span>
+          </div>
+          <p className="text-[10px] text-zinc-600">ボトルのバック率をワンタップで選べるようにする候補（カンマ区切り）。銘柄ごとの率は 在庫タブの商品マスタで設定します。</p>
         </div>
       </div>
 
@@ -3966,10 +4028,10 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
   );
 }
 
-const PRODUCT_CATEGORIES = [["drink", "ドリンク"], ["shot", "ショット"], ["bottle", "ボトル"], ["other", "その他"]];
+const PRODUCT_CATEGORIES = [["drink", "ドリンク"], ["shot", "ショット"], ["bottle", "ボトル"], ["champagne", "シャンパン"], ["other", "その他"]];
 
-function InventoryView({ products, setProducts, salesLog, logAudit }) {
-  const [newP, setNewP] = useState({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "" });
+function InventoryView({ products, setProducts, salesLog, logAudit, backPresets }) {
+  const [newP, setNewP] = useState({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "", backPct: "" });
   const [stocktake, setStocktake] = useState(false);
   const [orderSheet, setOrderSheet] = useState(null);
   const [month] = useState(businessDateOfNow().slice(0, 7));
@@ -3990,9 +4052,10 @@ function InventoryView({ products, setProducts, salesLog, logAudit }) {
       name: newP.name.trim(), category: newP.category,
       price: +newP.price || 0, cost: +newP.cost || 0,
       stock: +newP.stock || 0, lowStockAt: newP.lowStockAt === "" ? null : +newP.lowStockAt,
+      backPct: newP.backPct === "" ? null : +newP.backPct, // ボトルバック率（空=キャストの既定率）
     }]);
     logAudit("商品追加", newP.name.trim());
-    setNewP({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "" });
+    setNewP({ name: "", category: "drink", price: "", cost: "", stock: "", lowStockAt: "", backPct: "" });
   }
   const updP = (id, patch) => setProducts(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p));
   const delP = (id) => { const p = products.find(x => x.id === id); setProducts(ps => ps.filter(x => x.id !== id)); if (p) logAudit("商品削除", p.name); };
@@ -4068,6 +4131,19 @@ function InventoryView({ products, setProducts, salesLog, logAudit }) {
                 <span className="text-zinc-500">基準</span>
                 <input type="number" value={p.lowStockAt ?? ""} placeholder="-" onChange={e => updP(p.id, { lowStockAt: e.target.value === "" ? null : +e.target.value })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-14 rounded px-1.5 py-1 outline-none" />
               </div>
+              {/* ボトル・シャンパンは銘柄ごとにバック率が違うのでここで設定する */}
+              {(p.category === "bottle" || p.category === "champagne") && (
+              <div className="flex items-center gap-2 text-[11px] mt-1.5 flex-wrap">
+                <span style={{ color: p.backPct != null ? GOLD : "#71717a" }} className="font-bold">バック</span>
+                <input type="number" value={p.backPct ?? ""} placeholder="既定" onChange={e => updP(p.id, { backPct: e.target.value === "" ? null : Math.max(0, +e.target.value) })} style={{ background: "#0d0d10", border: `1px solid ${p.backPct != null ? GOLD : "#22222a"}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
+                <span className="text-zinc-500">%</span>
+                {(backPresets || []).map(v => (
+                  <button key={v} onClick={() => updP(p.id, { backPct: v })} style={{ background: p.backPct === v ? GOLD : "#1c1c22", color: p.backPct === v ? "#000" : "#888" }} className="rounded-full px-2 py-0.5 font-bold">{v}%</button>
+                ))}
+                {p.backPct != null && <button onClick={() => updP(p.id, { backPct: null })} className="text-zinc-500 underline">既定に戻す</button>}
+                <span className="text-[9px] text-zinc-600 w-full">空欄＝キャストごとの既定バック率を使用</span>
+              </div>
+              )}
             </div>
           ))}
           {(products || []).length === 0 && <p className="text-[11px] text-zinc-500 py-2">まだ商品がありません。下から追加してください。</p>}
@@ -4085,6 +4161,9 @@ function InventoryView({ products, setProducts, salesLog, logAudit }) {
             <input type="number" value={newP.cost} onChange={e => setNewP(x => ({ ...x, cost: e.target.value }))} placeholder="原価" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
             <input type="number" value={newP.stock} onChange={e => setNewP(x => ({ ...x, stock: e.target.value }))} placeholder="在庫" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
             <input type="number" value={newP.lowStockAt} onChange={e => setNewP(x => ({ ...x, lowStockAt: e.target.value }))} placeholder="基準" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+            {(newP.category === "bottle" || newP.category === "champagne") && (
+              <input type="number" value={newP.backPct} onChange={e => setNewP(x => ({ ...x, backPct: e.target.value }))} placeholder="バック%" title="ボトルバック率（空=キャスト既定）" style={{ background: "#141418", border: `1px solid ${GOLD}`, fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+            )}
             <button onClick={addProduct} style={{ background: GOLD, color: "#000" }} className="px-3 py-2 rounded-lg text-xs font-bold shrink-0">追加</button>
           </div>
           <p className="text-[10px] text-zinc-600">基準 = 低在庫アラートを出す残数（空欄でアラートなし）</p>
@@ -4364,7 +4443,8 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
           <PayRow label="時給" value={c.hourlyWage} onChange={v => upd(c.id, x => ({ ...x, hourlyWage: num(v) }))} suffix="円" />
           <PayRow label="ドリンクバック" value={c.drinkBack} onChange={v => upd(c.id, x => ({ ...x, drinkBack: num(v) }))} suffix="円/杯" />
           <PayRow label="ショットバック" value={c.shotBack} onChange={v => upd(c.id, x => ({ ...x, shotBack: num(v) }))} suffix="円/杯" />
-          <PayRow label="ボトルバック" value={c.bottleBackPct} onChange={v => upd(c.id, x => ({ ...x, bottleBackPct: num(v) }))} suffix="%" />
+          <PayRow label="ボトルバック(既定)" value={c.bottleBackPct} onChange={v => upd(c.id, x => ({ ...x, bottleBackPct: num(v) }))} suffix="%" />
+          <p className="text-[9px] text-zinc-600 -mt-1">※ 商品マスタでバック%を設定した銘柄はそちらが優先されます（オリジナルシャンパン35% 等）</p>
           <PayRow label="同伴バック" value={c.dohanBack} onChange={v => upd(c.id, x => ({ ...x, dohanBack: num(v) }))} suffix="円/回" />
           <PayRow label="場内指名" value={c.fieldNominationBack} onChange={v => upd(c.id, x => ({ ...x, fieldNominationBack: num(v) }))} suffix="円/回" />
           <PayRow label="本指名" value={c.mainNominationBack} onChange={v => upd(c.id, x => ({ ...x, mainNominationBack: num(v) }))} suffix="円/回" />
