@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.5.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.5.1"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -556,20 +556,20 @@ export default function App() {
   }
 
   // ---- 会計の端数処理 ----
-  // お会計は端数を「繰り上げ（切り上げ）」。既定は100円単位。
-  //   例) 小計27,830 → 27,900
-  //   小計と最終合計をそれぞれ繰り上げる。単位は設定で変更可（50円等）。
+  // 丸めるのは「最後の合計」だけ。途中（小計・消費税・サービス料）は素の金額のまま。
+  // 途中で切り上げると二重に上乗せされてしまうため。
+  //   例) 小計27,830 / 税2,783 / サービス料2,783 = 33,396 → 繰り上げ 33,400
   const roundUnit = Math.max(1, settings.roundUnit ?? 100);
   const roundMoney = (n) => Math.ceil(n / roundUnit) * roundUnit;
-  const tableRawTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
-  const tableTotal = (t) => roundMoney(tableRawTotal(t)); // 小計（端数を丸めたもの）
+  const tableTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0); // 小計（素のまま）
+  const tableRawTotal = tableTotal; // 互換: 小計は丸めないので同じ
   const taxRate = (settings.taxRate ?? 10) / 100;
   const tableTax = (t) => Math.round(tableTotal(t) * taxRate);
   const tableGrand = (t) => tableTotal(t) + tableTax(t);
   // カード決済サービス料。消費税と同じく「小計」に対して設定の%（既定10%）。
   const cardFeePct = settings.cardFeePct ?? 10;
   const tableCardFee = (t) => (t?.payMethod === "card" ? Math.round(tableTotal(t) * cardFeePct / 100) : 0);
-  // 実際にお客様からいただく額（最終も50円単位に丸める）
+  // 実際にお客様からいただく額。ここで初めて端数を繰り上げる。
   const tablePayable = (t) => roundMoney(tableGrand(t) + tableCardFee(t));
   const tableRoundAdj = (t) => tablePayable(t) - (tableGrand(t) + tableCardFee(t)); // 端数調整額
   const setPayMethod = (tableId, m) => upd(tableId, t => ({ ...t, payMethod: m }));
@@ -1383,9 +1383,8 @@ export default function App() {
           cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
           productId: o.productId || null,
         })),
-        ...(total - tableRawTotal(t) !== 0 ? [{ businessDate: bd, hour, label: "端数調整", price: total - tableRawTotal(t), qty: 1, cost: 0, productId: null }] : []),
         ...(fee > 0 ? [{ businessDate: bd, hour, label: "カード決済サービス料", price: fee, qty: 1, cost: 0, productId: null }] : []),
-        ...(adj !== 0 ? [{ businessDate: bd, hour, label: "端数調整(合計)", price: adj, qty: 1, cost: 0, productId: null }] : []),
+        ...(adj !== 0 ? [{ businessDate: bd, hour, label: "端数調整", price: adj, qty: 1, cost: 0, productId: null }] : []),
       ];
       if (entries.length) setSalesLog(sl => [...entries, ...sl].slice(0, 3000));
     }
@@ -2011,7 +2010,7 @@ function Detail(p) {
             </div>
             <div className="border-t border-[#2a2a32] pt-2 space-y-1">
               <div className="flex justify-between text-xs text-zinc-400">
-                <span>小計{tableTotal(t) !== tableRawTotal(t) && <span className="text-[10px] text-zinc-600">（{yen(tableRawTotal(t))}を繰り上げ）</span>}</span>
+                <span>小計</span>
                 <span>{yen(tableTotal(t))}</span>
               </div>
               <div className="flex justify-between text-xs text-zinc-500"><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
@@ -2034,7 +2033,7 @@ function Detail(p) {
               )}
               {tableRoundAdj(t) !== 0 && (
                 <div className="flex justify-between text-xs text-zinc-500">
-                  <span>端数調整（{roundUnit}円単位に繰り上げ）</span><span>+{yen(tableRoundAdj(t))}</span>
+                  <span>端数調整（合計を{roundUnit}円単位に繰り上げ）</span><span>+{yen(tableRoundAdj(t))}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-1 border-t border-[#2a2a32] mt-1">
@@ -3874,7 +3873,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
               ))}
             </div>
           </div>
-          <p className="text-[10px] text-zinc-600">お会計はこの単位に<b>切り上げ</b>ます（例: 100円単位なら 27,830 → 27,900）。小計と最終合計の両方に適用されます。</p>
+          <p className="text-[10px] text-zinc-600"><b>最後の合計だけ</b>この単位に切り上げます。小計・消費税・サービス料は素の金額のまま計算するので、二重に上乗せされません。</p>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">ボトル<br />バック候補</span>
             <input value={(settings.bottleBackPresets || [20, 25, 35]).join(",")}
