@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.4.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.5.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -64,7 +64,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, roundUnit: 50, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, roundUnit: 100, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -556,11 +556,11 @@ export default function App() {
   }
 
   // ---- 会計の端数処理 ----
-  // お会計は50円単位（100円か50円しか存在しない）。小計と最終合計をそれぞれ四捨五入する。
-  //   例) 小計27,535 → 27,550 / 消費税10%=2,755 / サービス料10%=2,755
-  //       27,550+2,755+2,755=33,060 → 33,050
-  const roundUnit = Math.max(1, settings.roundUnit ?? 50);
-  const roundMoney = (n) => Math.round(n / roundUnit) * roundUnit;
+  // お会計は端数を「繰り上げ（切り上げ）」。既定は100円単位。
+  //   例) 小計27,830 → 27,900
+  //   小計と最終合計をそれぞれ繰り上げる。単位は設定で変更可（50円等）。
+  const roundUnit = Math.max(1, settings.roundUnit ?? 100);
+  const roundMoney = (n) => Math.ceil(n / roundUnit) * roundUnit;
   const tableRawTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
   const tableTotal = (t) => roundMoney(tableRawTotal(t)); // 小計（端数を丸めたもの）
   const taxRate = (settings.taxRate ?? 10) / 100;
@@ -1332,8 +1332,9 @@ export default function App() {
       castNames: [...new Set(t.casts.map(a => castById[a.castId]?.name).filter(Boolean))],
       setPrice: t.setType, setCount: t.customers.length, setAmount: t.setType * t.customers.length,
       orders: t.orders.map(o => ({ label: o.label, qty: o.qty, price: o.price, castName: castById[o.castId]?.name || "" })),
+      rawSubtotal: tableRawTotal(t),
       subtotal, taxRate: settings.taxRate ?? 10, tax, grand,
-      cardFeePct, cardFee: fee, payable: grand + fee,
+      cardFeePct, cardFee: fee, payable: tablePayable(t), roundAdj: tableRoundAdj(t), roundUnit,
       payMethod: t.payMethod || "cash",
       settled: !!opts.settled, // 会計済みか（印刷しただけならfalse）
     };
@@ -1441,7 +1442,7 @@ export default function App() {
           castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
-          tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt,
+          tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, tableRawTotal, tableRoundAdj, roundUnit,
           backPresets: settings.bottleBackPresets || [20, 25, 35],
           recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
@@ -1769,7 +1770,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets, tableRawTotal, tableRoundAdj, roundUnit } = p;
   const [chBack, setChBack] = useState(null); // 手入力ボトルのバック率（null=既定）
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
@@ -2009,9 +2010,11 @@ function Detail(p) {
               <div className="flex justify-between"><span>飲食</span><span>{yen(t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</span></div>
             </div>
             <div className="border-t border-[#2a2a32] pt-2 space-y-1">
-              <div className="flex justify-between text-xs text-zinc-400"><span>小計</span><span>{yen(tableTotal(t))}</span></div>
+              <div className="flex justify-between text-xs text-zinc-400">
+                <span>小計{tableTotal(t) !== tableRawTotal(t) && <span className="text-[10px] text-zinc-600">（{yen(tableRawTotal(t))}を繰り上げ）</span>}</span>
+                <span>{yen(tableTotal(t))}</span>
+              </div>
               <div className="flex justify-between text-xs text-zinc-500"><span>消費税 {taxRate}%</span><span>{yen(tableTax(t))}</span></div>
-              <div className="flex justify-between text-xs text-zinc-400"><span>税込</span><span>{yen(tableGrand(t))}</span></div>
 
               {/* 支払い方法。カードは手数料を上乗せ */}
               <div className="flex items-center gap-1.5 pt-2">
@@ -2027,6 +2030,11 @@ function Detail(p) {
               {tableCardFee(t) > 0 && (
                 <div className="flex justify-between text-xs" style={{ color: "#e0a84a" }}>
                   <span>カード決済サービス料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span>
+                </div>
+              )}
+              {tableRoundAdj(t) !== 0 && (
+                <div className="flex justify-between text-xs text-zinc-500">
+                  <span>端数調整（{roundUnit}円単位に繰り上げ）</span><span>+{yen(tableRoundAdj(t))}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-1 border-t border-[#2a2a32] mt-1">
@@ -2380,6 +2388,9 @@ function ReceiptModal({ r, onClose }) {
           <div style={line}><span>消費税 {r.taxRate}%</span><span>{yen(r.tax)}</span></div>
           {r.cardFee > 0 && (
             <div style={line}><span>カード決済サービス料 {r.cardFeePct}%</span><span>{yen(r.cardFee)}</span></div>
+          )}
+          {!!r.roundAdj && (
+            <div style={line}><span>端数調整</span><span>+{yen(r.roundAdj)}</span></div>
           )}
           <div style={{ ...line, fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", marginTop: "1mm", borderTop: "2px solid #000", paddingTop: "1mm" }}>
             <span>合計</span><span>{yen(r.payable)}</span>
@@ -3852,7 +3863,18 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <input type="number" value={settings.cardFeePct ?? 10} onChange={e => setSettings(s => ({ ...s, cardFeePct: Math.max(0, +e.target.value || 0) }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">%</span>
           </div>
-          <p className="text-[10px] text-zinc-600">カード払いを選ぶと、税込合計にこの%を上乗せしてご請求します。</p>
+          <p className="text-[10px] text-zinc-600">カード払いを選ぶと、この%を上乗せしてご請求します。</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 w-16">端数の<br />繰り上げ</span>
+            <div className="flex-1 flex gap-1.5 flex-wrap">
+              {[1, 10, 50, 100].map(v => (
+                <button key={v} onClick={() => setSettings(s2 => ({ ...s2, roundUnit: v }))}
+                  style={{ background: (settings.roundUnit ?? 100) === v ? GOLD : "#1c1c22", color: (settings.roundUnit ?? 100) === v ? "#000" : "#888" }}
+                  className="text-[11px] rounded-full px-3 py-1.5 font-bold">{v === 1 ? "なし" : v + "円"}</button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[10px] text-zinc-600">お会計はこの単位に<b>切り上げ</b>ます（例: 100円単位なら 27,830 → 27,900）。小計と最終合計の両方に適用されます。</p>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">ボトル<br />バック候補</span>
             <input value={(settings.bottleBackPresets || [20, 25, 35]).join(",")}
