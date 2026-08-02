@@ -64,7 +64,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, roundUnit: 50, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -418,7 +418,8 @@ export default function App() {
     const activeSubtotal = activeRows.reduce((s, t) => s + tableTotal(t), 0);
     const closedSubtotal = closed.reduce((s, r) => s + (r.total || 0), 0);
     const subtotal = activeSubtotal + closedSubtotal;
-    const tax = Math.round(subtotal * taxRate);
+    const tax = closed.reduce((s2, r) => s2 + (r.tax ?? Math.round((r.total || 0) * taxRate)), 0)
+      + activeRows.reduce((s2, t) => s2 + tableTax(t), 0);
     const grand = subtotal + tax;
     const cardFee = closed.reduce((s2, r) => s2 + (r.fee || 0), 0)
       + activeRows.reduce((s2, t) => s2 + tableCardFee(t), 0);
@@ -554,14 +555,23 @@ export default function App() {
     return t;
   }
 
-  const tableTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
+  // ---- 会計の端数処理 ----
+  // お会計は50円単位（100円か50円しか存在しない）。小計と最終合計をそれぞれ四捨五入する。
+  //   例) 小計27,535 → 27,550 / 消費税10%=2,755 / サービス料10%=2,755
+  //       27,550+2,755+2,755=33,060 → 33,050
+  const roundUnit = Math.max(1, settings.roundUnit ?? 50);
+  const roundMoney = (n) => Math.round(n / roundUnit) * roundUnit;
+  const tableRawTotal = (t) => (t.setType * t.customers.length) + t.orders.reduce((s, o) => s + o.price * o.qty, 0);
+  const tableTotal = (t) => roundMoney(tableRawTotal(t)); // 小計（端数を丸めたもの）
   const taxRate = (settings.taxRate ?? 10) / 100;
   const tableTax = (t) => Math.round(tableTotal(t) * taxRate);
   const tableGrand = (t) => tableTotal(t) + tableTax(t);
-  // カード払いの手数料。税込合計に対して設定の%（既定10%）を上乗せする。
+  // カード決済サービス料。消費税と同じく「小計」に対して設定の%（既定10%）。
   const cardFeePct = settings.cardFeePct ?? 10;
-  const tableCardFee = (t) => (t?.payMethod === "card" ? Math.round(tableGrand(t) * cardFeePct / 100) : 0);
-  const tablePayable = (t) => tableGrand(t) + tableCardFee(t); // 実際にお客様からいただく額
+  const tableCardFee = (t) => (t?.payMethod === "card" ? Math.round(tableTotal(t) * cardFeePct / 100) : 0);
+  // 実際にお客様からいただく額（最終も50円単位に丸める）
+  const tablePayable = (t) => roundMoney(tableGrand(t) + tableCardFee(t));
+  const tableRoundAdj = (t) => tablePayable(t) - (tableGrand(t) + tableCardFee(t)); // 端数調整額
   const setPayMethod = (tableId, m) => upd(tableId, t => ({ ...t, payMethod: m }));
 
   // ---- 付け回しロジック（公平ドラフト方式） ----
@@ -1344,10 +1354,12 @@ export default function App() {
     saveReceipt(tableId, { settled: true }); // 会計しても金額はデータとして残す
     const tRef = tables.find(x => x.id === tableId);
     const label = tRef ? dispTable(tRef).label : tableId;
-    const grand = total + Math.round(total * taxRate);
+    const tax = tableTax(t);
+    const grand = total + tax;
     const fee = tableCardFee(t);                 // カード決済サービス料（現金なら0）
-    const payable = grand + fee;                 // 実際にいただいた額
-    setClosed(c => [...c, { label, total, n: t.customers.length, fee, payMethod: t.payMethod || "cash" }]);
+    const payable = tablePayable(t);             // 実際にいただいた額（50円単位）
+    const adj = payable - (grand + fee);         // 端数調整
+    setClosed(c => [...c, { label, total, tax, n: t.customers.length, fee, adj, payable, payMethod: t.payMethod || "cash" }]);
     // LTV: 客名帳連携済みのお客様に税込頭割り額を累積 + 来店履歴
     if (t.customers.length > 0) {
       const share = Math.round(payable / t.customers.length);
@@ -1370,7 +1382,9 @@ export default function App() {
           cost: (products.find(p => p.id === o.productId)?.cost || 0) * o.qty,
           productId: o.productId || null,
         })),
+        ...(total - tableRawTotal(t) !== 0 ? [{ businessDate: bd, hour, label: "端数調整", price: total - tableRawTotal(t), qty: 1, cost: 0, productId: null }] : []),
         ...(fee > 0 ? [{ businessDate: bd, hour, label: "カード決済サービス料", price: fee, qty: 1, cost: 0, productId: null }] : []),
+        ...(adj !== 0 ? [{ businessDate: bd, hour, label: "端数調整(合計)", price: adj, qty: 1, cost: 0, productId: null }] : []),
       ];
       if (entries.length) setSalesLog(sl => [...entries, ...sl].slice(0, 3000));
     }
