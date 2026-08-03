@@ -6,31 +6,46 @@
 <title>🔁 2店舗 振りっこボード</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
-  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:120px; }
+  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:110px; }
   .wrap { max-width:760px; margin:0 auto; padding:0 12px; }
   header { border-bottom:1px solid #1c1c22; padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .brand { font-family:Georgia,serif; letter-spacing:.15em; color:#c9a64e; font-size:15px; font-weight:bold; }
   .sub { color:#6a6a72; font-size:10px; }
   .me { font-size:10px; color:#a8e6e2; border:1px solid #2a6a66; border-radius:999px; padding:3px 10px; background:rgba(63,182,176,.08); white-space:nowrap; }
 
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
-  @media (max-width:420px){ .grid { grid-template-columns:1fr; } }
-  .store { background:#141418; border:1px solid #22222a; border-radius:16px; padding:12px; }
-  .store.mine { border-color:#c9a64e; }
+  .sec { background:#141418; border:1px solid #22222a; border-radius:16px; padding:12px; margin-top:12px; }
+  .sec.mine { border-color:#c9a64e; }
+  .shead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
   .sname { font-family:Georgia,serif; font-size:17px; font-weight:bold; letter-spacing:.08em; }
   .mine .sname { color:#c9a64e; }
   .stale { color:#e08484; font-size:10px; font-weight:bold; }
   .fresh { color:#5a5a62; font-size:10px; }
 
-  .accept { border-radius:12px; padding:10px; text-align:center; margin:8px 0; font-weight:bold; }
-  .a-ok   { background:rgba(95,214,160,.12); border:1px solid #3f8f6a; color:#7ee6ac; }
-  .a-soon { background:rgba(224,168,74,.12); border:1px solid #7a5a1a; color:#e8c07a; }
-  .a-full { background:rgba(224,85,85,.12); border:1px solid #a15050; color:#f0a0a0; }
-  .a-none { background:#0d0d10; border:1px dashed #33333c; color:#5a5a62; font-weight:normal; }
-  .accept .big { font-size:20px; display:block; }
-  .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
+  /* 卓グリッド（自店・手入力用） */
+  .tgrid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  @media (min-width:520px){ .tgrid { grid-template-columns:repeat(3,1fr); } }
+  .tcard { background:#0d0d10; border:1.5px dashed #2f2f38; border-radius:14px; padding:10px; text-align:left; width:100%; }
+  .tcard.busy { border-style:solid; border-color:#c9a64e; background:#15130d; }
+  .tcard.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
+  .tcard.over { border-color:#a15050; background:rgba(224,85,85,.1); }
+  .tcard .tl { font-family:Georgia,serif; font-size:15px; font-weight:bold; color:#e8e8ec; }
+  .tcard.busy .tl { color:#c9a64e; }
+  .tcard .empty { font-size:11px; color:#4a4a52; margin-top:4px; }
+  .tcard .big { font-size:20px; font-weight:bold; color:#fff; margin-top:2px; }
+  .tcard .small { font-size:10px; color:#8a8a92; margin-top:2px; }
+  .tcard .out { font-size:11px; font-weight:bold; color:#e8c07a; }
 
-  .lv-title { font-size:10px; color:#6a6a72; margin:10px 0 4px; }
+  .expand { background:#0d0d10; border:1px solid #c9a64e; border-radius:14px; padding:10px; margin-top:8px; }
+  .expand .lbl2 { font-size:11px; color:#c9a64e; font-weight:bold; margin-bottom:8px; }
+  .nums { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .nums button { background:#1c1c22; border:1px solid #2f2f38; color:#e8e8ec; border-radius:12px; padding:16px 0; font-size:20px; font-weight:bold; }
+  .acts { display:flex; gap:8px; flex-wrap:wrap; }
+  .acts button { flex:1; min-width:88px; border:none; border-radius:12px; padding:14px 6px; font-size:14px; font-weight:bold; }
+  .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; }
+  .a-out { background:#7a2222; color:#fff; }
+  .a-cancel { background:#1c1c22; color:#888; }
+
+  .lv-title { font-size:10px; color:#6a6a72; margin:12px 0 4px; }
   .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
   .lv.soon { border-color:#7a5a1a; background:rgba(224,168,74,.07); }
   .lv.now  { border-color:#3f8f6a; background:rgba(95,214,160,.08); }
@@ -40,6 +55,14 @@
   .lv .auto { font-size:9px; color:#5fd6a0; border:1px solid #2f6a4f; border-radius:4px; padding:0 4px; }
   .lv .del { background:none; border:none; color:#55555c; font-size:15px; padding:0 2px; }
   .empty { font-size:11px; color:#4a4a52; padding:6px 0; }
+
+  .accept { border-radius:12px; padding:10px; text-align:center; margin:8px 0; font-weight:bold; }
+  .a-ok   { background:rgba(95,214,160,.12); border:1px solid #3f8f6a; color:#7ee6ac; }
+  .a-soon { background:rgba(224,168,74,.12); border:1px solid #7a5a1a; color:#e8c07a; }
+  .a-full { background:rgba(224,85,85,.12); border:1px solid #a15050; color:#f0a0a0; }
+  .a-none { background:#0d0d10; border:1px dashed #33333c; color:#5a5a62; font-weight:normal; }
+  .accept .big { font-size:20px; display:block; }
+  .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
 
   .bar { position:fixed; left:0; right:0; bottom:0; background:#0a0a0c; border-top:1px solid #1c1c22; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px); display:flex; gap:8px; z-index:20; }
   .bar button { flex:1; border:none; border-radius:12px; padding:13px 4px; font-weight:bold; font-size:13px; }
@@ -56,9 +79,10 @@
   .chip { background:#1c1c22; color:#9a9aa2; border:1px solid #2a2a32; border-radius:999px; padding:9px 14px; font-size:14px; font-weight:bold; }
   .chip.on { background:#c9a64e; color:#000; border-color:#c9a64e; }
   .chip.wide { flex:1; min-width:70px; text-align:center; }
-  input[type=time], input[type=text] { background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:10px; font-size:16px; width:100%; }
+  input[type=time], input[type=text], input[type=number] { background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:10px; font-size:16px; width:100%; }
   .go { width:100%; background:#c9a64e; color:#000; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:15px; margin-top:16px; }
   .go:disabled { background:#2a2a32; color:#5a5a62; }
+  .link { background:none; border:none; color:#6a6a72; font-size:11px; text-decoration:underline; padding:6px 0; }
 
   .alert { background:rgba(201,166,78,.14); border:1px solid #c9a64e; border-radius:14px; padding:12px; margin-top:12px; }
   .alert .h { color:#c9a64e; font-weight:bold; font-size:14px; }
@@ -79,7 +103,8 @@
 
 <div class="wrap">
   <div id="alerts"></div>
-  <div class="grid" id="grid"></div>
+  <div id="mine"></div>
+  <div id="theirs"></div>
   <div id="err"></div>
   <p class="note">
     10秒ごとに自動更新。<br>
@@ -88,9 +113,8 @@
 </div>
 
 <div class="bar">
-  <button class="b-gold" id="addBtn">＋ 退店予定</button>
   <button class="b-teal" id="acceptBtn">受入状況</button>
-  <button class="b-teal" id="sendBtn">📨 送客</button>
+  <button class="b-gold" id="sendBtn">📨 送客を伝える</button>
 </div>
 
 <!-- 店舗選択 -->
@@ -99,13 +123,17 @@
     <h3>この端末はどちらのお店？<button data-close>×</button></h3>
     <div class="chips" id="meChips"></div>
     <p class="lbl">選んだお店として書き込みます。両方のお店の状況はどちらを選んでも見られます。</p>
+    <div class="lbl">卓の数（自分のお店を手入力する場合）</div>
+    <div class="chips" id="tcountChips"></div>
+    <div class="lbl">セット時間（退店予定の自動計算に使います）</div>
+    <div class="chips" id="setminChips"></div>
   </div>
 </div>
 
-<!-- 退店予定 -->
+<!-- 退店予定（手入力・イレギュラー用） -->
 <div class="sheet hidden" id="sheetAdd">
   <div class="panel">
-    <h3>退店予定を知らせる<button data-close>×</button></h3>
+    <h3>退店予定を直接入れる<button data-close>×</button></h3>
     <div class="lbl">何分後に出る？</div>
     <div class="chips" id="minChips"></div>
     <div class="lbl">または時刻を直接</div>
@@ -157,16 +185,15 @@
     { id: "vivace", name: "vivace", shareKeys: ["share:viverce", "share:vivace"] },
     { id: "anela",  name: "ANELA",  shareKeys: ["share:ANELA", "share:anela"] }
   ];
-  var LS_ME = "board-me";
-  var LS_SEEN = "board-seen-at";
+  var LS_ME = "board-me", LS_SEEN = "board-seen-at";
 
-  var me = null;              // 自店の id
+  var me = null;
   var data = {};              // { storeId: boardDoc }
-  var autoLeaving = {};       // { storeId: [entry] }  つけ回しツールから自動生成
+  var autoLeaving = {};       // つけ回しツールから取り込んだ分
   var lastErr = "";
+  var openTid = null;         // 展開中の卓
   var draft = { min: 30, guests: 2, level: "ok", seats: 4, sendGuests: 2 };
 
-  // ---------- 小道具 ----------
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function hhmm(ms) { var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
@@ -175,7 +202,14 @@
   function uid() { return Math.random().toString(36).slice(2, 9); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
 
-  function emptyDoc(id) { return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [] }; }
+  function makeTables(n) {
+    var a = [];
+    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, guests: 0, startAt: 0, min: 60 });
+    return a;
+  }
+  function emptyDoc(id) {
+    return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60 };
+  }
 
   // ---------- 通信 ----------
   function getRow(key) {
@@ -192,7 +226,19 @@
     }).then(function (r) { return r.ok; }).catch(function () { return false; });
   }
 
-  // 自店の書き込みは「読んでから足す」ことで、2人が同時に触っても消し合わないようにする
+  // 卓の在席から「何時に何名出る」を自動で作る（手入力の逆算をなくすのが狙い）
+  function tableLeaving(doc) {
+    return (doc.tables || []).filter(function (t) { return t.guests > 0 && t.startAt; })
+      .map(function (t) {
+        return { id: "tbl-" + t.id, t: t.startAt + (t.min || 60) * 60000, guests: t.guests, memo: t.label, auto: true, fromTable: t.id, at: Date.now() };
+      });
+  }
+  function syncLeaving(doc) {
+    var manual = (doc.leaving || []).filter(function (e) { return !e.fromTable; });
+    doc.leaving = manual.concat(tableLeaving(doc));
+  }
+
+  // 自店の書き込みは「読んでから足す」ことで、2人が同時に触っても消し合わない
   function updateMine(fn) {
     if (!me) return Promise.resolve(false);
     var key = "board:" + me;
@@ -201,7 +247,10 @@
       doc.name = storeOf(me).name;
       doc.leaving = doc.leaving || [];
       doc.sending = doc.sending || [];
+      if (!doc.tables) doc.tables = makeTables(6);
+      if (!doc.setMin) doc.setMin = 60;
       fn(doc);
+      syncLeaving(doc);
       doc.at = Date.now();
       doc.leaving = prune(doc.leaving);
       doc.sending = (doc.sending || []).filter(function (s) { return Date.now() - s.at < 2 * 3600e3; }).slice(-20);
@@ -210,18 +259,16 @@
       return putRow(key, doc);
     });
   }
-  // 予定時刻から30分過ぎたものは自動で消す
+  // 予定から30分過ぎた手入力分は自動で消す。卓由来は退店を押すまで残す。
   function prune(list) {
     var now = Date.now();
-    return (list || []).filter(function (e) { return now - e.t < 30 * 60e3; })
-      .sort(function (a, b) { return a.t - b.t; }).slice(0, 40);
+    return (list || []).filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
+      .sort(function (a, b) { return a.t - b.t; }).slice(0, 60);
   }
 
-  // つけ回しツールの共有データ → 退店予定に変換
   function fromShare(share) {
     if (!share || !share.tables) return null;
-    var now = Date.now();
-    var out = [], free = 0, freeSeats = 0;
+    var now = Date.now(), out = [], free = 0, freeSeats = 0;
     share.tables.forEach(function (t) {
       if (!t.busy) { free++; freeSeats += (t.cap || 0); return; }
       if (t.preparing || t.remainMin == null) return;
@@ -234,11 +281,8 @@
     var jobs = [];
     STORES.forEach(function (s) {
       jobs.push(getRow("board:" + s.id).then(function (d) { if (d) data[s.id] = d; else if (!data[s.id]) data[s.id] = emptyDoc(s.id); }));
-      // つけ回しツールを使っている店は自動で取り込む
-      jobs.push(
-        getRow(s.shareKeys[0]).then(function (d) { return d || getRow(s.shareKeys[1]); })
-          .then(function (d) { autoLeaving[s.id] = fromShare(d); })
-      );
+      jobs.push(getRow(s.shareKeys[0]).then(function (d) { return d || getRow(s.shareKeys[1]); })
+        .then(function (d) { autoLeaving[s.id] = fromShare(d); }));
     });
     return Promise.all(jobs).then(function () { lastErr = ""; render(); })
       .catch(function (e) { lastErr = String(e && e.message || e); render(); });
@@ -248,24 +292,96 @@
   function render() {
     $("clock").textContent = hhmm(Date.now()) + " 現在";
     $("meBtn").textContent = me ? ("この端末: " + storeOf(me).name) : "▶ 店舗を選ぶ";
-    var g = $("grid"); g.innerHTML = "";
-    var order = me ? [me, other(me)] : ["vivace", "anela"];
-    order.forEach(function (id) { g.appendChild(panelFor(id)); });
+    $("mine").innerHTML = me ? myPanel() : "";
+    $("theirs").innerHTML = theirPanel(me ? other(me) : "vivace") + (me ? "" : theirPanel("anela"));
     renderAlerts();
     $("err").innerHTML = lastErr ? '<div class="err">通信エラー: ' + esc(lastErr) + '<br>電波を確認してください。表示は最後に取れた内容です。</div>' : "";
   }
 
-  function panelFor(id) {
-    var st = storeOf(id), doc = data[id] || emptyDoc(id), auto = autoLeaving[id];
-    var el = document.createElement("div");
-    el.className = "store" + (id === me ? " mine" : "");
-    var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
-    var mins = updAt ? Math.floor((Date.now() - updAt) / 60000) : null;
-    var freshHtml = updAt
-      ? (mins >= 20 ? '<span class="stale">⚠ ' + mins + '分 更新なし</span>' : '<span class="fresh">' + (mins <= 0 ? "たった今" : mins + "分前") + '</span>')
-      : '<span class="fresh">未共有</span>';
+  function freshHtml(updAt) {
+    if (!updAt) return '<span class="fresh">未共有</span>';
+    var m = Math.floor((Date.now() - updAt) / 60000);
+    return m >= 20 ? '<span class="stale">⚠ ' + m + '分 更新なし</span>'
+      : '<span class="fresh">' + (m <= 0 ? "たった今" : m + "分前") + '</span>';
+  }
 
-    // 受入状況（手動が優先、無ければツールの空き卓から）
+  // 自店パネル: 卓をタップ → 人数タップ、で入店。退店予定は自動計算。
+  function myPanel() {
+    var doc = data[me] || emptyDoc(me), st = storeOf(me);
+    var auto = autoLeaving[me];
+    // つけ回しツールを使っている店は、卓の手入力は不要
+    if (auto) return theirPanel(me, true);
+
+    var tables = doc.tables || makeTables(6);
+    var now = Date.now();
+    var h = '<div class="sec mine"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
+      + '<span>' + freshHtml(doc.at) + '</span></div>'
+      + '<div class="lv-title">卓をタップ → 人数をタップ だけでOK（退店予定は自動計算）</div><div class="tgrid">';
+    tables.forEach(function (t) {
+      var busy = t.guests > 0 && t.startAt;
+      if (!busy) {
+        h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div><div class="empty">空席 ・ タップで入店</div></button>';
+      } else {
+        var end = t.startAt + (t.min || 60) * 60000;
+        var rem = Math.ceil((end - now) / 60000);
+        var cls = rem <= 0 ? "over" : rem <= 15 ? "soon" : "";
+        h += '<button class="tcard busy ' + cls + '" data-tap="' + t.id + '">'
+          + '<div class="tl">' + esc(t.label) + '</div>'
+          + '<div class="big">' + t.guests + '名</div>'
+          + '<div class="out">' + hhmm(end) + ' 退店予定</div>'
+          + '<div class="small">' + (rem <= 0 ? "時間超過 " + (-rem) + "分" : "あと" + rem + "分") + '</div>'
+          + '</button>';
+      }
+    });
+    h += '</div>';
+
+    // タップした卓の操作パネル（シートを開かずその場で）
+    if (openTid) {
+      var t2 = tables.filter(function (x) { return x.id === openTid; })[0];
+      if (t2) {
+        var busy2 = t2.guests > 0 && t2.startAt;
+        h += '<div class="expand">';
+        if (!busy2) {
+          h += '<div class="lbl2">' + esc(t2.label) + ' に何名入りましたか？</div><div class="nums">';
+          [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (n) { h += '<button data-in="' + t2.id + '|' + n + '">' + n + '</button>'; });
+          h += '</div><div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
+        } else {
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
+            + '<div class="acts">'
+            + '<button class="a-ext" data-ext="' + t2.id + '|30">＋30分</button>'
+            + '<button class="a-ext" data-ext="' + t2.id + '|60">＋60分</button>'
+            + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
+            + '</div>'
+            + '<div class="acts" style="margin-top:8px">'
+            + '<button class="a-cancel" data-close-exp>閉じる</button>'
+            + '</div>';
+        }
+        h += '</div>';
+      }
+    }
+
+    // 手入力の退店予定（イレギュラー用）だけ別枠で出す
+    var manual = (doc.leaving || []).filter(function (e) { return !e.fromTable; });
+    if (manual.length) {
+      h += '<div class="lv-title">手入力の退店予定</div>';
+      manual.sort(function (a, b) { return a.t - b.t; }).forEach(function (e) {
+        var diff = Math.round((e.t - now) / 60000);
+        h += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
+          + '<span class="t">' + hhmm(e.t) + '</span><span class="g">' + (e.guests || 0) + '名</span>'
+          + (e.memo ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + '</span>' : '')
+          + '<span class="in">' + (diff <= 0 ? "出てるはず" : "あと" + diff + "分") + '</span>'
+          + '<button class="del" data-del="' + e.id + '">×</button></div>';
+      });
+    }
+    h += '<button class="link" id="addManual">＋ 卓を使わずに退店予定を直接入れる</button>';
+    h += '</div>';
+    return h;
+  }
+
+  // 相手店パネル（読むだけ）。自店がツール連携済みの場合もこれを使う。
+  function theirPanel(id, isMine) {
+    var doc = data[id] || emptyDoc(id), auto = autoLeaving[id], st = storeOf(id), now = Date.now();
+    var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
     var acc = doc.accept, accHtml;
     if (acc && Date.now() - acc.at < 3 * 3600e3) {
       var cls = acc.level === "ok" ? "a-ok" : acc.level === "soon" ? "a-soon" : "a-full";
@@ -273,35 +389,33 @@
       accHtml = '<div class="accept ' + cls + '"><span class="big">' + txt + '</span>'
         + (acc.level !== "full" ? '<span class="small">' + acc.seats + '名まで</span>' : '') + '</div>';
     } else if (auto) {
-      var c2 = auto.free > 0 ? "a-ok" : "a-full";
-      accHtml = '<div class="accept ' + c2 + '"><span class="big">' + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span>'
-        + '<span class="small">つけ回しツールから自動</span></div>';
+      accHtml = '<div class="accept ' + (auto.free > 0 ? "a-ok" : "a-full") + '"><span class="big">'
+        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span><span class="small">つけ回しツールから自動</span></div>';
     } else {
-      accHtml = '<div class="accept a-none">受入状況 未入力</div>';
+      // 卓の手入力から空き数を出す
+      var tb = doc.tables || [];
+      var freeN = tb.filter(function (t) { return !(t.guests > 0 && t.startAt); }).length;
+      accHtml = tb.length
+        ? '<div class="accept ' + (freeN > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (freeN > 0 ? "◯ 空き " + freeN + "卓" : "✕ 満席") + '</span><span class="small">卓の入力から自動</span></div>'
+        : '<div class="accept a-none">受入状況 未入力</div>';
     }
 
-    var list = prune((doc.leaving || []).concat(auto ? auto.leaving : []));
-    var lvHtml = "";
-    if (!list.length) lvHtml = '<div class="empty">退店予定はまだありません</div>';
+    var list = ((doc.leaving || []).concat(auto ? auto.leaving : []))
+      .filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
+      .sort(function (a, b) { return a.t - b.t; });
+    var lvHtml = list.length ? "" : '<div class="empty">退店予定はまだありません</div>';
     list.forEach(function (e) {
-      var diff = Math.round((e.t - Date.now()) / 60000);
-      var cls = diff <= 0 ? "now" : diff <= 15 ? "soon" : "";
-      var inTxt = diff <= 0 ? "出てるはず" : "あと" + diff + "分";
-      lvHtml += '<div class="lv ' + cls + '">'
-        + '<span class="t">' + hhmm(e.t) + '</span>'
-        + '<span class="g">' + (e.guests || 0) + '名</span>'
+      var diff = Math.round((e.t - now) / 60000);
+      lvHtml += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
+        + '<span class="t">' + hhmm(e.t) + '</span><span class="g">' + (e.guests || 0) + '名</span>'
         + (e.auto ? '<span class="auto">自動</span>' : '')
-        + (e.memo && !e.auto ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + '</span>' : '')
-        + '<span class="in">' + inTxt + '</span>'
-        + (!e.auto && id === me ? '<button class="del" data-del="' + e.id + '">×</button>' : '')
-        + '</div>';
+        + (e.memo && !e.fromTable ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + '</span>' : '')
+        + '<span class="in">' + (diff <= 0 ? "出てるはず" : "あと" + diff + "分") + '</span></div>';
     });
 
-    el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline">'
-      + '<span class="sname">' + esc(st.name) + '</span>' + freshHtml + '</div>'
-      + accHtml
-      + '<div class="lv-title">これから出るお客様</div>' + lvHtml;
-    return el;
+    return '<div class="sec' + (isMine ? " mine" : "") + '"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
+      + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml
+      + '<div class="lv-title">これから出るお客様</div>' + lvHtml + '</div>';
   }
 
   function renderAlerts() {
@@ -335,60 +449,89 @@
       host.appendChild(b);
     });
   }
-
   function drawAdd() {
-    chipRow($("minChips"), [
-      { l: "今すぐ", v: 0 }, { l: "15分後", v: 15 }, { l: "30分後", v: 30 },
-      { l: "45分後", v: 45 }, { l: "60分後", v: 60 }, { l: "90分後", v: 90 }
-    ], draft.min, function (v) { draft.min = v; $("timeInput").value = ""; drawAdd(); });
-    chipRow($("guestChips"), [1, 2, 3, 4, 5, 6, 7, 8, 10].map(function (n) { return { l: n + "名", v: n }; }),
-      draft.guests, function (v) { draft.guests = v; drawAdd(); });
+    chipRow($("minChips"), [{ l: "今すぐ", v: 0 }, { l: "15分後", v: 15 }, { l: "30分後", v: 30 }, { l: "45分後", v: 45 }, { l: "60分後", v: 60 }, { l: "90分後", v: 90 }],
+      draft.min, function (v) { draft.min = v; $("timeInput").value = ""; drawAdd(); });
+    chipRow($("guestChips"), [1, 2, 3, 4, 5, 6, 7, 8, 10].map(function (n) { return { l: n + "名", v: n }; }), draft.guests, function (v) { draft.guests = v; drawAdd(); });
   }
   function drawAccept() {
-    chipRow($("lvChips"), [
-      { l: "◯ 今すぐOK", v: "ok" }, { l: "△ もう少し", v: "soon" }, { l: "✕ 満席", v: "full" }
-    ], draft.level, function (v) { draft.level = v; drawAccept(); }, true);
-    chipRow($("seatChips"), [1, 2, 3, 4, 5, 6, 8, 10, 12].map(function (n) { return { l: n + "名", v: n }; }),
-      draft.seats, function (v) { draft.seats = v; drawAccept(); });
+    chipRow($("lvChips"), [{ l: "◯ 今すぐOK", v: "ok" }, { l: "△ もう少し", v: "soon" }, { l: "✕ 満席", v: "full" }], draft.level, function (v) { draft.level = v; drawAccept(); }, true);
+    chipRow($("seatChips"), [1, 2, 3, 4, 5, 6, 8, 10, 12].map(function (n) { return { l: n + "名", v: n }; }), draft.seats, function (v) { draft.seats = v; drawAccept(); });
   }
   function drawSend() {
-    chipRow($("sendGuestChips"), [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { l: n + "名", v: n }; }),
-      draft.sendGuests, function (v) { draft.sendGuests = v; drawSend(); });
+    chipRow($("sendGuestChips"), [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { l: n + "名", v: n }; }), draft.sendGuests, function (v) { draft.sendGuests = v; drawSend(); });
   }
   function drawMe() {
     chipRow($("meChips"), STORES.map(function (s) { return { l: s.name, v: s.id }; }), me, function (v) {
       me = v; try { localStorage.setItem(LS_ME, v); } catch (e) {}
-      closeSheets(); render(); poll();
+      drawMe(); render(); poll();
     }, true);
+    var doc = (me && data[me]) || null;
+    var n = doc && doc.tables ? doc.tables.length : 6;
+    chipRow($("tcountChips"), [4, 5, 6, 7, 8, 10, 12].map(function (v) { return { l: v + "卓", v: v }; }), n, function (v) {
+      updateMine(function (d) {
+        var old = d.tables || [];
+        var next = makeTables(v);
+        next.forEach(function (t, i) { if (old[i]) { t.guests = old[i].guests; t.startAt = old[i].startAt; t.min = old[i].min; } });
+        d.tables = next;
+      }).then(drawMe);
+    });
+    var sm = doc && doc.setMin ? doc.setMin : 60;
+    chipRow($("setminChips"), [50, 60, 90].map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
+      updateMine(function (d) { d.setMin = v; }).then(drawMe);
+    });
   }
+  function needMe() { if (me) return true; drawMe(); openSheet("sheetMe"); return false; }
 
-  function needMe() {
-    if (me) return true;
-    openSheet("sheetMe"); drawMe(); return false;
-  }
-
-  // ---------- 起動 ----------
   try { me = localStorage.getItem(LS_ME); } catch (e) {}
   if (!STORES.some(function (s) { return s.id === me; })) me = null;
 
   $("meBtn").onclick = function () { drawMe(); openSheet("sheetMe"); };
-  $("addBtn").onclick = function () { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); };
   $("acceptBtn").onclick = function () { if (!needMe()) return; drawAccept(); openSheet("sheetAccept"); };
   $("sendBtn").onclick = function () { if (!needMe()) return; drawSend(); openSheet("sheetSend"); };
 
   document.addEventListener("click", function (ev) {
-    var t = ev.target;
+    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
+    if (t.id === "addManual") { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); return; }
     if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
-    var del = t.getAttribute && t.getAttribute("data-del");
-    if (del) {
-      updateMine(function (doc) { doc.leaving = (doc.leaving || []).filter(function (e) { return e.id !== del; }); });
+    if (t.hasAttribute && t.hasAttribute("data-close-exp")) { openTid = null; render(); return; }
+
+    var tap = t.getAttribute && t.getAttribute("data-tap");
+    if (tap) { openTid = (openTid === tap ? null : tap); render(); return; }
+
+    var inn = t.getAttribute && t.getAttribute("data-in");
+    if (inn) {
+      var p = inn.split("|"), tid = p[0], g = +p[1];
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) {
+          return x.id === tid ? { ...x, guests: g, startAt: Date.now(), min: d.setMin || 60 } : x;
+        });
+      });
+      openTid = null;
       return;
     }
+    var ext = t.getAttribute && t.getAttribute("data-ext");
+    if (ext) {
+      var q = ext.split("|"), tid2 = q[0], add = +q[1];
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, min: (x.min || 60) + add } : x; });
+      });
+      return;
+    }
+    var out = t.getAttribute && t.getAttribute("data-out");
+    if (out) {
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) { return x.id === out ? { ...x, guests: 0, startAt: 0, min: d.setMin || 60 } : x; });
+      });
+      openTid = null;
+      return;
+    }
+    var del = t.getAttribute && t.getAttribute("data-del");
+    if (del) { updateMine(function (d) { d.leaving = (d.leaving || []).filter(function (e) { return e.id !== del; }); }); return; }
     var ack = t.getAttribute && t.getAttribute("data-ack");
     if (ack) {
-      var from = data[other(me)];
-      var newest = +ack;
+      var from = data[other(me)], newest = +ack;
       if (from && from.sending) from.sending.forEach(function (s2) { if (s2.to === me && s2.at > newest) newest = s2.at; });
       try { localStorage.setItem(LS_SEEN, String(newest)); } catch (e) {}
       renderAlerts(); return;
@@ -396,47 +539,35 @@
   });
 
   $("addGo").onclick = function () {
-    var when;
-    var tv = $("timeInput").value;
+    var when, tv = $("timeInput").value;
     if (tv) {
       var p = tv.split(":"), d = new Date();
       d.setHours(+p[0], +p[1], 0, 0);
-      // 深夜営業: 入力時刻が現在より6時間以上前なら翌日扱い
       if (d.getTime() < Date.now() - 6 * 3600e3) d.setDate(d.getDate() + 1);
       when = d.getTime();
-    } else {
-      when = Date.now() + draft.min * 60e3;
-    }
-    var memo = $("memoInput").value.trim();
-    var g = draft.guests;
+    } else { when = Date.now() + draft.min * 60e3; }
+    var memo = $("memoInput").value.trim(), g = draft.guests;
     $("addGo").disabled = true;
-    updateMine(function (doc) {
-      doc.leaving.push({ id: uid(), t: when, guests: g, memo: memo, at: Date.now() });
-    }).then(function () {
-      $("addGo").disabled = false; $("memoInput").value = ""; $("timeInput").value = ""; closeSheets();
-    });
+    updateMine(function (doc) { doc.leaving.push({ id: uid(), t: when, guests: g, memo: memo, at: Date.now() }); })
+      .then(function () { $("addGo").disabled = false; $("memoInput").value = ""; $("timeInput").value = ""; closeSheets(); });
   };
-
   $("acceptGo").onclick = function () {
     $("acceptGo").disabled = true;
     updateMine(function (doc) { doc.accept = { level: draft.level, seats: draft.seats, at: Date.now() }; })
       .then(function () { $("acceptGo").disabled = false; closeSheets(); });
   };
-
   $("sendGo").onclick = function () {
     var memo = $("sendMemo").value.trim(), g = draft.sendGuests;
     $("sendGo").disabled = true;
-    updateMine(function (doc) {
-      doc.sending.push({ id: uid(), to: other(me), guests: g, memo: memo, at: Date.now() });
-    }).then(function () { $("sendGo").disabled = false; $("sendMemo").value = ""; closeSheets(); });
+    updateMine(function (doc) { doc.sending.push({ id: uid(), to: other(me), guests: g, memo: memo, at: Date.now() }); })
+      .then(function () { $("sendGo").disabled = false; $("sendMemo").value = ""; closeSheets(); });
   };
 
   render();
-  // 初めて開いたときは、どちらのお店かを最初に選んでもらう
   if (!me) { drawMe(); openSheet("sheetMe"); }
   poll();
   setInterval(poll, 10000);
-  setInterval(render, 30000); // 「あと○分」を進める
+  setInterval(render, 30000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
 })();
 </script>
