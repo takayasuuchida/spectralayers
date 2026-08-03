@@ -26,10 +26,13 @@
   @media (min-width:520px){ .tgrid { grid-template-columns:repeat(3,1fr); } }
   .tcard { background:#0d0d10; border:1.5px dashed #2f2f38; border-radius:14px; padding:10px; text-align:left; width:100%; }
   .tcard.busy { border-style:solid; border-color:#c9a64e; background:#15130d; }
+  .tcard.prep { border-style:dashed; border-color:#3fb6b0; background:rgba(63,182,176,.07); }
   .tcard.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
   .tcard.over { border-color:#a15050; background:rgba(224,85,85,.1); }
   .tcard .tl { font-family:Georgia,serif; font-size:15px; font-weight:bold; color:#e8e8ec; }
   .tcard.busy .tl { color:#c9a64e; }
+  .tcard.prep .tl { color:#3fb6b0; }
+  .tcard .wait { font-size:12px; font-weight:bold; color:#3fb6b0; }
   .tcard .empty { font-size:11px; color:#4a4a52; margin-top:4px; }
   .tcard .big { font-size:20px; font-weight:bold; color:#fff; margin-top:2px; }
   .tcard .small { font-size:10px; color:#8a8a92; margin-top:2px; }
@@ -49,6 +52,7 @@
   .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; }
   .a-out { background:#7a2222; color:#fff; }
   .a-cancel { background:#1c1c22; color:#888; }
+  .a-start { width:100%; background:#3fb6b0; color:#04211f; border:none; border-radius:12px; padding:17px; font-size:17px; font-weight:bold; margin-top:4px; }
 
   .lv-title { font-size:10px; color:#6a6a72; margin:12px 0 4px; }
   .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
@@ -216,9 +220,18 @@
     if (d.getTime() - Date.now() > 6 * 3600e3) d.setDate(d.getDate() - 1);
     return d.getTime();
   }
+  // 時刻はすべて5分単位に丸める（ボードは5分刻みで見るため）
+  function round5(ms) { return Math.round(ms / 300000) * 300000; }
+  // セット時間は5分刻み。過去に入れた5分刻みでない値も消さずに残す。
+  function minOptions(cur) {
+    var out = "", m;
+    for (m = 30; m <= 180; m += 5) out += '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '分</option>';
+    if (cur && (cur < 30 || cur > 180 || cur % 5)) out = '<option value="' + cur + '" selected>' + cur + '分</option>' + out;
+    return out;
+  }
   function makeTables(n) {
     var a = [];
-    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, guests: 0, startAt: 0, min: 60 });
+    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, guests: 0, startAt: 0, planAt: 0, min: 60 });
     return a;
   }
   function emptyDoc(id) {
@@ -330,10 +343,18 @@
     var now = Date.now();
     var h = '<div class="sec mine"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
       + '<span>' + freshHtml(doc.at) + '</span></div>'
-      + '<div class="lv-title">卓をタップ → 人数をタップ だけでOK（退店予定は自動計算）</div><div class="tgrid">';
+      + '<div class="lv-title">卓をタップ → 人数をタップ → ▶スタート（退店予定は自動計算）</div><div class="tgrid">';
     tables.forEach(function (t) {
       var busy = t.guests > 0 && t.startAt;
-      if (!busy) {
+      var prep = t.guests > 0 && !t.startAt;
+      if (prep) {
+        h += '<button class="tcard prep" data-tap="' + t.id + '">'
+          + '<div class="tl">' + esc(t.label) + '</div>'
+          + '<div class="big">' + t.guests + '名</div>'
+          + '<div class="small">' + hhmm(t.planAt || Date.now()) + ' 入店 ・ ' + (t.min || 60) + '分</div>'
+          + '<div class="wait">▶ スタート待ち</div>'
+          + '</button>';
+      } else if (!busy) {
         h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div><div class="empty">空席 ・ タップで入店</div></button>';
       } else {
         var end = t.startAt + (t.min || 60) * 60000;
@@ -355,16 +376,32 @@
       var t2 = tables.filter(function (x) { return x.id === openTid; })[0];
       if (t2) {
         var busy2 = t2.guests > 0 && t2.startAt;
+        var prep2 = t2.guests > 0 && !t2.startAt;
         h += '<div class="expand">';
-        if (!busy2) {
+        if (prep2) {
+          // 人数だけ入れた状態。▶スタートを押すまでタイマーは動かず、相手店にも流さない。
+          var pAt = t2.planAt || round5(Date.now());
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名）・ ▶スタートで計り始めます</div>'
+            + '<div class="erow">'
+            + '<label>セット</label><select id="prepSetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
+            + '<label>入店</label><input type="time" id="prepInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(pAt) + '">'
+            + '<button class="now" data-prep-now="' + t2.id + '">今にする</button>'
+            + '</div>'
+            + '<button class="a-start" data-start="' + t2.id + '">▶ スタート（' + hhmm(pAt) + ' → ' + hhmm(pAt + (t2.min || 60) * 60000) + '）</button>'
+            + '<div class="lv-title">人数を直す</div><div class="nums">';
+          [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (n) { h += '<button data-in="' + t2.id + '|' + n + '">' + n + '</button>'; });
+          h += '</div>'
+            + '<div class="acts" style="margin-top:8px">'
+            + '<button class="a-out" data-out="' + t2.id + '">取り消す</button>'
+            + '<button class="a-cancel" data-close-exp>閉じる</button>'
+            + '</div>';
+        } else if (!busy2) {
           var curMin = openMin == null ? (doc.setMin || 60) : openMin;
-          var curAt = openInAt == null ? Date.now() : openInAt;
+          var curAt = openInAt == null ? round5(Date.now()) : openInAt;
           h += '<div class="lbl2">' + esc(t2.label) + ' に何名入りましたか？</div>'
             + '<div class="erow">'
-            + '<label>セット</label><select id="expSetMin">'
-            + [50, 60, 90, 120].map(function (m) { return '<option value="' + m + '"' + (m === curMin ? ' selected' : '') + '>' + m + '分</option>'; }).join("")
-            + '</select>'
-            + '<label>入店</label><input type="time" id="expInAt" value="' + hhmm(curAt) + '">'
+            + '<label>セット</label><select id="expSetMin">' + minOptions(curMin) + '</select>'
+            + '<label>入店</label><input type="time" id="expInAt" step="300" value="' + hhmm(curAt) + '">'
             + '<button class="now" id="expNow">今にする</button>'
             + '</div>'
             + '<div class="nums">';
@@ -373,17 +410,16 @@
         } else {
           h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
             + '<div class="erow">'
-            + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">'
-            + [50, 60, 90, 120].map(function (m) { return '<option value="' + m + '"' + (m === (t2.min || 60) ? ' selected' : '') + '>' + m + '分</option>'; }).join("")
-            + '</select>'
-            + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" value="' + hhmm(t2.startAt) + '">'
+            + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
+            + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(t2.startAt) + '">'
             + '</div>'
             + '<div class="acts">'
+            + '<button class="a-ext" data-ext="' + t2.id + '|5">延長 ＋5分</button>'
             + '<button class="a-ext" data-ext="' + t2.id + '|30">延長 ＋30分</button>'
             + '<button class="a-ext" data-ext="' + t2.id + '|60">延長 ＋60分</button>'
-            + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
             + '</div>'
             + '<div class="acts" style="margin-top:8px">'
+            + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
             + '<button class="a-cancel" data-close-exp>閉じる</button>'
             + '</div>';
         }
@@ -425,7 +461,7 @@
     } else {
       // 卓の手入力から空き数を出す
       var tb = doc.tables || [];
-      var freeN = tb.filter(function (t) { return !(t.guests > 0 && t.startAt); }).length;
+      var freeN = tb.filter(function (t) { return !(t.guests > 0); }).length;
       accHtml = tb.length
         ? '<div class="accept ' + (freeN > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (freeN > 0 ? "◯ 空き " + freeN + "卓" : "✕ 満席") + '</span><span class="small">卓の入力から自動</span></div>'
         : '<div class="accept a-none">受入状況 未入力</div>';
@@ -503,12 +539,12 @@
       updateMine(function (d) {
         var old = d.tables || [];
         var next = makeTables(v);
-        next.forEach(function (t, i) { if (old[i]) { t.guests = old[i].guests; t.startAt = old[i].startAt; t.min = old[i].min; } });
+        next.forEach(function (t, i) { if (old[i]) { t.guests = old[i].guests; t.startAt = old[i].startAt; t.planAt = old[i].planAt || 0; t.min = old[i].min; } });
         d.tables = next;
       }).then(drawMe);
     });
     var sm = doc && doc.setMin ? doc.setMin : 60;
-    chipRow($("setminChips"), [50, 60, 90].map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
+    chipRow($("setminChips"), [40, 45, 50, 55, 60, 70, 80, 90, 120].map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
       updateMine(function (d) { d.setMin = v; }).then(drawMe);
     });
   }
@@ -522,13 +558,20 @@
   $("sendBtn").onclick = function () { if (!needMe()) return; drawSend(); openSheet("sheetSend"); };
 
   document.addEventListener("click", function (ev) {
-    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
+    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
     if (t.id === "addManual") { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); return; }
     if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
     if (t.hasAttribute && t.hasAttribute("data-close-exp")) { openTid = null; render(); return; }
 
-    if (t.id === "expNow") { openInAt = Date.now(); render(); return; }
+    if (t.id === "expNow") { openInAt = round5(Date.now()); render(); return; }
+    var pnow = t.getAttribute && t.getAttribute("data-prep-now");
+    if (pnow) {
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) { return x.id === pnow ? { ...x, planAt: round5(Date.now()) } : x; });
+      });
+      return;
+    }
     var tap = t.getAttribute && t.getAttribute("data-tap");
     if (tap) {
       openTid = (openTid === tap ? null : tap);
@@ -536,18 +579,30 @@
       render(); return;
     }
 
+    // 人数を入れた時点では「準備中」。タイマーは▶スタートを押すまで動かさない。
     var inn = t.getAttribute && t.getAttribute("data-in");
     if (inn) {
       var p = inn.split("|"), tid = p[0], g = +p[1];
-      var selEl = $("expSetMin"), atEl = $("expInAt");
+      var selEl = $("expSetMin") || $("prepSetMin"), atEl = $("expInAt") || $("prepInAt");
       var useMin = selEl ? +selEl.value : (openMin || 60);
-      var useAt = atEl && atEl.value ? timeToMs(atEl.value) : (openInAt || Date.now());
+      var useAt = atEl && atEl.value ? timeToMs(atEl.value) : (openInAt || round5(Date.now()));
       updateMine(function (d) {
         d.tables = (d.tables || []).map(function (x) {
-          return x.id === tid ? { ...x, guests: g, startAt: useAt, min: useMin } : x;
+          return x.id === tid ? { ...x, guests: g, startAt: 0, planAt: useAt, min: useMin } : x;
         });
       });
-      openTid = null; openMin = null; openInAt = null;
+      openMin = null; openInAt = null;   // openTid は開いたまま → そのまま▶スタートを押せる
+      return;
+    }
+    // ▶スタート: この時点から計り始め、相手店の「これから出るお客様」に載る
+    var stt = t.getAttribute && t.getAttribute("data-start");
+    if (stt) {
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) {
+          return x.id === stt ? { ...x, startAt: x.planAt || round5(Date.now()), planAt: 0 } : x;
+        });
+      });
+      openTid = null;
       return;
     }
     var ext = t.getAttribute && t.getAttribute("data-ext");
@@ -561,7 +616,7 @@
     var out = t.getAttribute && t.getAttribute("data-out");
     if (out) {
       updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) { return x.id === out ? { ...x, guests: 0, startAt: 0, min: d.setMin || 60 } : x; });
+        d.tables = (d.tables || []).map(function (x) { return x.id === out ? { ...x, guests: 0, startAt: 0, planAt: 0, min: d.setMin || 60 } : x; });
       });
       openTid = null;
       return;
@@ -582,14 +637,24 @@
     var el = ev.target;
     if (!el || !el.id) return;
     if (el.id === "expSetMin") { openMin = +el.value; return; }      // 入店前の下書き
-    if (el.id === "expInAt") { if (el.value) openInAt = timeToMs(el.value); return; }
+    if (el.id === "expInAt") { if (el.value) openInAt = round5(timeToMs(el.value)); return; }
+    if (el.id === "prepSetMin") {                                     // 準備中のセット時間
+      var ptid = el.getAttribute("data-tid"), pv = +el.value;
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === ptid ? { ...x, min: pv } : x; }); });
+      return;
+    }
+    if (el.id === "prepInAt") {                                       // 準備中の入店時刻
+      var ptid2 = el.getAttribute("data-tid"), pat = round5(timeToMs(el.value));
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === ptid2 ? { ...x, planAt: pat } : x; }); });
+      return;
+    }
     if (el.id === "busySetMin") {                                     // 接客中のセット時間を変更
       var tid = el.getAttribute("data-tid"), v = +el.value;
       updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid ? { ...x, min: v } : x; }); });
       return;
     }
     if (el.id === "busyInAt") {                                       // 入店時刻の打ち間違いを直す
-      var tid2 = el.getAttribute("data-tid"), at = timeToMs(el.value);
+      var tid2 = el.getAttribute("data-tid"), at = round5(timeToMs(el.value));
       updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, startAt: at } : x; }); });
       return;
     }
