@@ -9,8 +9,9 @@
 1. **本拠地URL: https://takayasuuchida.github.io/spectralayers/ （GitHub Pages・2026-07-25開通）**
    - 更新手順: `npm run build:standalone` → `dist-standalone/index.html` を repo `takayasuuchida/spectralayers` の main に配置して push（git proxy 経由。過去の内容は履歴保持、force push 禁止）
    - このURLは恒久固定・ログイン不要・localStorage永続。クラウド金庫と外用ビューはここでのみ動作する（Artifact は CSP で外部通信不可）
-   - リポジトリは Public。main に置くのは配信物のみ = `index.html`（アプリ本体）+ `manual.html`（使い方ガイド）+ `.nojekyll` + `.github/workflows/pages.yml`。ソースは claude/* ブランチ
+   - リポジトリは Public。main に置くのは配信物のみ = `index.html`（アプリ本体）+ `manual.html`（使い方ガイド）+ `board.html`（振りっこボード）+ `board-manual.html`（ボードの使い方ガイド）+ `.nojekyll` + `.github/workflows/pages.yml`。ソースは claude/* ブランチ
    - **使い方ガイド: https://takayasuuchida.github.io/spectralayers/manual.html** — 初心者向け全機能説明書（単体HTML）。アプリの設定タブ先頭「📖 使い方ガイド」からも開ける。機能を足したらこのページも更新すること
+   - **振りっこボード: https://takayasuuchida.github.io/spectralayers/board.html** — 2店舗(vivace ⇄ ANELA)で卓状況と退店予定を共有する単体HTML。ANELA は本体アプリを使わずこれだけ使う。説明書は `board-manual.html`（ボードの下部リンクと manual.html 末尾から辿れる）。ボードを直したらこの説明書も更新すること
 2. **旧: Artifact 配布（廃止済み・2026-07-25に移転案内ページへ差し替え）。今後アプリ本体を Artifact に公開しない。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
    - 手順: `npm run build:standalone` → `dist-standalone/index.html` から `<style>` と `<script type="module">` を抽出して fragment 化（doctype/html/head/body を除去、`<title>` + `html,body{margin:0;padding:0;background:#000}` を付与）→ Artifact ツールで公開
    - **既存 Artifact URL**: https://claude.ai/code/artifact/365e61fe-c617-4ab0-83d1-ab0c1bce2e18

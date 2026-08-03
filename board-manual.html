@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🔁 振りっこボード 使い方ガイド</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-text-size-adjust: 100%; }
+  body { background: #0a0a0c; color: #e8e8ec; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; line-height: 1.9; padding-bottom: 80px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+  header { border-bottom: 1px solid #1c1c22; padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px 20px; text-align: center; }
+  header .brand { font-family: Georgia, serif; letter-spacing: .2em; color: #c9a64e; font-size: 20px; font-weight: bold; }
+  header .sub { color: #7a7a82; font-size: 12px; margin-top: 6px; }
+  a.applink { display: block; background: #c9a64e; color: #000; text-decoration: none; font-weight: bold; text-align: center; border-radius: 14px; padding: 14px; margin: 18px 0 6px; font-size: 15px; }
+  a.applink2 { display: block; background: #22222a; color: #3fb6b0; border: 1px solid #3fb6b0; text-decoration: none; font-weight: bold; text-align: center; border-radius: 14px; padding: 13px; margin: 10px 0 6px; font-size: 14px; }
+  h2 { font-size: 18px; color: #c9a64e; border-left: 4px solid #c9a64e; padding-left: 10px; margin: 40px 0 14px; scroll-margin-top: 16px; }
+  h3 { font-size: 15px; color: #e8d29a; margin: 22px 0 8px; }
+  p, li { font-size: 14px; color: #c9c9d0; }
+  b { color: #fff; }
+  .card { background: #141418; border: 1px solid #22222a; border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+  .gold { color: #c9a64e; font-weight: bold; }
+  .teal { color: #3fb6b0; font-weight: bold; }
+  .warn { background: rgba(224,85,85,.08); border: 1px solid #a15050; border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: #f0b0b0; }
+  .tip { background: rgba(63,182,176,.07); border: 1px solid #2a6a66; border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: #a8e6e2; }
+  .btnlike { display: inline-block; background: #c9a64e; color: #000; border-radius: 8px; padding: 1px 8px; font-weight: bold; font-size: 13px; white-space: nowrap; }
+  .btnlike2 { display: inline-block; background: #22222a; color: #c9a64e; border: 1px solid #3a3a42; border-radius: 8px; padding: 1px 8px; font-weight: bold; font-size: 13px; white-space: nowrap; }
+  .btnstart { display: inline-block; background: #3fb6b0; color: #04211f; border-radius: 8px; padding: 1px 8px; font-weight: bold; font-size: 13px; white-space: nowrap; }
+  ol.steps { counter-reset: n; list-style: none; margin: 10px 0; }
+  ol.steps > li { position: relative; padding-left: 40px; margin-bottom: 14px; }
+  ol.steps > li::before { counter-increment: n; content: counter(n); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; background: #c9a64e; color: #000; font-weight: bold; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  ul li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { border: 1px solid #26262e; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #17171c; color: #c9a64e; white-space: nowrap; }
+  .toc { background: #101014; border: 1px solid #22222a; border-radius: 14px; padding: 14px 18px; margin: 20px 0; }
+  .toc a { color: #a8e6e2; text-decoration: none; font-size: 14px; display: block; padding: 5px 0; border-bottom: 1px dashed #1e1e26; }
+  .toc a:last-child { border-bottom: none; }
+  .faq-q { font-weight: bold; color: #e8d29a; margin-top: 16px; font-size: 14px; }
+  .faq-a { font-size: 13.5px; color: #c9c9d0; margin-top: 4px; }
+  footer { text-align: center; color: #55555c; font-size: 11px; margin-top: 50px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .flow span.step { background: #1c1c22; border: 1px solid #33333c; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: bold; color: #e8e8ec; }
+  .flow span.arr { color: #c9a64e; font-weight: bold; }
+
+  /* 実物そっくりの見本 */
+  .demo { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+  .tcard { background: #0d0d10; border: 1.5px dashed #2f2f38; border-radius: 14px; padding: 10px; }
+  .tcard.busy { border-style: solid; border-color: #c9a64e; background: #15130d; }
+  .tcard.prep { border-style: dashed; border-color: #3fb6b0; background: rgba(63,182,176,.07); }
+  .tcard.soon { border-style: solid; border-color: #e0a84a; background: rgba(224,168,74,.1); }
+  .tcard .tl { font-family: Georgia, serif; font-size: 15px; font-weight: bold; color: #e8e8ec; }
+  .tcard.busy .tl { color: #c9a64e; }
+  .tcard.prep .tl { color: #3fb6b0; }
+  .tcard .big { font-size: 20px; font-weight: bold; color: #fff; margin-top: 2px; }
+  .tcard .small { font-size: 10px; color: #8a8a92; margin-top: 2px; }
+  .tcard .out { font-size: 11px; font-weight: bold; color: #e8c07a; }
+  .tcard .wait { font-size: 12px; font-weight: bold; color: #3fb6b0; }
+  .tcard .emptyx { font-size: 11px; color: #4a4a52; margin-top: 4px; }
+  .cap { font-size: 11px; color: #7a7a82; text-align: center; margin-top: -4px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🔁 振りっこボード</div>
+  <div class="sub">使い方ガイド（vivace ⇄ ANELA・初心者向け）</div>
+</header>
+
+<div class="wrap">
+
+<a class="applink" href="https://takayasuuchida.github.io/spectralayers/board.html">▶ 振りっこボードを開く（タップ）</a>
+<p style="text-align:center;font-size:11px;color:#7a7a82;">↑ このURLをホーム画面に追加しておくと毎回1タップで開けます</p>
+<a class="applink2" href="https://takayasuuchida.github.io/spectralayers/manual.html">つけ回しツール（本体アプリ）の説明書はこちら</a>
+
+<div class="toc">
+  <a href="#s0">0. これは何をする画面？</a>
+  <a href="#s1">1. 最初の設定（1回だけ）</a>
+  <a href="#s2">2. 画面の見方</a>
+  <a href="#s3">3. 一晩の流れ（覚えるのはこれだけ）</a>
+  <a href="#s4">4. 卓に入店を入れる（3タップ）</a>
+  <a href="#s5">5. ▶スタートボタンの意味</a>
+  <a href="#s6">6. 卓の色でわかること</a>
+  <a href="#s7">7. 延長・退店・打ち間違いの直し方</a>
+  <a href="#s8">8. 相手のお店を見る</a>
+  <a href="#s9">9. 送客を伝える・受け取る</a>
+  <a href="#s10">10. 受入状況を手で知らせる</a>
+  <a href="#s11">11. 卓を使わずに退店予定だけ入れる</a>
+  <a href="#s12">12. vivace 側（つけ回しツール連携）</a>
+  <a href="#s13">13. 困ったときは（よくある質問）</a>
+</div>
+
+<h2 id="s0">0. これは何をする画面？</h2>
+<div class="card">
+  <p><b>2店舗（vivace と ANELA）の間で、お客様を振りっこするための共有画面です。</b></p>
+  <p style="margin-top:8px;">お互いに知りたいのは、つまるところこの2つだけです。</p>
+  <ul>
+    <li><b>今そっちは入れる？</b>（空いてる卓は何卓？）</li>
+    <li><b>何時何分に何名出る？</b>（そこを狙って送りたい）</li>
+  </ul>
+  <p style="margin-top:8px;">この2つが、両店の携帯に自動でリアルタイム表示されます。電話もLINEも要りません。</p>
+</div>
+<div class="tip">
+  <b>ANELA の方へ：</b>つけ回しツール（本体アプリ）を使う必要はありません。この振りっこボードだけ開いて、卓に人数を入れてもらえれば十分です。入力は <b>卓タップ → 人数タップ → ▶スタート</b> の3タップだけです。
+</div>
+<div class="tip">
+  お客様の名前・売上・お給料などは<b>いっさい相手店に送られません</b>。送られるのは「卓の人数」と「退店予定の時刻」だけです。
+</div>
+
+<h2 id="s1">1. 最初の設定（1回だけ）</h2>
+<p>初めて開くと、お店を選ぶ画面が出ます。</p>
+<ol class="steps">
+  <li><b>この端末はどちらのお店？</b> … 自分のお店をタップします（<span class="btnlike">vivace</span> か <span class="btnlike">ANELA</span>）。選んだお店として書き込みます。<b>相手のお店の状況は、どちらを選んでも見られます。</b></li>
+  <li><b>卓の数</b> … お店の卓数をタップ（4〜12卓）。あとから変えても、入っているお客様は消えません。</li>
+  <li><b>セット時間</b> … いつもの標準セット（例：60分）をタップ。ここで決めたものが、卓に入れる時の最初の値になります。1卓ずつ変えることもできます。</li>
+</ol>
+<p>設定し終わったら右上の <b>×</b> で閉じます。次からはこの画面は出ません。</p>
+<div class="tip">
+  設定をやり直したい時は、画面右上の <span class="btnlike2">この端末: ANELA</span> をタップすると同じ画面が開きます。
+</div>
+
+<h3>ホーム画面に追加しておく</h3>
+<div class="card">
+  <p><b>iPhone</b>：Safari で開く → 下の「共有」ボタン（□に↑）→ 「ホーム画面に追加」</p>
+  <p style="margin-top:6px;"><b>Android</b>：Chrome で開く → 右上の「⋮」→ 「ホーム画面に追加」</p>
+  <p style="margin-top:6px;">これでアプリのように1タップで開けます。</p>
+</div>
+
+<h2 id="s2">2. 画面の見方</h2>
+<div class="card">
+  <p><span class="gold">■ 上（金色の枠）＝ 自分のお店</span><br>
+  卓が並んでいます。ここをタップして入店・退店を入れます。</p>
+  <p style="margin-top:10px;"><span class="teal">■ 下 ＝ 相手のお店</span><br>
+  見るだけです。相手の受入状況と、これから出るお客様の一覧が出ます。</p>
+  <p style="margin-top:10px;"><b>■ 一番下のボタン2つ</b><br>
+  <span class="btnlike2">受入状況</span> … 自分の店の受入可否を手で知らせる<br>
+  <span class="btnlike">📨 送客を伝える</span> … 相手店へ「今から○名送るよ」と連絡する</p>
+</div>
+<p><b>10秒ごとに自動で更新</b>されます。自分で更新ボタンを押す必要はありません。画面を閉じて開き直した時も、すぐ最新になります。</p>
+
+<h2 id="s3">3. 一晩の流れ（覚えるのはこれだけ）</h2>
+<div class="flow">
+  <span class="step">お客様が入った</span><span class="arr">→</span>
+  <span class="step">卓をタップ</span><span class="arr">→</span>
+  <span class="step">人数をタップ</span><span class="arr">→</span>
+  <span class="step">▶スタート</span>
+</div>
+<div class="flow">
+  <span class="step">延長になった</span><span class="arr">→</span>
+  <span class="step">卓をタップ</span><span class="arr">→</span>
+  <span class="step">延長ボタン</span>
+</div>
+<div class="flow">
+  <span class="step">お帰りになった</span><span class="arr">→</span>
+  <span class="step">卓をタップ</span><span class="arr">→</span>
+  <span class="step">退店した</span>
+</div>
+<p style="margin-top:10px;">これだけです。<b>退店予定の時刻は、入店時刻とセット時間から自動で計算されます。</b>頭で計算する必要はありません。</p>
+
+<h2 id="s4">4. 卓に入店を入れる（3タップ）</h2>
+<ol class="steps">
+  <li><b>空いている卓をタップ</b><br>
+    <span style="font-size:12.5px;color:#8a8a92;">「空席 ・ タップで入店」と書かれている卓です。</span></li>
+  <li><b>セット時間と入店時刻を確認</b><br>
+    <span style="font-size:12.5px;color:#8a8a92;">セット時間は <b>5分刻み（30分〜180分）</b>のプルダウンから選べます。入店時刻には<b>今の時刻が自動で入って</b>いるので、たいていはそのままでOKです。</span></li>
+  <li><b>人数の数字をタップ</b>（1〜8）<br>
+    <span style="font-size:12.5px;color:#8a8a92;">これで卓が「準備中」になります。</span></li>
+  <li><b><span class="btnstart">▶ スタート</span> を押す</b><br>
+    <span style="font-size:12.5px;color:#8a8a92;">ここから時間を計り始めます。</span></li>
+</ol>
+
+<div class="card">
+  <p style="font-size:12px;color:#8a8a92;margin-bottom:6px;">▼ 人数を入れた直後（まだ計っていない）</p>
+  <div class="tcard prep" style="max-width:180px;">
+    <div class="tl">卓1</div>
+    <div class="big">3名</div>
+    <div class="small">02:00 入店 ・ 55分</div>
+    <div class="wait">▶ スタート待ち</div>
+  </div>
+  <p style="font-size:12px;color:#8a8a92;margin:12px 0 6px;">▼ ▶スタートを押したあと</p>
+  <div class="tcard busy" style="max-width:180px;">
+    <div class="tl">卓1</div>
+    <div class="big">3名</div>
+    <div class="small">02:00 IN ・ 55分</div>
+    <div class="out">02:55 退店予定</div>
+    <div class="small">あと55分</div>
+  </div>
+</div>
+
+<h3>時刻はすべて5分単位</h3>
+<p>入店時刻も退店予定も、<b>5分単位に丸めて</b>表示します（例：01:57 に入れたら 02:00 スタート扱い）。両店で見た時に「02:55 に3名」のようにキリよく読めるようにするためです。</p>
+
+<h3>入店時刻を直したい時</h3>
+<p>入店パネルの <b>入店</b> の欄（時計マーク）をタップすると、時刻を選び直せます。<span class="btnlike2">今にする</span> を押すと、今の時刻に戻ります。</p>
+<div class="tip">
+  <b>ちょっと前に入ったお客様を後から入力する時</b>も安心です。入店時刻を実際の時刻（例：01:30）にしておけば、退店予定もそこから正しく計算されます。
+</div>
+
+<h2 id="s5">5. ▶スタートボタンの意味</h2>
+<div class="card">
+  <p><b>人数を入れただけでは、まだ時間は動きません。</b></p>
+  <p style="margin-top:8px;">「席にはご案内したけど、まだセットは始まってない」という状態がお店では普通にあるからです。この間の卓は <span class="teal">水色の点線</span> で「▶ スタート待ち」と表示され、<b>相手店の「これから出るお客様」にはまだ出ません</b>（まだ何時に出るか決まっていないので）。</p>
+  <p style="margin-top:8px;"><span class="btnstart">▶ スタート（02:00 → 02:55）</span> のように、<b>開始時刻と退店予定がボタンに書いてあります。</b>合っているか目で確認してから押せます。</p>
+  <p style="margin-top:8px;">押した瞬間から時間を計り始め、退店予定が相手店に共有されます。</p>
+</div>
+
+<h3>準備中のうちは何度でも直せる</h3>
+<ul>
+  <li><b>人数</b> … もう一度数字をタップすれば変わります</li>
+  <li><b>セット時間</b> … プルダウンで選び直し</li>
+  <li><b>入店時刻</b> … 時刻の欄をタップ、または <span class="btnlike2">今にする</span></li>
+  <li><b>やっぱり違った</b> … <span style="background:#7a2222;color:#fff;border-radius:8px;padding:1px 8px;font-weight:bold;font-size:13px;">取り消す</span> で空席に戻ります</li>
+</ul>
+<div class="tip">
+  準備中の卓も<b>「使っている卓」として数えます</b>。相手店に「空き○卓」と出る数には入りません。押さえてある席を空きと勘違いされる心配はありません。
+</div>
+
+<h2 id="s6">6. 卓の色でわかること</h2>
+<div class="demo">
+  <div class="tcard"><div class="tl">卓5</div><div class="emptyx">空席 ・ タップで入店</div></div>
+  <div class="tcard prep"><div class="tl">卓1</div><div class="big">3名</div><div class="small">02:00 入店 ・ 55分</div><div class="wait">▶ スタート待ち</div></div>
+  <div class="tcard busy"><div class="tl">卓2</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 退店予定</div><div class="small">あと35分</div></div>
+  <div class="tcard soon"><div class="tl">卓3</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 退店予定</div><div class="small">あと12分</div></div>
+</div>
+<table>
+  <tr><th>見た目</th><th>意味</th></tr>
+  <tr><td>灰色の点線</td><td><b>空席</b>。タップして入店を入れられます</td></tr>
+  <tr><td style="color:#3fb6b0;">水色の点線</td><td><b>準備中</b>。人数は入っているが、まだ▶スタートを押していない</td></tr>
+  <tr><td style="color:#c9a64e;">金色の実線</td><td><b>接客中</b>。時間を計っています</td></tr>
+  <tr><td style="color:#e0a84a;">オレンジ</td><td><b>退店15分前</b>。そろそろ出ます。相手店に案内するチャンス</td></tr>
+  <tr><td style="color:#e08484;">赤</td><td><b>時間超過</b>。予定を過ぎています（延長を入れるか、退店を押してください）</td></tr>
+</table>
+
+<h2 id="s7">7. 延長・退店・打ち間違いの直し方</h2>
+<p>接客中の卓をタップすると、操作パネルが開きます。</p>
+<h3>延長になった</h3>
+<p><span class="btnlike2">延長 ＋5分</span> <span class="btnlike2">延長 ＋30分</span> <span class="btnlike2">延長 ＋60分</span> のどれかを押します。何回押しても足されます（＋30を2回で＋60分）。退店予定も自動でうしろにずれ、相手店の表示もすぐ変わります。</p>
+<h3>お帰りになった</h3>
+<p><span style="background:#7a2222;color:#fff;border-radius:8px;padding:1px 8px;font-weight:bold;font-size:13px;">退店した</span> を押すと空席に戻り、相手店の「これから出るお客様」からも消えます。</p>
+<h3>入店時刻・セット時間を間違えた</h3>
+<p>同じパネルの <b>セット</b> のプルダウンと <b>入店</b> の時刻欄を直せば、その場で反映されます。押した瞬間に保存されるので、決定ボタンはありません。</p>
+<div class="warn">
+  <b>退店を押し忘れると</b>、相手店にはずっと「時間超過」で残り続けます。お帰りになったら押してください。押し忘れても、押した時点で正しく消えます。
+</div>
+
+<h2 id="s8">8. 相手のお店を見る</h2>
+<div class="card">
+  <p><b>◯ 空き 3卓</b> … 相手店で空いている卓の数。自動で計算されています。</p>
+  <p style="margin-top:8px;"><b>これから出るお客様</b><br>
+  <span style="font-size:13px;">「02:55 ／ 3名 ／ あと18分」のように並びます。時間が近い順です。</span></p>
+  <ul style="margin-top:6px;">
+    <li><span style="color:#e8c07a;">オレンジの行</span>＝あと15分以内。もうすぐ出ます</li>
+    <li><span style="color:#7ee6ac;">緑の行</span>＝もう出ているはずの時間</li>
+    <li><span style="font-size:11px;color:#5fd6a0;border:1px solid #2f6a4f;border-radius:4px;padding:0 4px;">自動</span> のマーク＝卓の入力から自動で作られたもの</li>
+  </ul>
+  <p style="margin-top:10px;"><b>「⚠ 25分 更新なし」</b>と赤く出たら、相手店がしばらく何も触っていないという意味です。表示が古い可能性があるので、電話で確認してください。</p>
+</div>
+
+<h2 id="s9">9. 送客を伝える・受け取る</h2>
+<h3>送るとき</h3>
+<ol class="steps">
+  <li>一番下の <span class="btnlike">📨 送客を伝える</span> を押す</li>
+  <li>何名送るかタップ</li>
+  <li>ひとこと（任意）… 例「今から向かいます」「○○様のご紹介」</li>
+  <li><b>送客を知らせる</b> を押す</li>
+</ol>
+<h3>受け取るとき</h3>
+<p>相手店から送客の連絡が来ると、画面の一番上に金色のお知らせが出ます。</p>
+<div class="card" style="border-color:#c9a64e;background:rgba(201,166,78,.14);">
+  <div style="color:#c9a64e;font-weight:bold;font-size:14px;">📨 vivace から 3名 送客</div>
+  <div style="font-size:12px;margin-top:3px;">02:10 連絡 ・ 今から向かいます</div>
+  <div style="margin-top:8px;"><span class="btnlike">確認しました</span></div>
+</div>
+<p><span class="btnlike">確認しました</span> を押すと消えます。<b>1回押せば、たまっていたお知らせが全部消えます。</b></p>
+
+<h2 id="s10">10. 受入状況を手で知らせる</h2>
+<p>ふだんは卓の入力から自動で「空き○卓」と出るので、これは使わなくて大丈夫です。ただし次のような時に便利です。</p>
+<ul>
+  <li>卓は空いているが、女の子が足りなくて受けられない</li>
+  <li>予約が入っていて、実際には使えない卓がある</li>
+  <li>「あと10分待ってくれれば入れる」と伝えたい</li>
+</ul>
+<p>一番下の <span class="btnlike2">受入状況</span> から、<b>◯ 今すぐOK ／ △ もう少し ／ ✕ 満席</b> と、何名まで入れるかを選んで知らせます。手で入れたものが優先で表示され、<b>3時間で自動的に消えて</b>、また自動計算に戻ります。</p>
+
+<h2 id="s11">11. 卓を使わずに退店予定だけ入れる</h2>
+<p>卓グリッドの下にある <b>＋ 卓を使わずに退店予定を直接入れる</b> から入れられます。</p>
+<ul>
+  <li>立ち飲み・カウンターなど卓で管理していないお客様</li>
+  <li>「30分後に4名出る」とだけ先に伝えたい時</li>
+</ul>
+<p>「何分後」または時刻を直接、人数、ひとこと（例：男性3名・年配・お酒強め）を入れて知らせます。手入力した分は<b>予定時刻から30分たつと自動で消えます</b>。手前の × ボタンでいつでも消せます。</p>
+
+<h2 id="s12">12. vivace 側（つけ回しツール連携）</h2>
+<div class="card">
+  <p>vivace のように<b>つけ回しツール（本体アプリ）を使っているお店は、このボードに卓を手入力する必要はありません。</b></p>
+  <p style="margin-top:8px;">本体アプリの卓の状況が、そのまま「◯ 空き○卓」と「これから出るお客様」として自動で流れます。ボードには卓グリッドが出ず、相手店の状況を見るだけの画面になります。</p>
+  <p style="margin-top:8px;">送客連絡と受入状況の手入力は、こちらの店でも使えます。</p>
+</div>
+<div class="tip">
+  本体アプリ側で「外用ビュー」の共有をONにしておく必要があります。設定タブから確認できます。
+</div>
+
+<h2 id="s13">13. 困ったときは（よくある質問）</h2>
+
+<p class="faq-q">Q. 相手の画面に反映されるまでどれくらい？</p>
+<p class="faq-a">A. 最大10秒です。相手の携帯が自動で取りに行きます。相手が画面を閉じていた場合も、開いた瞬間に最新になります。</p>
+
+<p class="faq-q">Q. 2人が同時に触ったら、片方が消えませんか？</p>
+<p class="faq-a">A. 消えません。書き込むたびに最新を読んでから足す作りになっているので、同じお店の中で2台使っても大丈夫です。</p>
+
+<p class="faq-q">Q. 「通信エラー」と赤く出ました</p>
+<p class="faq-a">A. 電波を確認してください。表示は最後に取れた内容のままなので、画面が真っ白になることはありません。電波が戻れば自動で復帰します。</p>
+
+<p class="faq-q">Q. ▶スタートを押し忘れました</p>
+<p class="faq-a">A. 卓をタップして、入店時刻を実際の時刻に直してから ▶スタート を押してください。退店予定はそこから正しく計算されます。</p>
+
+<p class="faq-q">Q. 間違えて別の卓に入れてしまいました</p>
+<p class="faq-a">A. 準備中なら「取り消す」、接客中なら「退店した」を押すと空席に戻ります。あらためて正しい卓に入れ直してください。</p>
+
+<p class="faq-q">Q. お客様の名前や売上は相手店に見えますか？</p>
+<p class="faq-a">A. 見えません。このボードでやりとりしているのは「卓の人数」「退店予定の時刻」「受入状況」「送客の連絡」だけです。お名前・お会計・お給料は一切送っていません。</p>
+
+<p class="faq-q">Q. 携帯を変えたらデータは消えますか？</p>
+<p class="faq-a">A. 卓の状況はクラウドにあるので、新しい携帯でURLを開いてお店を選び直せば、そのまま続きが見られます。</p>
+
+<p class="faq-q">Q. お店を選び間違えました</p>
+<p class="faq-a">A. 右上の「この端末: ○○」をタップして選び直してください。</p>
+
+<p class="faq-q">Q. 卓の数を増やしたい／減らしたい</p>
+<p class="faq-a">A. 右上の「この端末: ○○」→「卓の数」から変えられます。今入っているお客様は消えません。</p>
+
+<p class="faq-q">Q. セット時間が50分と60分で卓ごとに違います</p>
+<p class="faq-a">A. 卓ごとに変えられます。入店時のプルダウンで選ぶか、後から接客中パネルのプルダウンで直せます。よく使う時間は「この端末: ○○」→「セット時間」で既定にしておくと毎回の手間が減ります。</p>
+
+<p class="faq-q">Q. 5分刻みじゃない時間（例：45分ちょうどじゃなく47分）にしたい</p>
+<p class="faq-a">A. プルダウンは5分刻みですが、延長の ＋5分 を組み合わせれば細かく調整できます。ボードは両店で読み合う画面なので、5分単位で揃えたほうが伝わりやすいです。</p>
+
+<footer>
+  🔁 振りっこボード 使い方ガイド<br>
+  vivace ⇄ ANELA
+</footer>
+
+</div>
+</body>
+</html>
