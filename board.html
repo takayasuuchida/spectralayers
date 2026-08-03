@@ -39,6 +39,11 @@
   .expand .lbl2 { font-size:11px; color:#c9a64e; font-weight:bold; margin-bottom:8px; }
   .nums { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
   .nums button { background:#1c1c22; border:1px solid #2f2f38; color:#e8e8ec; border-radius:12px; padding:16px 0; font-size:20px; font-weight:bold; }
+  .erow { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .erow label { font-size:11px; color:#8a8a92; }
+  .erow select, .erow input[type=time] { background:#1c1c22; border:1px solid #3a3a42; color:#fff; border-radius:10px; padding:10px 8px; font-size:16px; font-weight:bold; }
+  .erow select { min-width:96px; }
+  .erow .now { background:#22222a; border:1px solid #3fb6b0; color:#3fb6b0; border-radius:10px; padding:10px 12px; font-size:12px; font-weight:bold; }
   .acts { display:flex; gap:8px; flex-wrap:wrap; }
   .acts button { flex:1; min-width:88px; border:none; border-radius:12px; padding:14px 6px; font-size:14px; font-weight:bold; }
   .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; }
@@ -192,6 +197,8 @@
   var autoLeaving = {};       // つけ回しツールから取り込んだ分
   var lastErr = "";
   var openTid = null;         // 展開中の卓
+  var openMin = null;         // 入店パネルで選択中のセット時間
+  var openInAt = null;        // 入店パネルで選択中の入店時刻(ms)
   var draft = { min: 30, guests: 2, level: "ok", seats: 4, sendGuests: 2 };
 
   function $(id) { return document.getElementById(id); }
@@ -202,6 +209,13 @@
   function uid() { return Math.random().toString(36).slice(2, 9); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
 
+  // "HH:MM" を今日の時刻(ms)に。深夜営業なので、6時間以上先の指定は前日として扱う。
+  function timeToMs(hm) {
+    var p = String(hm).split(":"), d = new Date();
+    d.setHours(+p[0], +p[1], 0, 0);
+    if (d.getTime() - Date.now() > 6 * 3600e3) d.setDate(d.getDate() - 1);
+    return d.getTime();
+  }
   function makeTables(n) {
     var a = [];
     for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, guests: 0, startAt: 0, min: 60 });
@@ -328,6 +342,7 @@
         h += '<button class="tcard busy ' + cls + '" data-tap="' + t.id + '">'
           + '<div class="tl">' + esc(t.label) + '</div>'
           + '<div class="big">' + t.guests + '名</div>'
+          + '<div class="small">' + hhmm(t.startAt) + ' IN ・ ' + (t.min || 60) + '分</div>'
           + '<div class="out">' + hhmm(end) + ' 退店予定</div>'
           + '<div class="small">' + (rem <= 0 ? "時間超過 " + (-rem) + "分" : "あと" + rem + "分") + '</div>'
           + '</button>';
@@ -342,14 +357,30 @@
         var busy2 = t2.guests > 0 && t2.startAt;
         h += '<div class="expand">';
         if (!busy2) {
-          h += '<div class="lbl2">' + esc(t2.label) + ' に何名入りましたか？</div><div class="nums">';
+          var curMin = openMin == null ? (doc.setMin || 60) : openMin;
+          var curAt = openInAt == null ? Date.now() : openInAt;
+          h += '<div class="lbl2">' + esc(t2.label) + ' に何名入りましたか？</div>'
+            + '<div class="erow">'
+            + '<label>セット</label><select id="expSetMin">'
+            + [50, 60, 90, 120].map(function (m) { return '<option value="' + m + '"' + (m === curMin ? ' selected' : '') + '>' + m + '分</option>'; }).join("")
+            + '</select>'
+            + '<label>入店</label><input type="time" id="expInAt" value="' + hhmm(curAt) + '">'
+            + '<button class="now" id="expNow">今にする</button>'
+            + '</div>'
+            + '<div class="nums">';
           [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (n) { h += '<button data-in="' + t2.id + '|' + n + '">' + n + '</button>'; });
           h += '</div><div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
         } else {
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
+            + '<div class="erow">'
+            + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">'
+            + [50, 60, 90, 120].map(function (m) { return '<option value="' + m + '"' + (m === (t2.min || 60) ? ' selected' : '') + '>' + m + '分</option>'; }).join("")
+            + '</select>'
+            + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" value="' + hhmm(t2.startAt) + '">'
+            + '</div>'
             + '<div class="acts">'
-            + '<button class="a-ext" data-ext="' + t2.id + '|30">＋30分</button>'
-            + '<button class="a-ext" data-ext="' + t2.id + '|60">＋60分</button>'
+            + '<button class="a-ext" data-ext="' + t2.id + '|30">延長 ＋30分</button>'
+            + '<button class="a-ext" data-ext="' + t2.id + '|60">延長 ＋60分</button>'
             + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
             + '</div>'
             + '<div class="acts" style="margin-top:8px">'
@@ -497,18 +528,26 @@
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
     if (t.hasAttribute && t.hasAttribute("data-close-exp")) { openTid = null; render(); return; }
 
+    if (t.id === "expNow") { openInAt = Date.now(); render(); return; }
     var tap = t.getAttribute && t.getAttribute("data-tap");
-    if (tap) { openTid = (openTid === tap ? null : tap); render(); return; }
+    if (tap) {
+      openTid = (openTid === tap ? null : tap);
+      openMin = null; openInAt = null; // 開くたびに「今」と既定のセット時間から始める
+      render(); return;
+    }
 
     var inn = t.getAttribute && t.getAttribute("data-in");
     if (inn) {
       var p = inn.split("|"), tid = p[0], g = +p[1];
+      var selEl = $("expSetMin"), atEl = $("expInAt");
+      var useMin = selEl ? +selEl.value : (openMin || 60);
+      var useAt = atEl && atEl.value ? timeToMs(atEl.value) : (openInAt || Date.now());
       updateMine(function (d) {
         d.tables = (d.tables || []).map(function (x) {
-          return x.id === tid ? { ...x, guests: g, startAt: Date.now(), min: d.setMin || 60 } : x;
+          return x.id === tid ? { ...x, guests: g, startAt: useAt, min: useMin } : x;
         });
       });
-      openTid = null;
+      openTid = null; openMin = null; openInAt = null;
       return;
     }
     var ext = t.getAttribute && t.getAttribute("data-ext");
@@ -535,6 +574,24 @@
       if (from && from.sending) from.sending.forEach(function (s2) { if (s2.to === me && s2.at > newest) newest = s2.at; });
       try { localStorage.setItem(LS_SEEN, String(newest)); } catch (e) {}
       renderAlerts(); return;
+    }
+  });
+
+  // プルダウン・時刻の変更
+  document.addEventListener("change", function (ev) {
+    var el = ev.target;
+    if (!el || !el.id) return;
+    if (el.id === "expSetMin") { openMin = +el.value; return; }      // 入店前の下書き
+    if (el.id === "expInAt") { if (el.value) openInAt = timeToMs(el.value); return; }
+    if (el.id === "busySetMin") {                                     // 接客中のセット時間を変更
+      var tid = el.getAttribute("data-tid"), v = +el.value;
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid ? { ...x, min: v } : x; }); });
+      return;
+    }
+    if (el.id === "busyInAt") {                                       // 入店時刻の打ち間違いを直す
+      var tid2 = el.getAttribute("data-tid"), at = timeToMs(el.value);
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, startAt: at } : x; }); });
+      return;
     }
   });
 
