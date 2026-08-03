@@ -111,8 +111,13 @@
 <ol class="steps">
   <li><b>この端末はどちらのお店？</b> … 自分のお店をタップします（<span class="btnlike">vivace</span> か <span class="btnlike">ANELA</span>）。選んだお店として書き込みます。<b>相手のお店の状況は、どちらを選んでも見られます。</b></li>
   <li><b>卓の数</b> … お店の卓数をタップ（4〜12卓）。あとから変えても、入っているお客様は消えません。</li>
+  <li><b>卓の名前と席数</b> … お店ごとに卓の呼び方も広さも違うので、1卓ずつ変えられます。左に名前（VIP・ボックス1・カウンター など）、右に席数（1〜12席）。<b>入力した瞬間に保存されます。</b></li>
   <li><b>セット時間</b> … いつもの標準セット（例：60分）をタップ。ここで決めたものが、卓に入れる時の最初の値になります。1卓ずつ変えることもできます。</li>
 </ol>
+<div class="tip">
+  <b>席数はぜひ入れてください。</b>相手店の画面に <b>「空き3卓 ・ 最大7名の卓 ・ 合計12席」</b> と出るようになります。「空き3卓」だけだと、5名のお客様が入るかどうかが相手に伝わりません。
+</div>
+<p>卓の数を増やしたり減らしたりしても、<b>それまでに付けた名前と席数は消えません。</b>増えた分だけ「卓7」「4席」という初期値で追加されます。</p>
 <p>設定し終わったら右上の <b>×</b> で閉じます。次からはこの画面は出ません。</p>
 <div class="tip">
   設定をやり直したい時は、画面右上の <span class="btnlike2">この端末: ANELA</span> をタップすると同じ画面が開きます。
@@ -159,11 +164,11 @@
 <h2 id="s4">4. 卓に入店を入れる（3タップ）</h2>
 <ol class="steps">
   <li><b>空いている卓をタップ</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">「空席 ・ タップで入店」と書かれている卓です。</span></li>
+    <span style="font-size:12.5px;color:#8a8a92;">「空席 ・ 4席」と書かれている卓です。何席の卓かがカードに出ています。</span></li>
   <li><b>セット時間と入店時刻を確認</b><br>
     <span style="font-size:12.5px;color:#8a8a92;">セット時間は <b>5分刻み（30分〜180分）</b>のプルダウンから選べます。入店時刻には<b>今の時刻が自動で入って</b>いるので、たいていはそのままでOKです。</span></li>
-  <li><b>人数の数字をタップ</b>（1〜8）<br>
-    <span style="font-size:12.5px;color:#8a8a92;">これで卓が「準備中」になります。</span></li>
+  <li><b>人数の数字をタップ</b><br>
+    <span style="font-size:12.5px;color:#8a8a92;">その卓の席数を超える数字は色が薄くなります（4席の卓なら5以上）。<b>薄くても押せます</b> — 詰めて座ることはあるので、止めはしません。</span></li>
   <li><b><span class="btnstart">▶ スタート</span> を押す</b><br>
     <span style="font-size:12.5px;color:#8a8a92;">ここから時間を計り始めます。</span></li>
 </ol>
@@ -171,14 +176,14 @@
 <div class="card">
   <p style="font-size:12px;color:#8a8a92;margin-bottom:6px;">▼ 人数を入れた直後（まだ計っていない）</p>
   <div class="tcard prep" style="max-width:180px;">
-    <div class="tl">卓1</div>
+    <div class="tl">VIP</div>
     <div class="big">3名</div>
     <div class="small">02:00 入店 ・ 55分</div>
     <div class="wait">▶ スタート待ち</div>
   </div>
   <p style="font-size:12px;color:#8a8a92;margin:12px 0 6px;">▼ ▶スタートを押したあと</p>
   <div class="tcard busy" style="max-width:180px;">
-    <div class="tl">卓1</div>
+    <div class="tl">VIP</div>
     <div class="big">3名</div>
     <div class="small">02:00 IN ・ 55分</div>
     <div class="out">02:55 退店予定</div>
@@ -216,14 +221,14 @@
 
 <h2 id="s6">6. 卓の色でわかること</h2>
 <div class="demo">
-  <div class="tcard"><div class="tl">卓5</div><div class="emptyx">空席 ・ タップで入店</div></div>
-  <div class="tcard prep"><div class="tl">卓1</div><div class="big">3名</div><div class="small">02:00 入店 ・ 55分</div><div class="wait">▶ スタート待ち</div></div>
-  <div class="tcard busy"><div class="tl">卓2</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 退店予定</div><div class="small">あと35分</div></div>
-  <div class="tcard soon"><div class="tl">卓3</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 退店予定</div><div class="small">あと12分</div></div>
+  <div class="tcard"><div class="tl">ボックス2</div><div class="emptyx">空席 ・ 6席</div><div class="emptyx">タップで入店</div></div>
+  <div class="tcard prep"><div class="tl">VIP</div><div class="big">3名</div><div class="small">02:00 入店 ・ 55分</div><div class="wait">▶ スタート待ち</div></div>
+  <div class="tcard busy"><div class="tl">ボックス1</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 退店予定</div><div class="small">あと35分</div></div>
+  <div class="tcard soon"><div class="tl">カウンター</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 退店予定</div><div class="small">あと12分</div></div>
 </div>
 <table>
   <tr><th>見た目</th><th>意味</th></tr>
-  <tr><td>灰色の点線</td><td><b>空席</b>。タップして入店を入れられます</td></tr>
+  <tr><td>灰色の点線</td><td><b>空席</b>。何席の卓かも出ています。タップして入店を入れられます</td></tr>
   <tr><td style="color:#3fb6b0;">水色の点線</td><td><b>準備中</b>。人数は入っているが、まだ▶スタートを押していない</td></tr>
   <tr><td style="color:#c9a64e;">金色の実線</td><td><b>接客中</b>。時間を計っています</td></tr>
   <tr><td style="color:#e0a84a;">オレンジ</td><td><b>退店15分前</b>。そろそろ出ます。相手店に案内するチャンス</td></tr>
@@ -244,9 +249,11 @@
 
 <h2 id="s8">8. 相手のお店を見る</h2>
 <div class="card">
-  <p><b>◯ 空き 3卓</b> … 相手店で空いている卓の数。自動で計算されています。</p>
-  <p style="margin-top:8px;"><b>これから出るお客様</b><br>
-  <span style="font-size:13px;">「02:55 ／ 3名 ／ あと18分」のように並びます。時間が近い順です。</span></p>
+  <p><b>◯ 空き 3卓</b><br>
+  <span style="font-size:12.5px;color:#8a8a92;">最大 7名の卓 ・ 合計 12席</span></p>
+  <p style="margin-top:6px;font-size:13px;">相手店で空いている卓の数と、<b>一番大きい卓が何名入るか</b>、<b>空いている席の合計</b>です。全部自動で計算されています。5名のお客様を送りたい時は「最大◯名」を見てください。</p>
+  <p style="margin-top:10px;"><b>これから出るお客様</b><br>
+  <span style="font-size:13px;">「02:55 ／ 3名 ／ VIP(7席) ／ あと18分」のように並びます。時間が近い順です。<b>どの卓が空くか（何席か）も出る</b>ので、大人数を送れるかどうかがすぐ分かります。</span></p>
   <ul style="margin-top:6px;">
     <li><span style="color:#e8c07a;">オレンジの行</span>＝あと15分以内。もうすぐ出ます</li>
     <li><span style="color:#7ee6ac;">緑の行</span>＝もう出ているはずの時間</li>
@@ -326,7 +333,16 @@
 <p class="faq-a">A. 右上の「この端末: ○○」をタップして選び直してください。</p>
 
 <p class="faq-q">Q. 卓の数を増やしたい／減らしたい</p>
-<p class="faq-a">A. 右上の「この端末: ○○」→「卓の数」から変えられます。今入っているお客様は消えません。</p>
+<p class="faq-a">A. 右上の「この端末: ○○」→「卓の数」から変えられます。今入っているお客様も、付けた名前と席数も消えません。</p>
+
+<p class="faq-q">Q. 卓の名前を「卓1」じゃなくてお店の呼び方にしたい</p>
+<p class="faq-a">A. 右上の「この端末: ○○」→「卓の名前と席数」で、1卓ずつ好きな名前に変えられます（VIP・ボックス1・カウンター など）。入力欄を空にすると「卓1」のような既定の名前に戻ります。</p>
+
+<p class="faq-q">Q. 席数はどこまで正確に入れればいい？</p>
+<p class="faq-a">A. ふだん座れる人数で大丈夫です。詰めれば入る、という時は席数を超える人数もそのまま入力できます（数字が薄くなるだけで押せます）。</p>
+
+<p class="faq-q">Q. 2店舗で卓の数も広さも全然違うけど大丈夫？</p>
+<p class="faq-a">A. 卓の数・名前・席数は<b>お店ごとに完全に別々</b>に持っています。お互いの設定が影響し合うことはありません。</p>
 
 <p class="faq-q">Q. セット時間が50分と60分で卓ごとに違います</p>
 <p class="faq-a">A. 卓ごとに変えられます。入店時のプルダウンで選ぶか、後から接客中パネルのプルダウンで直せます。よく使う時間は「この端末: ○○」→「セット時間」で既定にしておくと毎回の手間が減ります。</p>

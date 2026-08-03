@@ -73,6 +73,13 @@
   .accept .big { font-size:20px; display:block; }
   .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
 
+  /* 卓の名前と席数の編集 */
+  .trow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .trow input[type=text] { flex:1; min-width:0; padding:9px 10px; font-size:15px; }
+  .trow select { background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:9px 6px; font-size:15px; font-weight:bold; }
+  .capnote { font-size:10px; color:#5a5a62; }
+  .nums button.overcap { color:#7a6a3a; border-color:#3a3320; }
+
   .bar { position:fixed; left:0; right:0; bottom:0; background:#0a0a0c; border-top:1px solid #1c1c22; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px); display:flex; gap:8px; z-index:20; }
   .bar button { flex:1; border:none; border-radius:12px; padding:13px 4px; font-weight:bold; font-size:13px; }
   .b-gold { background:#c9a64e; color:#000; }
@@ -135,6 +142,9 @@
     <p class="lbl">選んだお店として書き込みます。両方のお店の状況はどちらを選んでも見られます。</p>
     <div class="lbl">卓の数（自分のお店を手入力する場合）</div>
     <div class="chips" id="tcountChips"></div>
+    <div class="lbl">卓の名前と席数（お店に合わせて変えてください）</div>
+    <div id="tableRows"></div>
+    <p class="lbl" style="margin-top:4px;">席数を入れておくと、相手店に「最大◯名まで入る」と伝わります。</p>
     <div class="lbl">セット時間（退店予定の自動計算に使います）</div>
     <div class="chips" id="setminChips"></div>
   </div>
@@ -232,8 +242,28 @@
   }
   function makeTables(n) {
     var a = [];
-    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, guests: 0, startAt: 0, planAt: 0, min: 60 });
+    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, cap: 4, guests: 0, startAt: 0, planAt: 0, min: 60 });
     return a;
+  }
+  function capOf(t) { return t && t.cap > 0 ? t.cap : 4; }
+  // 空き状況: 卓数だけでなく「何名まで入るか」まで出す（相手店が本当に知りたいのはこっち）
+  function freeInfo(tables) {
+    var free = (tables || []).filter(function (t) { return !(t.guests > 0); });
+    return {
+      count: free.length,
+      max: free.reduce(function (m, t) { return Math.max(m, capOf(t)); }, 0),
+      total: free.reduce(function (s, t) { return s + capOf(t); }, 0)
+    };
+  }
+  // 人数パッド。席数より多い数字は色を落とすだけで、押せなくはしない（詰めて座る事はあるため）
+  function numPad(t) {
+    var cap = capOf(t), max = Math.max(8, cap), h = '<div class="nums">';
+    for (var n = 1; n <= max; n++) h += '<button class="' + (n > cap ? "overcap" : "") + '" data-in="' + t.id + '|' + n + '">' + n + '</button>';
+    return h + '</div>';
+  }
+  function freeText(f) {
+    if (!f.count) return "";
+    return "最大 " + f.max + "名の卓" + (f.count > 1 ? " ・ 合計 " + f.total + "席" : "");
   }
   function emptyDoc(id) {
     return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60 };
@@ -258,7 +288,7 @@
   function tableLeaving(doc) {
     return (doc.tables || []).filter(function (t) { return t.guests > 0 && t.startAt; })
       .map(function (t) {
-        return { id: "tbl-" + t.id, t: t.startAt + (t.min || 60) * 60000, guests: t.guests, memo: t.label, auto: true, fromTable: t.id, at: Date.now() };
+        return { id: "tbl-" + t.id, t: t.startAt + (t.min || 60) * 60000, guests: t.guests, memo: t.label, cap: capOf(t), auto: true, fromTable: t.id, at: Date.now() };
       });
   }
   function syncLeaving(doc) {
@@ -276,6 +306,7 @@
       doc.leaving = doc.leaving || [];
       doc.sending = doc.sending || [];
       if (!doc.tables) doc.tables = makeTables(6);
+      doc.tables = doc.tables.map(function (t) { return { ...t, cap: capOf(t) }; });  // 古いデータに席数を補う
       if (!doc.setMin) doc.setMin = 60;
       fn(doc);
       syncLeaving(doc);
@@ -297,12 +328,13 @@
   function fromShare(share) {
     if (!share || !share.tables) return null;
     var now = Date.now(), out = [], free = 0, freeSeats = 0;
+    var maxSeat = 0;
     share.tables.forEach(function (t) {
-      if (!t.busy) { free++; freeSeats += (t.cap || 0); return; }
+      if (!t.busy) { free++; freeSeats += (t.cap || 0); maxSeat = Math.max(maxSeat, t.cap || 0); return; }
       if (t.preparing || t.remainMin == null) return;
-      out.push({ id: "auto-" + (t.label || ""), t: now + t.remainMin * 60e3, guests: t.guests || 0, auto: true, memo: t.label || "" });
+      out.push({ id: "auto-" + (t.label || ""), t: now + t.remainMin * 60e3, guests: t.guests || 0, auto: true, memo: t.label || "", cap: t.cap || 0 });
     });
-    return { leaving: out.sort(function (a, b) { return a.t - b.t; }), free: free, freeSeats: freeSeats, at: share.at || 0 };
+    return { leaving: out.sort(function (a, b) { return a.t - b.t; }), free: free, freeSeats: freeSeats, maxSeat: maxSeat, at: share.at || 0 };
   }
 
   function poll() {
@@ -323,6 +355,9 @@
     $("mine").innerHTML = me ? myPanel() : "";
     $("theirs").innerHTML = theirPanel(me ? other(me) : "vivace") + (me ? "" : theirPanel("anela"));
     renderAlerts();
+    // 設定シートを開いている間は卓の一覧も追従させる（入力中は触らない）
+    if (!$("sheetMe").classList.contains("hidden")
+      && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#tableRows"))) drawTableRows();
     $("err").innerHTML = lastErr ? '<div class="err">通信エラー: ' + esc(lastErr) + '<br>電波を確認してください。表示は最後に取れた内容です。</div>' : "";
   }
 
@@ -356,7 +391,9 @@
           + '<div class="wait">▶ スタート待ち</div>'
           + '</button>';
       } else if (!busy) {
-        h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div><div class="empty">空席 ・ タップで入店</div></button>';
+        h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div>'
+          + '<div class="empty">空席 ・ ' + capOf(t) + '席</div>'
+          + '<div class="empty">タップで入店</div></button>';
       } else {
         var end = t.startAt + (t.min || 60) * 60000;
         var rem = Math.ceil((end - now) / 60000);
@@ -389,9 +426,9 @@
             + '<button class="now" data-prep-now="' + t2.id + '">今にする</button>'
             + '</div>'
             + '<button class="a-start" data-start="' + t2.id + '">▶ スタート（' + hhmm(pAt) + ' → ' + hhmm(pAt + (t2.min || 60) * 60000) + '）</button>'
-            + '<div class="lv-title">人数を直す</div><div class="nums">';
-          [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (n) { h += '<button data-in="' + t2.id + '|' + n + '">' + n + '</button>'; });
-          h += '</div>'
+            + '<div class="lv-title">人数を直す（この卓は' + capOf(t2) + '席）</div>'
+            + numPad(t2);
+          h += ''
             + '<div class="acts" style="margin-top:8px">'
             + '<button class="a-out" data-out="' + t2.id + '">取り消す</button>'
             + '<button class="a-cancel" data-close-exp>閉じる</button>'
@@ -399,15 +436,14 @@
         } else if (!busy2) {
           var curMin = openMin == null ? (doc.setMin || 60) : openMin;
           var curAt = openInAt == null ? round5(Date.now()) : openInAt;
-          h += '<div class="lbl2">' + esc(t2.label) + ' に何名入りましたか？</div>'
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + capOf(t2) + '席）に何名入りましたか？</div>'
             + '<div class="erow">'
             + '<label>セット</label><select id="expSetMin">' + minOptions(curMin) + '</select>'
             + '<label>入店</label><input type="time" id="expInAt" step="300" value="' + hhmm(curAt) + '">'
             + '<button class="now" id="expNow">今にする</button>'
             + '</div>'
-            + '<div class="nums">';
-          [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (n) { h += '<button data-in="' + t2.id + '|' + n + '">' + n + '</button>'; });
-          h += '</div><div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
+            + numPad(t2)
+            + '<div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
         } else {
           h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
             + '<div class="erow">'
@@ -458,13 +494,16 @@
         + (acc.level !== "full" ? '<span class="small">' + acc.seats + '名まで</span>' : '') + '</div>';
     } else if (auto) {
       accHtml = '<div class="accept ' + (auto.free > 0 ? "a-ok" : "a-full") + '"><span class="big">'
-        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span><span class="small">つけ回しツールから自動</span></div>';
+        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span><span class="small">'
+        + (auto.free > 0 && auto.maxSeat ? "最大 " + auto.maxSeat + "名の卓" + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + " ・ " : "")
+        + 'つけ回しツールから自動</span></div>';
     } else {
-      // 卓の手入力から空き数を出す
+      // 卓の手入力から空き数と「何名まで入るか」を出す
       var tb = doc.tables || [];
-      var freeN = tb.filter(function (t) { return !(t.guests > 0); }).length;
+      var fi = freeInfo(tb);
       accHtml = tb.length
-        ? '<div class="accept ' + (freeN > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (freeN > 0 ? "◯ 空き " + freeN + "卓" : "✕ 満席") + '</span><span class="small">卓の入力から自動</span></div>'
+        ? '<div class="accept ' + (fi.count > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (fi.count > 0 ? "◯ 空き " + fi.count + "卓" : "✕ 満席") + '</span>'
+          + '<span class="small">' + (fi.count > 0 ? freeText(fi) + " ・ " : "") + '卓の入力から自動</span></div>'
         : '<div class="accept a-none">受入状況 未入力</div>';
     }
 
@@ -477,7 +516,7 @@
       lvHtml += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
         + '<span class="t">' + hhmm(e.t) + '</span><span class="g">' + (e.guests || 0) + '名</span>'
         + (e.auto ? '<span class="auto">自動</span>' : '')
-        + (e.memo && !e.fromTable ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + '</span>' : '')
+        + (e.memo ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + (e.cap ? '(' + e.cap + '席)' : '') + '</span>' : '')
         + '<span class="in">' + (diff <= 0 ? "出てるはず" : "あと" + diff + "分") + '</span></div>';
     });
 
@@ -540,14 +579,38 @@
       updateMine(function (d) {
         var old = d.tables || [];
         var next = makeTables(v);
-        next.forEach(function (t, i) { if (old[i]) { t.guests = old[i].guests; t.startAt = old[i].startAt; t.planAt = old[i].planAt || 0; t.min = old[i].min; } });
+        next.forEach(function (t, i) {
+          if (!old[i]) return;
+          t.label = old[i].label; t.cap = capOf(old[i]);   // 名前と席数は卓数を変えても残す
+          t.guests = old[i].guests; t.startAt = old[i].startAt; t.planAt = old[i].planAt || 0; t.min = old[i].min;
+        });
         d.tables = next;
       }).then(drawMe);
     });
+    drawTableRows();
     var sm = doc && doc.setMin ? doc.setMin : 60;
     chipRow($("setminChips"), [40, 45, 50, 55, 60, 70, 80, 90, 120].map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
       updateMine(function (d) { d.setMin = v; }).then(drawMe);
     });
+  }
+  // 卓の名前と席数の編集。お店ごとに卓の呼び方も広さも違うので、両方その場で直せるようにする。
+  function drawTableRows() {
+    var host = $("tableRows"); if (!host) return;
+    var doc = (me && data[me]) || null;
+    if (!doc || !doc.tables || autoLeaving[me]) {
+      host.innerHTML = autoLeaving[me]
+        ? '<p class="lbl" style="margin:0">つけ回しツールから自動で取り込んでいるので、ここでの卓設定は使いません。</p>' : "";
+      return;
+    }
+    host.innerHTML = doc.tables.map(function (t, i) {
+      return '<div class="trow">'
+        + '<input type="text" data-tname="' + t.id + '" value="' + esc(t.label) + '" placeholder="卓' + (i + 1) + '" maxlength="10">'
+        + '<select data-tcap="' + t.id + '">'
+        + [1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(function (c) {
+            return '<option value="' + c + '"' + (c === capOf(t) ? ' selected' : '') + '>' + c + '席</option>';
+          }).join("")
+        + '</select></div>';
+    }).join("");
   }
   function needMe() { if (me) return true; drawMe(); openSheet("sheetMe"); return false; }
 
@@ -636,7 +699,23 @@
   // プルダウン・時刻の変更
   document.addEventListener("change", function (ev) {
     var el = ev.target;
-    if (!el || !el.id) return;
+    if (!el) return;
+    // 卓の名前・席数（設定シート）
+    var tn = el.getAttribute && el.getAttribute("data-tname");
+    if (tn) {
+      var nm = String(el.value || "").trim();
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x, i) { return x.id === tn ? { ...x, label: nm || ("卓" + (i + 1)) } : x; });
+      }).then(drawTableRows);
+      return;
+    }
+    var tc = el.getAttribute && el.getAttribute("data-tcap");
+    if (tc) {
+      var cv = +el.value;
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tc ? { ...x, cap: cv } : x; }); });
+      return;
+    }
+    if (!el.id) return;
     if (el.id === "expSetMin") { openMin = +el.value; return; }      // 入店前の下書き
     if (el.id === "expInAt") { if (el.value) openInAt = round5(timeToMs(el.value)); return; }
     if (el.id === "prepSetMin") {                                     // 準備中のセット時間
