@@ -99,11 +99,16 @@
     <li><b>何時にチェック</b> … 次はいつ空く？</li>
   </ul>
   <p style="margin-top:8px;">この3つが、相手店の欄に<b>そのまま3行で</b>出ます。電話もLINEも要りません。</p>
-  <div class="accept-demo" style="background:rgba(95,214,160,.12);border:1px solid #3f8f6a;border-radius:12px;padding:10px;text-align:center;margin-top:10px;">
+  <div style="background:rgba(95,214,160,.12);border:1px solid #3f8f6a;border-radius:12px;padding:10px;text-align:center;margin-top:10px;">
     <div style="font-size:20px;font-weight:bold;color:#7ee6ac;">◯ 空き 3卓</div>
     <div style="font-size:12px;font-weight:bold;color:#7ee6ac;">最大 7名の卓 ・ 合計 12席</div>
-    <div style="font-size:12px;font-weight:bold;color:#7ee6ac;">次のチェック 02:50（あと18分） 4名 VIP</div>
   </div>
+  <div style="background:#0d0d10;border:1px solid #22222a;border-radius:10px;padding:8px 10px;margin-top:6px;display:flex;gap:8px;align-items:center;">
+    <span style="font-size:15px;font-weight:bold;color:#e8e8ec;">5卓</span>
+    <span style="font-size:15px;font-weight:bold;color:#c9a64e;">2名</span>
+    <span style="font-size:17px;font-weight:bold;margin-left:auto;">23:00 チェック</span>
+  </div>
+  <p style="font-size:12.5px;color:#8a8a92;margin-top:6px;">↑ 出るお客様は<b>この1行だけ</b>。「5卓 2名 23:00チェック」でぜんぶ伝わります。</p>
 </div>
 <div class="tip">
   <b>ANELA の方へ：</b>つけ回しツール（本体アプリ）を使う必要はありません。この振りっこボードだけ開いて、卓に人数を入れてもらえれば十分です。入力は <b>卓タップ → 人数タップ → ▶スタート</b> の3タップだけです。
@@ -170,7 +175,7 @@
 <h2 id="s4">4. 卓に入店を入れる（3タップ）</h2>
 <ol class="steps">
   <li><b>空いている卓をタップ</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">「空席 ・ 4席」と書かれている卓です。何席の卓かがカードに出ています。</span></li>
+    <span style="font-size:12.5px;color:#8a8a92;">「空席 4席」と書かれている卓です。</span></li>
   <li><b>セット時間と入店時刻を確認</b><br>
     <span style="font-size:12.5px;color:#8a8a92;">セット時間は <b>5分刻み（30分〜180分）</b>のプルダウンから選べます。入店時刻には<b>今の時刻が自動で入って</b>いるので、たいていはそのままでOKです。</span></li>
   <li><b>人数の数字をタップ</b><br>
@@ -184,16 +189,13 @@
   <div class="tcard prep" style="max-width:180px;">
     <div class="tl">VIP</div>
     <div class="big">3名</div>
-    <div class="small">02:00 入店 ・ 55分</div>
     <div class="wait">▶ スタート待ち</div>
   </div>
   <p style="font-size:12px;color:#8a8a92;margin:12px 0 6px;">▼ ▶スタートを押したあと</p>
   <div class="tcard busy" style="max-width:180px;">
     <div class="tl">VIP</div>
     <div class="big">3名</div>
-    <div class="small">02:00 IN ・ 55分</div>
     <div class="out">02:55 チェック</div>
-    <div class="small">あと55分</div>
   </div>
 </div>
 
@@ -227,14 +229,14 @@
 
 <h2 id="s6">6. 卓の色でわかること</h2>
 <div class="demo">
-  <div class="tcard"><div class="tl">ボックス2</div><div class="emptyx">空席 ・ 6席</div><div class="emptyx">タップで入店</div></div>
-  <div class="tcard prep"><div class="tl">VIP</div><div class="big">3名</div><div class="small">02:00 入店 ・ 55分</div><div class="wait">▶ スタート待ち</div></div>
-  <div class="tcard busy"><div class="tl">ボックス1</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 チェック</div><div class="small">あと35分</div></div>
-  <div class="tcard soon"><div class="tl">カウンター</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 チェック</div><div class="small">あと12分</div></div>
+  <div class="tcard"><div class="tl">ボックス2</div><div class="emptyx">空席 6席</div></div>
+  <div class="tcard prep"><div class="tl">VIP</div><div class="big">3名</div><div class="wait">▶ スタート待ち</div></div>
+  <div class="tcard busy"><div class="tl">ボックス1</div><div class="big">4名</div><div class="out">02:30 チェック</div></div>
+  <div class="tcard soon"><div class="tl">カウンター</div><div class="big">2名</div><div class="out">02:20 チェック</div></div>
 </div>
 <table>
   <tr><th>見た目</th><th>意味</th></tr>
-  <tr><td>灰色の点線</td><td><b>空席</b>。何席の卓かも出ています。タップして入店を入れられます</td></tr>
+  <tr><td>灰色の点線</td><td><b>空席</b>（例: 空席 4席）。タップして入店を入れられます</td></tr>
   <tr><td style="color:#3fb6b0;">水色の点線</td><td><b>準備中</b>。人数は入っているが、まだ▶スタートを押していない</td></tr>
   <tr><td style="color:#c9a64e;">金色の実線</td><td><b>接客中</b>。時間を計っています</td></tr>
   <tr><td style="color:#e0a84a;">オレンジ</td><td><b>退店15分前</b>。そろそろ出ます。相手店に案内するチャンス</td></tr>
@@ -256,10 +258,10 @@
 <h2 id="s8">8. 相手のお店を見る</h2>
 <div class="card">
   <p><b>◯ 空き 3卓</b><br>
-  <span style="font-size:12.5px;color:#8a8a92;">最大 7名の卓 ・ 合計 12席<br>次のチェック 02:50（あと18分） 4名 VIP</span></p>
-  <p style="margin-top:6px;font-size:13px;">上から順に <b>何卓・何名・何時にチェック</b>。全部自動で計算されています。5名のお客様を送りたい時は「最大◯名」を、今は満席でも近いうちに送りたい時は「次のチェック」を見てください。<b>満席の時でも「次のチェック」は出ます。</b></p>
+  <span style="font-size:12.5px;color:#8a8a92;">最大 7名の卓 ・ 合計 12席</span></p>
+  <p style="margin-top:6px;font-size:13px;">空いている卓の数と、一番大きい卓が何名入るか。5名のお客様を送りたい時は「最大◯名」を見てください。</p>
   <p style="margin-top:10px;"><b>チェック予定</b><br>
-  <span style="font-size:13px;">「02:55 ／ 3名 ／ VIP(7席) ／ あと18分」のように並びます。時間が近い順です。<b>どの卓が空くか（何席か）も出る</b>ので、大人数を送れるかどうかがすぐ分かります。</span></p>
+  <span style="font-size:13px;"><b>「5卓　2名　23:00 チェック」</b>の1行が、時間の近い順に並びます。満席の時でもこの一覧は出るので、<b>いつ送れるか</b>がすぐ分かります。</span></p>
   <ul style="margin-top:6px;">
     <li><span style="color:#e8c07a;">オレンジの行</span>＝あと15分以内。もうすぐ出ます</li>
     <li><span style="color:#7ee6ac;">緑の行</span>＝もう出ているはずの時間</li>
@@ -283,11 +285,12 @@
 <h3>受け取るとき</h3>
 <p>相手店から送客の連絡が来ると、画面の一番上に金色のお知らせが出ます。</p>
 <div class="card" style="border-color:#c9a64e;background:rgba(201,166,78,.14);">
-  <div style="color:#c9a64e;font-weight:bold;font-size:14px;">📨 vivace から 6名 送客</div>
-  <div style="font-size:12px;margin-top:3px;">02:50 チェック（あと18分） ・ VIP ・ お酒強め</div>
+  <div style="color:#c9a64e;font-weight:bold;font-size:14px;">📨 vivace から</div>
+  <div style="font-size:16px;font-weight:bold;color:#fff;margin-top:3px;">VIP 6名 ・ 02:50 チェック</div>
+  <div style="font-size:12px;margin-top:3px;">お酒強め</div>
   <div style="margin-top:8px;"><span class="btnlike">確認しました</span></div>
 </div>
-<p style="font-size:13px;">「<b>02:50 チェック（あと18分）</b>」＝ そのお客様が向こうを出る時刻です。着く時間が読めるので、卓を空けて待てます。</p>
+<p style="font-size:13px;">相手にも <b>「何卓 何名 何時にチェック」</b> の1行で届きます。着く時間が読めるので、卓を空けて待てます。</p>
 <p><span class="btnlike">確認しました</span> を押すと消えます。<b>1回押せば、たまっていたお知らせが全部消えます。</b></p>
 
 <h2 id="s10">10. 受入状況を手で知らせる</h2>
