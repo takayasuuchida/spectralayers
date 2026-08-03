@@ -72,6 +72,7 @@
   .a-none { background:#0d0d10; border:1px dashed #33333c; color:#5a5a62; font-weight:normal; }
   .accept .big { font-size:20px; display:block; }
   .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
+  .accept .line { display:block; font-size:12px; font-weight:bold; opacity:.95; margin-top:2px; }
 
   /* 卓の名前と席数の編集 */
   .trow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
@@ -145,7 +146,7 @@
     <div class="lbl">卓の名前と席数（お店に合わせて変えてください）</div>
     <div id="tableRows"></div>
     <p class="lbl" style="margin-top:4px;">席数を入れておくと、相手店に「最大◯名まで入る」と伝わります。</p>
-    <div class="lbl">セット時間（退店予定の自動計算に使います）</div>
+    <div class="lbl">セット時間（チェック時刻の自動計算に使います）</div>
     <div class="chips" id="setminChips"></div>
   </div>
 </div>
@@ -153,7 +154,7 @@
 <!-- 退店予定（手入力・イレギュラー用） -->
 <div class="sheet hidden" id="sheetAdd">
   <div class="panel">
-    <h3>退店予定を直接入れる<button data-close>×</button></h3>
+    <h3>チェック予定を直接入れる<button data-close>×</button></h3>
     <div class="lbl">何分後に出る？</div>
     <div class="chips" id="minChips"></div>
     <div class="lbl">または時刻を直接</div>
@@ -182,10 +183,15 @@
 <div class="sheet hidden" id="sheetSend">
   <div class="panel">
     <h3>相手のお店へ送客を伝える<button data-close>×</button></h3>
+    <div class="lbl">どの卓のお客様？（選ぶと人数とチェック時刻が入ります）</div>
+    <div class="chips" id="sendTableChips"></div>
     <div class="lbl">何名送る？</div>
     <div class="chips" id="sendGuestChips"></div>
+    <div class="lbl">何時にチェック？（お店を出る時間）</div>
+    <input type="time" id="sendCheckAt" step="300">
+    <div class="chips" id="sendWhenChips" style="margin-top:6px;"></div>
     <div class="lbl">ひとこと（任意）</div>
-    <input type="text" id="sendMemo" placeholder="例: 今から向かいます・○○様のご紹介">
+    <input type="text" id="sendMemo" placeholder="例: ○○様のご紹介・お酒強め">
     <button class="go" id="sendGo">送客を知らせる</button>
   </div>
 </div>
@@ -214,7 +220,7 @@
   var openTid = null;         // 展開中の卓
   var openMin = null;         // 入店パネルで選択中のセット時間
   var openInAt = null;        // 入店パネルで選択中の入店時刻(ms)
-  var draft = { min: 30, guests: 2, level: "ok", seats: 4, sendGuests: 2 };
+  var draft = { min: 30, guests: 2, level: "ok", seats: 4, sendGuests: 2, sendTable: "", sendLabel: "", sendCheckAt: 0 };
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
@@ -264,6 +270,16 @@
   function freeText(f) {
     if (!f.count) return "";
     return "最大 " + f.max + "名の卓" + (f.count > 1 ? " ・ 合計 " + f.total + "席" : "");
+  }
+  // 知りたいのは「何卓・何名・何時にチェック」の3つ。次に空く卓を1行で出す。
+  function nextCheckHtml(list) {
+    var now = Date.now();
+    var next = (list || []).slice().sort(function (a, b) { return a.t - b.t; })
+      .filter(function (e) { return e.t - now > -30 * 60e3; })[0];
+    if (!next) return '<span class="line">次のチェック なし</span>';
+    var d = Math.round((next.t - now) / 60000);
+    return '<span class="line">次のチェック ' + hhmm(next.t) + '（' + (d <= 0 ? "出てるはず" : "あと" + d + "分") + '）'
+      + ' ' + (next.guests || 0) + '名' + (next.memo ? ' ' + esc(next.memo) : '') + '</span>';
   }
   function emptyDoc(id) {
     return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60 };
@@ -379,7 +395,7 @@
     var now = Date.now();
     var h = '<div class="sec mine"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
       + '<span>' + freshHtml(doc.at) + '</span></div>'
-      + '<div class="lv-title">卓をタップ → 人数をタップ → ▶スタート（退店予定は自動計算）</div><div class="tgrid">';
+      + '<div class="lv-title">卓をタップ → 人数をタップ → ▶スタート（チェック時刻は自動計算）</div><div class="tgrid">';
     tables.forEach(function (t) {
       var busy = t.guests > 0 && t.startAt;
       var prep = t.guests > 0 && !t.startAt;
@@ -402,7 +418,7 @@
           + '<div class="tl">' + esc(t.label) + '</div>'
           + '<div class="big">' + t.guests + '名</div>'
           + '<div class="small">' + hhmm(t.startAt) + ' IN ・ ' + (t.min || 60) + '分</div>'
-          + '<div class="out">' + hhmm(end) + ' 退店予定</div>'
+          + '<div class="out">' + hhmm(end) + ' チェック</div>'
           + '<div class="small">' + (rem <= 0 ? "時間超過 " + (-rem) + "分" : "あと" + rem + "分") + '</div>'
           + '</button>';
       }
@@ -445,7 +461,7 @@
             + numPad(t2)
             + '<div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
         } else {
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' 退店予定）</div>'
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' チェック）</div>'
             + '<div class="erow">'
             + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
             + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(t2.startAt) + '">'
@@ -467,7 +483,7 @@
     // 手入力の退店予定（イレギュラー用）だけ別枠で出す
     var manual = (doc.leaving || []).filter(function (e) { return !e.fromTable; });
     if (manual.length) {
-      h += '<div class="lv-title">手入力の退店予定</div>';
+      h += '<div class="lv-title">手入力のチェック予定</div>';
       manual.sort(function (a, b) { return a.t - b.t; }).forEach(function (e) {
         var diff = Math.round((e.t - now) / 60000);
         h += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
@@ -477,7 +493,7 @@
           + '<button class="del" data-del="' + e.id + '">×</button></div>';
       });
     }
-    h += '<button class="link" id="addManual">＋ 卓を使わずに退店予定を直接入れる</button>';
+    h += '<button class="link" id="addManual">＋ 卓を使わずにチェック予定を直接入れる</button>';
     h += '</div>';
     return h;
   }
@@ -486,31 +502,38 @@
   function theirPanel(id, isMine) {
     var doc = data[id] || emptyDoc(id), auto = autoLeaving[id], st = storeOf(id), now = Date.now();
     var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
+    var allLeaving = (doc.leaving || []).concat(auto ? auto.leaving : []);
+    var nextHtml = nextCheckHtml(allLeaving);
     var acc = doc.accept, accHtml;
     if (acc && Date.now() - acc.at < 3 * 3600e3) {
       var cls = acc.level === "ok" ? "a-ok" : acc.level === "soon" ? "a-soon" : "a-full";
       var txt = acc.level === "ok" ? "◯ 今すぐOK" : acc.level === "soon" ? "△ もう少しで空く" : "✕ 満席";
       accHtml = '<div class="accept ' + cls + '"><span class="big">' + txt + '</span>'
-        + (acc.level !== "full" ? '<span class="small">' + acc.seats + '名まで</span>' : '') + '</div>';
+        + (acc.level !== "full" ? '<span class="line">最大 ' + acc.seats + '名まで</span>' : '')
+        + nextHtml + '</div>';
     } else if (auto) {
       accHtml = '<div class="accept ' + (auto.free > 0 ? "a-ok" : "a-full") + '"><span class="big">'
-        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span><span class="small">'
-        + (auto.free > 0 && auto.maxSeat ? "最大 " + auto.maxSeat + "名の卓" + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + " ・ " : "")
-        + 'つけ回しツールから自動</span></div>';
+        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span>'
+        + (auto.free > 0 && auto.maxSeat ? '<span class="line">最大 ' + auto.maxSeat + '名の卓'
+            + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + '</span>' : '')
+        + nextHtml
+        + '<span class="small">つけ回しツールから自動</span></div>';
     } else {
       // 卓の手入力から空き数と「何名まで入るか」を出す
       var tb = doc.tables || [];
       var fi = freeInfo(tb);
       accHtml = tb.length
         ? '<div class="accept ' + (fi.count > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (fi.count > 0 ? "◯ 空き " + fi.count + "卓" : "✕ 満席") + '</span>'
-          + '<span class="small">' + (fi.count > 0 ? freeText(fi) + " ・ " : "") + '卓の入力から自動</span></div>'
+          + (fi.count > 0 ? '<span class="line">' + freeText(fi) + '</span>' : '')
+          + nextHtml
+          + '<span class="small">卓の入力から自動</span></div>'
         : '<div class="accept a-none">受入状況 未入力</div>';
     }
 
     var list = ((doc.leaving || []).concat(auto ? auto.leaving : []))
       .filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
       .sort(function (a, b) { return a.t - b.t; });
-    var lvHtml = list.length ? "" : '<div class="empty">退店予定はまだありません</div>';
+    var lvHtml = list.length ? "" : '<div class="empty">チェック予定はまだありません</div>';
     list.forEach(function (e) {
       var diff = Math.round((e.t - now) / 60000);
       lvHtml += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
@@ -522,7 +545,7 @@
 
     return '<div class="sec' + (isMine ? " mine" : "") + '"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
       + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml
-      + '<div class="lv-title">これから出るお客様</div>' + lvHtml + '</div>';
+      + '<div class="lv-title">チェック予定（何時に何名出る）</div>' + lvHtml + '</div>';
   }
 
   function renderAlerts() {
@@ -535,8 +558,11 @@
       if (s.to !== me || s.at <= seen) return;
       var d = document.createElement("div");
       d.className = "alert";
+      var when = s.checkAt
+        ? hhmm(s.checkAt) + ' チェック（' + (s.checkAt - Date.now() <= 0 ? "もう出てる" : "あと" + Math.round((s.checkAt - Date.now()) / 60000) + "分") + '）'
+        : hhmm(s.at) + ' 連絡';
       d.innerHTML = '<div class="h">📨 ' + esc(storeOf(other(me)).name) + ' から ' + s.guests + '名 送客</div>'
-        + '<div class="b">' + hhmm(s.at) + ' 連絡' + (s.memo ? ' ・ ' + esc(s.memo) : '') + '</div>'
+        + '<div class="b">' + when + (s.table ? ' ・ ' + esc(s.table) : '') + (s.memo ? ' ・ ' + esc(s.memo) : '') + '</div>'
         + '<button data-ack="' + s.at + '">確認しました</button>';
       box.appendChild(d);
     });
@@ -565,8 +591,32 @@
     chipRow($("lvChips"), [{ l: "◯ 今すぐOK", v: "ok" }, { l: "△ もう少し", v: "soon" }, { l: "✕ 満席", v: "full" }], draft.level, function (v) { draft.level = v; drawAccept(); }, true);
     chipRow($("seatChips"), [1, 2, 3, 4, 5, 6, 8, 10, 12].map(function (n) { return { l: n + "名", v: n }; }), draft.seats, function (v) { draft.seats = v; drawAccept(); });
   }
+  // 送客で相手が知りたいのは「何卓・何名・何時にチェック」。卓を選べば残り2つが自動で入る。
   function drawSend() {
-    chipRow($("sendGuestChips"), [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { l: n + "名", v: n }; }), draft.sendGuests, function (v) { draft.sendGuests = v; drawSend(); });
+    var doc = data[me] || emptyDoc(me), auto = autoLeaving[me];
+    var busy = auto
+      ? (auto.leaving || []).map(function (e, i) { return { key: "a" + i, label: e.memo || "卓", guests: e.guests, t: e.t }; })
+      : (doc.tables || []).filter(function (t) { return t.guests > 0 && t.startAt; })
+          .map(function (t) { return { key: t.id, label: t.label, guests: t.guests, t: t.startAt + (t.min || 60) * 60000 }; });
+    busy.sort(function (a, b) { return a.t - b.t; });
+
+    var items = busy.map(function (b) { return { l: b.label + " " + b.guests + "名 " + hhmm(b.t), v: b.key }; });
+    items.push({ l: "卓を選ばない", v: "" });
+    chipRow($("sendTableChips"), items, draft.sendTable || "", function (v) {
+      draft.sendTable = v;
+      var hit = busy.filter(function (b) { return b.key === v; })[0];
+      if (hit) { draft.sendGuests = hit.guests; draft.sendCheckAt = hit.t; draft.sendLabel = hit.label; }
+      else { draft.sendLabel = ""; }
+      drawSend();
+    }, true);
+
+    chipRow($("sendGuestChips"), [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { l: n + "名", v: n }; }),
+      draft.sendGuests, function (v) { draft.sendGuests = v; drawSend(); });
+
+    if (!draft.sendCheckAt) draft.sendCheckAt = round5(Date.now());
+    $("sendCheckAt").value = hhmm(draft.sendCheckAt);
+    chipRow($("sendWhenChips"), [{ l: "今すぐ", v: 0 }, { l: "15分後", v: 15 }, { l: "30分後", v: 30 }, { l: "45分後", v: 45 }, { l: "60分後", v: 60 }],
+      null, function (v) { draft.sendCheckAt = round5(Date.now() + v * 60000); drawSend(); });
   }
   function drawMe() {
     chipRow($("meChips"), STORES.map(function (s) { return { l: s.name, v: s.id }; }), me, function (v) {
@@ -760,9 +810,17 @@
   };
   $("sendGo").onclick = function () {
     var memo = $("sendMemo").value.trim(), g = draft.sendGuests;
+    var cv = $("sendCheckAt").value;
+    var checkAt = cv ? round5(timeToMs(cv)) : round5(Date.now());
+    var tbl = draft.sendLabel || "";
     $("sendGo").disabled = true;
-    updateMine(function (doc) { doc.sending.push({ id: uid(), to: other(me), guests: g, memo: memo, at: Date.now() }); })
-      .then(function () { $("sendGo").disabled = false; $("sendMemo").value = ""; closeSheets(); });
+    updateMine(function (doc) {
+      doc.sending.push({ id: uid(), to: other(me), guests: g, memo: memo, checkAt: checkAt, table: tbl, at: Date.now() });
+    }).then(function () {
+      $("sendGo").disabled = false; $("sendMemo").value = "";
+      draft.sendTable = ""; draft.sendLabel = ""; draft.sendCheckAt = 0;
+      closeSheets();
+    });
   };
 
   render();
