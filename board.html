@@ -75,6 +75,28 @@
   .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
   .accept .line { display:block; font-size:12px; font-weight:bold; opacity:.95; margin-top:2px; }
 
+  /* 1画面で打ち切る卓の行 */
+  .rows { display:flex; flex-direction:column; gap:6px; }
+  .row { display:flex; align-items:center; gap:6px; background:#0d0d10; border:1.5px solid #22222a; border-radius:12px; padding:7px 8px; }
+  .row.busy { border-color:#c9a64e; background:#15130d; }
+  .row.prep { border-color:#3fb6b0; border-style:dashed; background:rgba(63,182,176,.06); }
+  .row.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
+  .row.over { border-color:#a15050; background:rgba(224,85,85,.1); }
+  .row .nm { background:none; border:none; color:#e8e8ec; font-family:Georgia,serif; font-size:15px; font-weight:bold; min-width:52px; text-align:left; padding:6px 0; }
+  .row.busy .nm { color:#c9a64e; }
+  .row.prep .nm { color:#3fb6b0; }
+  .cnt { display:flex; align-items:center; gap:3px; }
+  .cnt button { width:38px; height:38px; border-radius:10px; background:#1c1c22; border:1px solid #3a3a42; color:#fff; font-size:19px; font-weight:bold; line-height:1; }
+  .cnt button:disabled { color:#3a3a42; border-color:#22222a; }
+  .cnt .n { font-size:16px; font-weight:bold; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
+  .row .rt { margin-left:auto; }
+  .row .chk { background:#22222a; border:1px solid #3a3a42; color:#e8c07a; border-radius:10px; padding:9px 8px; font-size:13px; font-weight:bold; white-space:nowrap; }
+  .row .go { background:#3fb6b0; color:#04211f; border:none; border-radius:10px; padding:10px 12px; font-size:14px; font-weight:bold; white-space:nowrap; }
+  .row .cap2 { font-size:11px; color:#4a4a52; padding-right:4px; }
+  .castbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:7px 10px; margin:8px 0; }
+  .castbar .cg { display:flex; align-items:center; gap:6px; }
+  .castbar .cl { font-size:11px; color:#8a8a92; font-weight:bold; white-space:nowrap; }
+
   /* 卓の名前と席数の編集 */
   .trow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
   .trow input[type=text] { flex:1; min-width:0; padding:9px 10px; font-size:15px; }
@@ -272,8 +294,50 @@
     if (!f.count) return "";
     return "最大 " + f.max + "名の卓" + (f.count > 1 ? " ・ 合計 " + f.total + "席" : "");
   }
+
+  // 卓が空いていてもキャストがいなければ振れない。両方から「何卓・何名まで」を出す。
+  function availOf(doc) {
+    var tb = doc.tables || [];
+    var used = tb.reduce(function (s, t) { return s + (t.guests > 0 ? t.guests : 0); }, 0);
+    var free = tb.filter(function (t) { return !(t.guests > 0); });
+    var c = doc.casts || {};
+    var castNow = c.now || 0, castTotal = Math.max(c.total || 0, castNow);
+    var maxSeat = free.reduce(function (m, t) { return Math.max(m, capOf(t)); }, 0);
+    var freeCast = castNow ? Math.max(0, castNow - used) : 0;
+    return {
+      freeTables: free.length, maxSeat: maxSeat,
+      castNow: castNow, castTotal: castTotal, freeCast: freeCast,
+      coming: Math.max(0, castTotal - castNow),
+      // キャスト未入力の店は席数だけで判断する（今までどおり）
+      take: castNow ? Math.min(freeCast, maxSeat) : maxSeat
+    };
+  }
+  function castLine(a) {
+    if (!a.castNow && !a.castTotal) return "";
+    return '<span class="line">キャスト ' + a.castNow + '/' + a.castTotal + '名 出勤'
+      + (a.freeCast > 0 ? '（手空き ' + a.freeCast + '名）' : '（全員接客中）')
+      + (a.coming > 0 ? ' ・ あと' + a.coming + '名 来る' : '') + '</span>';
+  }
+  function availHtml(a) {
+    if (!a.freeTables) return '<div class="accept a-full"><span class="big">✕ 満席</span>' + castLine(a) + '</div>';
+    if (a.castNow && a.take <= 0)
+      return '<div class="accept a-soon"><span class="big">△ キャスト待ち</span>'
+        + '<span class="line">卓は ' + a.freeTables + '卓 空き</span>' + castLine(a) + '</div>';
+    return '<div class="accept a-ok"><span class="big">◯ ' + a.freeTables + '卓 ・ ' + a.take + '名までOK</span>'
+      + castLine(a) + '</div>';
+  }
+  // 出勤キャストの打ち込み（＋−だけ）
+  function castBar(doc) {
+    var c = doc.casts || {};
+    return '<div class="castbar">'
+      + '<div class="cg"><span class="cl">👥 今いる</span>'
+      +   '<div class="cnt"><button data-cast="now|-1">−</button><span class="n">' + (c.now || 0) + '</span><button data-cast="now|1">＋</button></div></div>'
+      + '<div class="cg"><span class="cl">本日 出勤</span>'
+      +   '<div class="cnt"><button data-cast="total|-1">−</button><span class="n">' + Math.max(c.total || 0, c.now || 0) + '</span><button data-cast="total|1">＋</button></div></div>'
+      + '</div>';
+  }
   function emptyDoc(id) {
-    return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60 };
+    return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60, casts: { now: 0, total: 0 } };
   }
 
   // ---------- 通信 ----------
@@ -314,6 +378,7 @@
       doc.sending = doc.sending || [];
       if (!doc.tables) doc.tables = makeTables(6);
       doc.tables = doc.tables.map(function (t) { return { ...t, cap: capOf(t) }; });  // 古いデータに席数を補う
+      doc.casts = Object.assign({ now: 0, total: 0 }, doc.casts || {});
       if (!doc.setMin) doc.setMin = 60;
       fn(doc);
       syncLeaving(doc);
@@ -385,31 +450,38 @@
     var tables = doc.tables || makeTables(6);
     var now = Date.now();
     var h = '<div class="sec mine"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
-      + '<span>' + freshHtml(doc.at) + '</span></div>'
-      + '<div class="lv-title">卓をタップ → 人数をタップ → ▶スタート（チェック時刻は自動計算）</div><div class="tgrid">';
+      + '<span>' + freshHtml(doc.at) + '</span></div>';
+
+    // いま相手店にどう見えているか（自分でも確認できるように同じものを出す）
+    h += availHtml(availOf(doc));
+    h += castBar(doc);
+
+    // 1画面で打ち切れるように、卓は縦1行ずつ。＋−で人数、▶でスタート。
+    h += '<div class="lv-title">＋で人数 → ▶スタート。時刻を直すときは卓名か時刻をタップ</div><div class="rows">';
     tables.forEach(function (t) {
       var busy = t.guests > 0 && t.startAt;
       var prep = t.guests > 0 && !t.startAt;
-      // 出すのは「卓名・何名・何時にチェック」だけ。細かい時刻はタップした先で見られる。
-      if (prep) {
-        h += '<button class="tcard prep" data-tap="' + t.id + '">'
-          + '<div class="tl">' + esc(t.label) + '</div>'
-          + '<div class="big">' + t.guests + '名</div>'
-          + '<div class="wait">▶ スタート待ち</div>'
-          + '</button>';
-      } else if (!busy) {
-        h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div>'
-          + '<div class="empty">空席 ' + capOf(t) + '席</div></button>';
-      } else {
+      var cls = "", right;
+      if (busy) {
         var end = t.startAt + (t.min || 60) * 60000;
         var rem = Math.ceil((end - now) / 60000);
-        var cls = rem <= 0 ? "over" : rem <= 15 ? "soon" : "";
-        h += '<button class="tcard busy ' + cls + '" data-tap="' + t.id + '">'
-          + '<div class="tl">' + esc(t.label) + '</div>'
-          + '<div class="big">' + t.guests + '名</div>'
-          + '<div class="out">' + hhmm(end) + ' チェック</div>'
-          + '</button>';
+        cls = "busy" + (rem <= 0 ? " over" : rem <= 15 ? " soon" : "");
+        right = '<button class="chk" data-tap="' + t.id + '">' + hhmm(end) + ' チェック ▾</button>';
+      } else if (prep) {
+        cls = "prep";
+        right = '<button class="go" data-start="' + t.id + '">▶ スタート</button>';
+      } else {
+        right = '<span class="cap2">' + capOf(t) + '席</span>';
       }
+      h += '<div class="row ' + cls + '">'
+        + '<button class="nm" data-tap="' + t.id + '">' + esc(t.label) + '</button>'
+        + '<div class="cnt">'
+        +   '<button data-guest="' + t.id + '|-1"' + (t.guests > 0 ? '' : ' disabled') + '>−</button>'
+        +   '<span class="n">' + (t.guests > 0 ? t.guests + '名' : '空') + '</span>'
+        +   '<button data-guest="' + t.id + '|1">＋</button>'
+        + '</div>'
+        + '<div class="rt">' + right + '</div>'
+        + '</div>';
     });
     h += '</div>';
 
@@ -503,14 +575,9 @@
             + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + '</span>' : '')
         + '<span class="small">つけ回しツールから自動</span></div>';
     } else {
-      // 卓の手入力から空き数と「何名まで入るか」を出す
+      // 卓とキャストの入力から「何卓・何名まで振れるか」を自動で出す
       var tb = doc.tables || [];
-      var fi = freeInfo(tb);
-      accHtml = tb.length
-        ? '<div class="accept ' + (fi.count > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (fi.count > 0 ? "◯ 空き " + fi.count + "卓" : "✕ 満席") + '</span>'
-          + (fi.count > 0 ? '<span class="line">' + freeText(fi) + '</span>' : '')
-          + '<span class="small">卓の入力から自動</span></div>'
-        : '<div class="accept a-none">受入状況 未入力</div>';
+      accHtml = tb.length ? availHtml(availOf(doc)) : '<div class="accept a-none">受入状況 未入力</div>';
     }
 
     var list = ((doc.leaving || []).concat(auto ? auto.leaving : []))
@@ -654,7 +721,7 @@
   $("sendBtn").onclick = function () { if (!needMe()) return; drawSend(); openSheet("sheetSend"); };
 
   document.addEventListener("click", function (ev) {
-    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
+    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-guest],[data-cast],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
     if (t.id === "addManual") { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); return; }
     if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
@@ -675,6 +742,34 @@
       render(); return;
     }
 
+    // 出勤キャストの増減
+    var cst = t.getAttribute && t.getAttribute("data-cast");
+    if (cst) {
+      var cp = cst.split("|"), fld = cp[0], dl = +cp[1];
+      updateMine(function (d) {
+        var c = Object.assign({ now: 0, total: 0 }, d.casts || {});
+        c[fld] = Math.max(0, Math.min(60, (c[fld] || 0) + dl));
+        if (fld === "now" && c.now > c.total) c.total = c.now;      // 今いる数が本日の予定を超えたら合わせる
+        if (fld === "total" && c.total < c.now) c.now = c.total;
+        d.casts = c;
+      });
+      return;
+    }
+    // 卓の人数を ＋− で直す。0→1 で準備中になり、0 に戻すと空席。
+    var gst = t.getAttribute && t.getAttribute("data-guest");
+    if (gst) {
+      var gp = gst.split("|"), gtid = gp[0], gd = +gp[1];
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) {
+          if (x.id !== gtid) return x;
+          var n = Math.max(0, Math.min(20, (x.guests || 0) + gd));
+          if (n === 0) return { ...x, guests: 0, startAt: 0, planAt: 0, min: d.setMin || 60 };
+          if (!x.guests) return { ...x, guests: n, startAt: 0, planAt: round5(Date.now()), min: d.setMin || 60 };
+          return { ...x, guests: n };
+        });
+      });
+      return;
+    }
     // 人数を入れた時点では「準備中」。タイマーは▶スタートを押すまで動かさない。
     var inn = t.getAttribute && t.getAttribute("data-in");
     if (inn) {
