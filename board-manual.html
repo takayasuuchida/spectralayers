@@ -84,7 +84,7 @@
   <a href="#s8">8. 相手のお店を見る</a>
   <a href="#s9">9. 送客を伝える・受け取る</a>
   <a href="#s10">10. 受入状況を手で知らせる</a>
-  <a href="#s11">11. 卓を使わずに退店予定だけ入れる</a>
+  <a href="#s11">11. 卓を使わずにチェック予定だけ入れる</a>
   <a href="#s12">12. vivace 側（つけ回しツール連携）</a>
   <a href="#s13">13. 困ったときは（よくある質問）</a>
 </div>
@@ -92,18 +92,24 @@
 <h2 id="s0">0. これは何をする画面？</h2>
 <div class="card">
   <p><b>2店舗（vivace と ANELA）の間で、お客様を振りっこするための共有画面です。</b></p>
-  <p style="margin-top:8px;">お互いに知りたいのは、つまるところこの2つだけです。</p>
+  <p style="margin-top:8px;">お互いに知りたいのは、つまるところ<b>この3つだけ</b>です。</p>
   <ul>
-    <li><b>今そっちは入れる？</b>（空いてる卓は何卓？）</li>
-    <li><b>何時何分に何名出る？</b>（そこを狙って送りたい）</li>
+    <li><b>何卓</b> … 今そっち何卓空いてる？</li>
+    <li><b>何名</b> … 何名まで入る？（大きい卓はあるか）</li>
+    <li><b>何時にチェック</b> … 次はいつ空く？</li>
   </ul>
-  <p style="margin-top:8px;">この2つが、両店の携帯に自動でリアルタイム表示されます。電話もLINEも要りません。</p>
+  <p style="margin-top:8px;">この3つが、相手店の欄に<b>そのまま3行で</b>出ます。電話もLINEも要りません。</p>
+  <div class="accept-demo" style="background:rgba(95,214,160,.12);border:1px solid #3f8f6a;border-radius:12px;padding:10px;text-align:center;margin-top:10px;">
+    <div style="font-size:20px;font-weight:bold;color:#7ee6ac;">◯ 空き 3卓</div>
+    <div style="font-size:12px;font-weight:bold;color:#7ee6ac;">最大 7名の卓 ・ 合計 12席</div>
+    <div style="font-size:12px;font-weight:bold;color:#7ee6ac;">次のチェック 02:50（あと18分） 4名 VIP</div>
+  </div>
 </div>
 <div class="tip">
   <b>ANELA の方へ：</b>つけ回しツール（本体アプリ）を使う必要はありません。この振りっこボードだけ開いて、卓に人数を入れてもらえれば十分です。入力は <b>卓タップ → 人数タップ → ▶スタート</b> の3タップだけです。
 </div>
 <div class="tip">
-  お客様の名前・売上・お給料などは<b>いっさい相手店に送られません</b>。送られるのは「卓の人数」と「退店予定の時刻」だけです。
+  お客様の名前・売上・お給料などは<b>いっさい相手店に送られません</b>。送られるのは「卓の人数」と「チェック時刻」だけです。
 </div>
 
 <h2 id="s1">1. 最初の設定（1回だけ）</h2>
@@ -159,7 +165,7 @@
   <span class="step">卓をタップ</span><span class="arr">→</span>
   <span class="step">退店した</span>
 </div>
-<p style="margin-top:10px;">これだけです。<b>退店予定の時刻は、入店時刻とセット時間から自動で計算されます。</b>頭で計算する必要はありません。</p>
+<p style="margin-top:10px;">これだけです。<b>チェック時刻は、入店時刻とセット時間から自動で計算されます。</b>頭で計算する必要はありません。</p>
 
 <h2 id="s4">4. 卓に入店を入れる（3タップ）</h2>
 <ol class="steps">
@@ -186,26 +192,26 @@
     <div class="tl">VIP</div>
     <div class="big">3名</div>
     <div class="small">02:00 IN ・ 55分</div>
-    <div class="out">02:55 退店予定</div>
+    <div class="out">02:55 チェック</div>
     <div class="small">あと55分</div>
   </div>
 </div>
 
 <h3>時刻はすべて5分単位</h3>
-<p>入店時刻も退店予定も、<b>5分単位に丸めて</b>表示します（例：01:57 に入れたら 02:00 スタート扱い）。両店で見た時に「02:55 に3名」のようにキリよく読めるようにするためです。</p>
+<p>入店時刻もチェック時刻も、<b>5分単位に丸めて</b>表示します（例：01:57 に入れたら 02:00 スタート扱い）。両店で見た時に「02:55 に3名」のようにキリよく読めるようにするためです。</p>
 
 <h3>入店時刻を直したい時</h3>
 <p>入店パネルの <b>入店</b> の欄（時計マーク）をタップすると、時刻を選び直せます。<span class="btnlike2">今にする</span> を押すと、今の時刻に戻ります。</p>
 <div class="tip">
-  <b>ちょっと前に入ったお客様を後から入力する時</b>も安心です。入店時刻を実際の時刻（例：01:30）にしておけば、退店予定もそこから正しく計算されます。
+  <b>ちょっと前に入ったお客様を後から入力する時</b>も安心です。入店時刻を実際の時刻（例：01:30）にしておけば、チェック時刻もそこから正しく計算されます。
 </div>
 
 <h2 id="s5">5. ▶スタートボタンの意味</h2>
 <div class="card">
   <p><b>人数を入れただけでは、まだ時間は動きません。</b></p>
   <p style="margin-top:8px;">「席にはご案内したけど、まだセットは始まってない」という状態がお店では普通にあるからです。この間の卓は <span class="teal">水色の点線</span> で「▶ スタート待ち」と表示され、<b>相手店の「これから出るお客様」にはまだ出ません</b>（まだ何時に出るか決まっていないので）。</p>
-  <p style="margin-top:8px;"><span class="btnstart">▶ スタート（02:00 → 02:55）</span> のように、<b>開始時刻と退店予定がボタンに書いてあります。</b>合っているか目で確認してから押せます。</p>
-  <p style="margin-top:8px;">押した瞬間から時間を計り始め、退店予定が相手店に共有されます。</p>
+  <p style="margin-top:8px;"><span class="btnstart">▶ スタート（02:00 → 02:55）</span> のように、<b>開始時刻とチェック時刻がボタンに書いてあります。</b>合っているか目で確認してから押せます。</p>
+  <p style="margin-top:8px;">押した瞬間から時間を計り始め、チェック時刻が相手店に共有されます。</p>
 </div>
 
 <h3>準備中のうちは何度でも直せる</h3>
@@ -223,8 +229,8 @@
 <div class="demo">
   <div class="tcard"><div class="tl">ボックス2</div><div class="emptyx">空席 ・ 6席</div><div class="emptyx">タップで入店</div></div>
   <div class="tcard prep"><div class="tl">VIP</div><div class="big">3名</div><div class="small">02:00 入店 ・ 55分</div><div class="wait">▶ スタート待ち</div></div>
-  <div class="tcard busy"><div class="tl">ボックス1</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 退店予定</div><div class="small">あと35分</div></div>
-  <div class="tcard soon"><div class="tl">カウンター</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 退店予定</div><div class="small">あと12分</div></div>
+  <div class="tcard busy"><div class="tl">ボックス1</div><div class="big">4名</div><div class="small">01:30 IN ・ 60分</div><div class="out">02:30 チェック</div><div class="small">あと35分</div></div>
+  <div class="tcard soon"><div class="tl">カウンター</div><div class="big">2名</div><div class="small">01:20 IN ・ 60分</div><div class="out">02:20 チェック</div><div class="small">あと12分</div></div>
 </div>
 <table>
   <tr><th>見た目</th><th>意味</th></tr>
@@ -238,7 +244,7 @@
 <h2 id="s7">7. 延長・退店・打ち間違いの直し方</h2>
 <p>接客中の卓をタップすると、操作パネルが開きます。</p>
 <h3>延長になった</h3>
-<p><span class="btnlike2">延長 ＋5分</span> <span class="btnlike2">延長 ＋30分</span> <span class="btnlike2">延長 ＋60分</span> のどれかを押します。何回押しても足されます（＋30を2回で＋60分）。退店予定も自動でうしろにずれ、相手店の表示もすぐ変わります。</p>
+<p><span class="btnlike2">延長 ＋5分</span> <span class="btnlike2">延長 ＋30分</span> <span class="btnlike2">延長 ＋60分</span> のどれかを押します。何回押しても足されます（＋30を2回で＋60分）。チェック時刻も自動でうしろにずれ、相手店の表示もすぐ変わります。</p>
 <h3>お帰りになった</h3>
 <p><span style="background:#7a2222;color:#fff;border-radius:8px;padding:1px 8px;font-weight:bold;font-size:13px;">退店した</span> を押すと空席に戻り、相手店の「これから出るお客様」からも消えます。</p>
 <h3>入店時刻・セット時間を間違えた</h3>
@@ -250,9 +256,9 @@
 <h2 id="s8">8. 相手のお店を見る</h2>
 <div class="card">
   <p><b>◯ 空き 3卓</b><br>
-  <span style="font-size:12.5px;color:#8a8a92;">最大 7名の卓 ・ 合計 12席</span></p>
-  <p style="margin-top:6px;font-size:13px;">相手店で空いている卓の数と、<b>一番大きい卓が何名入るか</b>、<b>空いている席の合計</b>です。全部自動で計算されています。5名のお客様を送りたい時は「最大◯名」を見てください。</p>
-  <p style="margin-top:10px;"><b>これから出るお客様</b><br>
+  <span style="font-size:12.5px;color:#8a8a92;">最大 7名の卓 ・ 合計 12席<br>次のチェック 02:50（あと18分） 4名 VIP</span></p>
+  <p style="margin-top:6px;font-size:13px;">上から順に <b>何卓・何名・何時にチェック</b>。全部自動で計算されています。5名のお客様を送りたい時は「最大◯名」を、今は満席でも近いうちに送りたい時は「次のチェック」を見てください。<b>満席の時でも「次のチェック」は出ます。</b></p>
+  <p style="margin-top:10px;"><b>チェック予定</b><br>
   <span style="font-size:13px;">「02:55 ／ 3名 ／ VIP(7席) ／ あと18分」のように並びます。時間が近い順です。<b>どの卓が空くか（何席か）も出る</b>ので、大人数を送れるかどうかがすぐ分かります。</span></p>
   <ul style="margin-top:6px;">
     <li><span style="color:#e8c07a;">オレンジの行</span>＝あと15分以内。もうすぐ出ます</li>
@@ -266,17 +272,22 @@
 <h3>送るとき</h3>
 <ol class="steps">
   <li>一番下の <span class="btnlike">📨 送客を伝える</span> を押す</li>
-  <li>何名送るかタップ</li>
-  <li>ひとこと（任意）… 例「今から向かいます」「○○様のご紹介」</li>
+  <li><b>どの卓のお客様かタップ</b> … 接客中の卓が「VIP 6名 02:50」のように並びます。<b>選ぶだけで人数とチェック時刻が自動で入ります。</b>卓を使っていない時は「卓を選ばない」を選んでください</li>
+  <li>人数とチェック時刻を確認（違えば直せます。「今すぐ／15分後／30分後…」のボタンでも入ります）</li>
+  <li>ひとこと（任意）… 例「○○様のご紹介」「お酒強め」</li>
   <li><b>送客を知らせる</b> を押す</li>
 </ol>
+<div class="tip">
+  相手が知りたいのは <b>何卓・何名・何時にチェック</b> の3つです。卓をタップすれば3つとも自動で埋まるので、実質2タップで送れます。
+</div>
 <h3>受け取るとき</h3>
 <p>相手店から送客の連絡が来ると、画面の一番上に金色のお知らせが出ます。</p>
 <div class="card" style="border-color:#c9a64e;background:rgba(201,166,78,.14);">
-  <div style="color:#c9a64e;font-weight:bold;font-size:14px;">📨 vivace から 3名 送客</div>
-  <div style="font-size:12px;margin-top:3px;">02:10 連絡 ・ 今から向かいます</div>
+  <div style="color:#c9a64e;font-weight:bold;font-size:14px;">📨 vivace から 6名 送客</div>
+  <div style="font-size:12px;margin-top:3px;">02:50 チェック（あと18分） ・ VIP ・ お酒強め</div>
   <div style="margin-top:8px;"><span class="btnlike">確認しました</span></div>
 </div>
+<p style="font-size:13px;">「<b>02:50 チェック（あと18分）</b>」＝ そのお客様が向こうを出る時刻です。着く時間が読めるので、卓を空けて待てます。</p>
 <p><span class="btnlike">確認しました</span> を押すと消えます。<b>1回押せば、たまっていたお知らせが全部消えます。</b></p>
 
 <h2 id="s10">10. 受入状況を手で知らせる</h2>
@@ -288,8 +299,8 @@
 </ul>
 <p>一番下の <span class="btnlike2">受入状況</span> から、<b>◯ 今すぐOK ／ △ もう少し ／ ✕ 満席</b> と、何名まで入れるかを選んで知らせます。手で入れたものが優先で表示され、<b>3時間で自動的に消えて</b>、また自動計算に戻ります。</p>
 
-<h2 id="s11">11. 卓を使わずに退店予定だけ入れる</h2>
-<p>卓グリッドの下にある <b>＋ 卓を使わずに退店予定を直接入れる</b> から入れられます。</p>
+<h2 id="s11">11. 卓を使わずにチェック予定だけ入れる</h2>
+<p>卓グリッドの下にある <b>＋ 卓を使わずにチェック予定を直接入れる</b> から入れられます。</p>
 <ul>
   <li>立ち飲み・カウンターなど卓で管理していないお客様</li>
   <li>「30分後に4名出る」とだけ先に伝えたい時</li>
@@ -318,13 +329,13 @@
 <p class="faq-a">A. 電波を確認してください。表示は最後に取れた内容のままなので、画面が真っ白になることはありません。電波が戻れば自動で復帰します。</p>
 
 <p class="faq-q">Q. ▶スタートを押し忘れました</p>
-<p class="faq-a">A. 卓をタップして、入店時刻を実際の時刻に直してから ▶スタート を押してください。退店予定はそこから正しく計算されます。</p>
+<p class="faq-a">A. 卓をタップして、入店時刻を実際の時刻に直してから ▶スタート を押してください。チェック時刻はそこから正しく計算されます。</p>
 
 <p class="faq-q">Q. 間違えて別の卓に入れてしまいました</p>
 <p class="faq-a">A. 準備中なら「取り消す」、接客中なら「退店した」を押すと空席に戻ります。あらためて正しい卓に入れ直してください。</p>
 
 <p class="faq-q">Q. お客様の名前や売上は相手店に見えますか？</p>
-<p class="faq-a">A. 見えません。このボードでやりとりしているのは「卓の人数」「退店予定の時刻」「受入状況」「送客の連絡」だけです。お名前・お会計・お給料は一切送っていません。</p>
+<p class="faq-a">A. 見えません。このボードでやりとりしているのは「卓の人数」「チェック時刻」「受入状況」「送客の連絡」だけです。お名前・お会計・お給料は一切送っていません。</p>
 
 <p class="faq-q">Q. 携帯を変えたらデータは消えますか？</p>
 <p class="faq-a">A. 卓の状況はクラウドにあるので、新しい携帯でURLを開いてお店を選び直せば、そのまま続きが見られます。</p>
