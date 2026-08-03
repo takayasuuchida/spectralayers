@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.5.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.6.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -188,7 +188,14 @@ const storeSet = async (key, val) => {
 };
 
 // 時計ロジック（各パーツが個別に持つ → アプリ全体は再描画されない）
-const remainOf = (t, now) => t.setStart + t.setDuration * 60000 - now;
+// 指名の種類。ボトルバックは本指名のキャストで折半する（場内・ヘルプには付かない）
+const NOM_MAIN = "main", NOM_FIELD = "field", NOM_HELP = "help";
+const NOM_LABEL = { main: "本", field: "場内", help: "ヘルプ" };
+const NOM_COLOR = { main: "#c9a64e", field: "#3fb6b0", help: "#5a5a62" };
+const NOM_ORDER = [NOM_HELP, NOM_FIELD, NOM_MAIN];
+// セット時間 + 延長ぶん
+const setMinOf = (t) => (t.setDuration || 0) + (t.extendMin || 0);
+const remainOf = (t, now) => t.setStart + setMinOf(t) * 60000 - now;
 const tstateOf = (t, now) => { const r = remainOf(t, now); if (r <= 0) return "over"; if (r <= 600000) return "soon"; return "ok"; };
 const fmt = (ms) => { const a = Math.abs(ms); const m = Math.floor(a / 60000); const s = Math.floor((a % 60000) / 1000); return `${m}:${String(s).padStart(2, "0")}`; };
 // 業務日: AM6:00 未満は前日扱い（キャバクラの深夜業態向け）
@@ -655,7 +662,7 @@ export default function App() {
 
     // セット終盤に投入するなら延長に強い子を（終了5〜10分前の布石）
     if (t?.setStart) {
-      const remainMin = (t.setStart + t.setDuration * 60000 - Date.now()) / 60000;
+      const remainMin = (t.setStart + setMinOf(t) * 60000 - Date.now()) / 60000;
       if (remainMin <= 12 && (cast.strengths || []).includes("延長に強い")) s += 45;
     }
 
@@ -747,7 +754,7 @@ export default function App() {
     Object.entries(ts).forEach(([tid, t]) => {
       if (!t?.active || !t.setStart || !t.customers.length) return;
       const label = tables.find(x => x.id === tid)?.label || tid;
-      const remainMin = (t.setStart + t.setDuration * 60000 - nowMs) / 60000;
+      const remainMin = (t.setStart + setMinOf(t) * 60000 - nowMs) / 60000;
 
       // 延長クロージング: 終了5〜10分前にお気に入り／延長に強い子を入れる
       if (remainMin > 0 && remainMin <= 10) {
@@ -898,7 +905,7 @@ export default function App() {
         const t = ts[tt.id];
         if (!t?.active) return { label: disp.label, cap: disp.cap, busy: false };
         if (!t.setStart) return { label: disp.label, cap: disp.cap, busy: true, preparing: true, guests: t.customers.length };
-        const remainMin = Math.ceil((t.setStart + t.setDuration * 60000 - nowMs) / 60000);
+        const remainMin = Math.ceil((t.setStart + setMinOf(t) * 60000 - nowMs) / 60000);
         const rotMs = (t.setDuration / 3) * 60000;
         const rotOver = t.casts.some(a => (a.at ?? t.setStart) + rotMs - nowMs <= 0);
         return { label: disp.label, cap: disp.cap, busy: true, guests: t.customers.length, remainMin, rotOver };
@@ -976,13 +983,43 @@ export default function App() {
       onResult?.({ ok: false, msg: "復元失敗: " + String(e?.message || e) });
     }
   }
+  // ---- 指名の種類（本指名 / 場内 / ヘルプ） ----
+  // ボトルバックは「その卓の本指名キャスト」で均等に折半する。
+  // 場内は延長になった時点で本指名に昇格し、そこから折半に加わる。
+  function bumpNomCounter(castId, type, delta) {
+    if (type === NOM_MAIN) bumpCastCounter(castId, "mainNominationCount", delta);
+    else if (type === NOM_FIELD) bumpCastCounter(castId, "fieldNominationCount", delta);
+  }
+  function setNomType(tableId, castId, next) {
+    const cur = ts[tableId]?.casts.find(a => a.castId === castId)?.nomType || NOM_HELP;
+    if (cur === next) return;
+    bumpNomCounter(castId, cur, -1);   // 前の種別のカウントを戻す
+    bumpNomCounter(castId, next, 1);   // 新しい種別を加算
+    upd(tableId, t => ({ ...t, casts: t.casts.map(a => a.castId === castId ? { ...a, nomType: next } : a) }));
+    logAudit("指名種別", `${castById[castId]?.name || "?"} → ${NOM_LABEL[next]}`);
+  }
+  // 延長: セット時間を延ばし、場内指名を本指名に昇格させる（そこからボトルバックは全員で折半）
+  function extendTable(tableId, minutes) {
+    const t = ts[tableId];
+    if (!t?.active) return;
+    const promoted = t.casts.filter(a => a.nomType === NOM_FIELD).map(a => a.castId);
+    promoted.forEach(id => { bumpNomCounter(id, NOM_FIELD, -1); bumpNomCounter(id, NOM_MAIN, 1); });
+    upd(tableId, t2 => ({
+      ...t2,
+      extendMin: (t2.extendMin || 0) + minutes,
+      casts: t2.casts.map(a => a.nomType === NOM_FIELD ? { ...a, nomType: NOM_MAIN } : a),
+    }));
+    const label = tables.find(x => x.id === tableId)?.label || tableId;
+    logAudit("延長", `${label} +${minutes}分${promoted.length ? ` / 場内→本指名: ${promoted.map(id => castById[id]?.name).join("・")}` : ""}`);
+  }
+
   function doAssign(tableId, castId, customerId) {
     upd(tableId, t => {
       const seats = [...t.seats];
       const ci = seats.findIndex(s => s.k === "cust" && s.id === customerId);
       const entry = { k: "cast", id: castId };
       if (ci >= 0) seats.splice(ci + 1, 0, entry); else seats.push(entry);
-      return { ...t, casts: [...t.casts, { castId, customerId, at: Date.now() }], seats };
+      return { ...t, casts: [...t.casts, { castId, customerId, at: Date.now(), nomType: NOM_HELP }], seats };
     });
     setServed(s => ({ ...s, [customerId]: [...new Set([...(s[customerId] || []), castId])] }));
     const cust = ts[tableId]?.customers.find(c => c.id === customerId);
@@ -1060,7 +1097,7 @@ export default function App() {
           fromLabel: tables.find(x => x.id === tid)?.label || tid,
           fromCustName: t.customers.find(c => c.id === a.customerId)?.name || "",
           rotRemainMs: rotEndOf(t, a) - now,           // 交代までの残り
-          tableRemainMs: t.setStart + t.setDuration * 60000 - now, // その卓の残り時間
+          tableRemainMs: t.setStart + setMinOf(t) * 60000 - now, // その卓の残り時間
           satMs: now - at,                              // 着席してからの経過
           fresh: now - at < MIN_STAY_MS,                // 付けたばかり＝抜くべきでない
           lastOne: t.casts.length <= 1,                 // 抜くとその卓が女の子ゼロ
@@ -1252,31 +1289,55 @@ export default function App() {
     if (pr?.backPct != null) return pr.backPct;
     return cast?.bottleBackPct ?? 0;
   };
+  // ボトルバックを受け取るキャスト。その卓の「本指名」で折半。
+  // 本指名がいなければ、そのボトルを入れたキャスト本人へ（従来どおり）。
+  function bottleRecipients(tableId, o) {
+    const t = ts[tableId];
+    const mains = (t?.casts || []).filter(a => a.nomType === NOM_MAIN).map(a => a.castId);
+    if (mains.length) return [...new Set(mains)];
+    return o?.castId ? [o.castId] : [];
+  }
+  // 総額を人数で割る。1円単位の端数は先頭の人に寄せて合計が必ず一致するようにする。
+  function splitYen(total, ids) {
+    if (!ids.length) return [];
+    const base = Math.floor(total / ids.length);
+    let rest = total - base * ids.length;
+    return ids.map(id => { const extra = rest > 0 ? 1 : 0; rest -= extra; return { castId: id, yen: base + extra }; });
+  }
+
   // 注文の増減に合わせてキャストのカウンター・ボトルバック実額を増減する
   function applyOrderCounters(o, unit) {
-    if (!o?.castId || !unit) return;
-    setCasts(cs => cs.map(c => {
+    if (!unit) return;
+    if (o?.castId) setCasts(cs => cs.map(c => {
       if (c.id !== o.castId) return c;
       if (o.kind === "drink") return { ...c, drinkCount: Math.max(0, (c.drinkCount || 0) + unit) };
       if (o.kind === "shot") return { ...c, shotCount: Math.max(0, (c.shotCount || 0) + unit) };
-      if (isBottleKind(o.kind)) {
-        const pct = resolveBackPct(o, c);
-        const sales = (o.price || 0) * unit;
-        return {
-          ...c,
-          bottleSales: Math.max(0, (c.bottleSales || 0) + sales),
-          bottleSalesBacked: Math.max(0, (c.bottleSalesBacked || 0) + sales),
-          bottleBackYen: Math.max(0, (c.bottleBackYen || 0) + Math.round(sales * pct / 100)),
-        };
-      }
       return c;
     }));
+    // ボトルは「売った子」に売上、「本指名の子たち」にバックを折半して積む
+    if (isBottleKind(o.kind)) {
+      const split = o.backSplit || [];
+      setCasts(cs => cs.map(c => {
+        let n = c;
+        if (c.id === o.castId) {
+          const sales = (o.price || 0) * unit;
+          n = { ...n, bottleSales: Math.max(0, (n.bottleSales || 0) + sales), bottleSalesBacked: Math.max(0, (n.bottleSalesBacked || 0) + sales) };
+        }
+        const part = split.find(x => x.castId === c.id);
+        if (part) n = { ...n, bottleBackYen: Math.max(0, (n.bottleBackYen || 0) + part.yen * unit) };
+        return n;
+      }));
+    }
   }
   const addOrder = (tableId, o) => {
     // 注文時点のバック率を確定して保存（あとで設定を変えても過去の伝票は動かない）
     const cast = o.castId ? castById[o.castId] : null;
     const entry = { ...o, id: "o" + Math.random().toString(36).slice(2, 7), qty: 1, at: Date.now() };
-    if (isBottleKind(o.kind)) entry.backPct = resolveBackPct(o, cast);
+    if (isBottleKind(o.kind)) {
+      entry.backPct = resolveBackPct(o, cast);
+      const recips = bottleRecipients(tableId, o);
+      entry.backSplit = splitYen(Math.round((o.price || 0) * entry.backPct / 100), recips);
+    }
     upd(tableId, t => ({ ...t, orders: [...t.orders, entry] }));
     bumpStock(o.productId, -1); // リアルタイム在庫減算
     applyOrderCounters(entry, 1);
@@ -1300,7 +1361,7 @@ export default function App() {
   };
   function openTable(tableId) {
     // setStart: null = 準備中。「▶ セット開始」ボタンでタイマー開始
-    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", customers: [], casts: [], seats: [], orders: [] } }));
+    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", extendMin: 0, customers: [], casts: [], seats: [], orders: [] } }));
     logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
   }
   function startTable(tableId) {
@@ -1442,6 +1503,7 @@ export default function App() {
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
           tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, tableRawTotal, tableRoundAdj, roundUnit,
+          setNomType, extendTable,
           backPresets: settings.bottleBackPresets || [20, 25, 35],
           recallCandidates, recallTo, minusInfo, storeName: settings.storeName,
           castsInTable: (ts[sel]?.casts || []).map(a => castById[a.castId]).filter(Boolean),
@@ -1769,7 +1831,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets, tableRawTotal, tableRoundAdj, roundUnit } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets, tableRawTotal, tableRoundAdj, roundUnit, setNomType, extendTable } = p;
   const [chBack, setChBack] = useState(null); // 手入力ボトルのバック率（null=既定）
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
@@ -1873,7 +1935,7 @@ function Detail(p) {
             );
           })()}
 
-          {t.setStart && <RotationPlan t={t} plusAssign={() => plusAssign(tableId)} availCount={availCount} castById={castById} reactions={reactions} tryAssign={(castId, custId) => tryAssign(tableId, castId, custId)} />}
+          {t.setStart && <RotationPlan t={t} plusAssign={() => plusAssign(tableId)} availCount={availCount} castById={castById} reactions={reactions} tryAssign={(castId, custId) => tryAssign(tableId, castId, custId)} extendTable={(m) => extendTable(tableId, m)} />}
 
           <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#000" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
             <div className="space-y-2">
@@ -1911,9 +1973,12 @@ function Detail(p) {
                         const at = a.at ?? t.setStart;
                         const schedEnd = (t.setStart || at) + rotWindowEndMin(t.setDuration, n) * 60000;
                         const end = Math.max(schedEnd, at + 10 * 60000);
+                        const nom = a.nomType || "help";
                         return (
                           <RotationChip key={a.castId} cast={c} at={at} rotMs={end - at} started={!!t.setStart}
                             nth={n + 1} reaction={reactions?.[cust.id]?.[c.id]} onReact={(v) => setReaction(cust.id, c.id, v)}
+                            nomType={nom}
+                            onNom={() => setNomType(tableId, c.id, NOM_ORDER[(NOM_ORDER.indexOf(nom) + 1) % NOM_ORDER.length])}
                             onRemove={() => removeCast(tableId, c.id)} />
                         );
                       })}
@@ -2417,10 +2482,10 @@ function ReceiptModal({ r, onClose }) {
 
 // 接客プラン: 教科書の時間配分（1人目0分/2人目15〜20分/3人目35〜40分）を可視化し、
 // セット終了5〜10分前の延長クロージングを促す。プラス付けもここから。
-function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssign }) {
+function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssign, extendTable }) {
   const now = useNow(true);
   const elapsedMin = Math.max(0, Math.floor((now - t.setStart) / 60000));
-  const remainMin = Math.ceil((t.setStart + t.setDuration * 60000 - now) / 60000);
+  const remainMin = Math.ceil((t.setStart + setMinOf(t) * 60000 - now) / 60000);
   const sched = rotationSchedule(t.setDuration);
   const closing = remainMin <= 10 && remainMin > 0;   // 延長交渉の準備タイム
   const urgent = remainMin <= 5 && remainMin > 0;     // 延長交渉そのもの
@@ -2433,6 +2498,9 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
     });
   });
   const canPlus = availCount > 0;
+  const mains = t.casts.filter(a => a.nomType === "main");
+  const fields = t.casts.filter(a => a.nomType === "field");
+  const nameOf = (a) => castById[a.castId]?.name || "?";
   return (
     <div style={{ background: closing ? "rgba(224,168,74,.08)" : "#141418", border: `1px solid ${closing ? "#7a5a1a" : "#22222a"}` }} className="rounded-xl p-3">
       <div className="flex items-center justify-between mb-2">
@@ -2470,6 +2538,34 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
           )}
         </div>
       )}
+      {/* ボトルバックの行き先。本指名で折半、いなければ入れた子へ */}
+      <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
+        <div className="text-[10px] text-zinc-500 mb-1">🍾 ボトルバックの行き先</div>
+        {mains.length ? (
+          <div className="text-[11px]" style={{ color: GOLD }}>
+            <b>{mains.map(nameOf).join("・")}</b>
+            <span className="text-zinc-500">{mains.length > 1 ? ` の${mains.length}名で折半` : " に全額"}</span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-zinc-500">本指名がいないので、ボトルを入れた子に付きます</div>
+        )}
+        {fields.length > 0 && (
+          <div className="text-[10px] text-zinc-500 mt-1">
+            場内: {fields.map(nameOf).join("・")} — 延長すると本指名になり折半に加わります
+          </div>
+        )}
+        <div className="text-[9px] text-zinc-600 mt-1">チップの「本/場内/ヘルプ」をタップして切替</div>
+      </div>
+
+      {/* 延長: 場内→本指名に昇格させ、以降のボトルバックを全員で折半 */}
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="text-[10px] text-zinc-500">延長</span>
+        {[30, 60].map(m => (
+          <button key={m} onClick={() => extendTable(m)} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="text-[11px] rounded-lg px-3 py-1.5 font-bold">＋{m}分</button>
+        ))}
+        {(t.extendMin || 0) > 0 && <span style={{ color: GOLD }} className="text-[10px] font-bold">延長中 +{t.extendMin}分</span>}
+      </div>
+
       <button onClick={plusAssign} disabled={!canPlus}
         style={{ background: canPlus ? "#22222a" : "#141418", color: canPlus ? TEAL : "#4a4a52", border: `1px solid ${canPlus ? TEAL : "#2a2a32"}` }}
         className="w-full rounded-lg py-2 text-[11px] font-bold">
@@ -2479,7 +2575,7 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
   );
 }
 
-function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction, onReact }) {
+function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction, onReact, nomType, onNom }) {
   const now = useNow(started);
   // 反応ボタン（◎/✗）— お客様の反応を見極めて場内指名・延長に繋ぐための記録
   const React2 = () => onReact ? (
@@ -2489,11 +2585,17 @@ function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction
     </>
   ) : null;
   const numBadge = nth ? <span className="text-[8px] opacity-60">{nth}人目</span> : null;
+  // 指名バッジ。タップで ヘルプ→場内→本 と切り替わる。本指名だけボトルバックの折半対象。
+  const nomBadge = onNom ? (
+    <button onClick={onNom} title="タップで 本指名/場内/ヘルプ を切替"
+      style={{ background: nomType === "main" ? GOLD : nomType === "field" ? TEAL : "#2a2a32", color: nomType === "help" ? "#9a9aa2" : "#000" }}
+      className="text-[8px] rounded px-1 font-bold leading-tight">{NOM_LABEL[nomType] || "ヘルプ"}</button>
+  ) : null;
   if (!started || !at) {
     // セット開始前: タイマーなしの待機チップ
     return (
       <span style={{ background: "rgba(63,182,176,.15)", border: `1px solid ${TEAL}`, color: "#a8e6e2" }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-        今 {cast.name}{numBadge}
+        今 {cast.name}{numBadge}{nomBadge}
         <span className="text-[9px] opacity-70">待機</span>
         <React2 />
         <button onClick={onRemove}><X size={11} /></button>
@@ -2509,7 +2611,7 @@ function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction
   const fg = over ? "#ffb3b3" : soon ? "#f0cf9a" : good ? "#e8d29a" : "#a8e6e2";
   return (
     <span style={{ background: bg, border: `1px solid ${color}`, color: fg }} className="text-[11px] rounded-full pl-2 pr-1 py-0.5 font-bold flex items-center gap-1">
-      今 {cast.name}{numBadge}
+      今 {cast.name}{numBadge}{nomBadge}
       <span className="text-[9px] opacity-90">{over ? "交代!" : `残${Math.ceil(remain / 60000)}分`}</span>
       <React2 />
       <button onClick={onRemove}><X size={11} /></button>
