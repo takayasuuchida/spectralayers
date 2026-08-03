@@ -58,8 +58,9 @@
   .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
   .lv.soon { border-color:#7a5a1a; background:rgba(224,168,74,.07); }
   .lv.now  { border-color:#3f8f6a; background:rgba(95,214,160,.08); }
-  .lv .t { font-size:17px; font-weight:bold; font-variant-numeric:tabular-nums; }
-  .lv .g { font-size:13px; color:#c9a64e; font-weight:bold; }
+  .lv .tbl { font-size:15px; font-weight:bold; color:#e8e8ec; }
+  .lv .t { font-size:17px; font-weight:bold; font-variant-numeric:tabular-nums; margin-left:auto; white-space:nowrap; }
+  .lv .g { font-size:15px; color:#c9a64e; font-weight:bold; }
   .lv .in { font-size:10px; color:#8a8a92; margin-left:auto; white-space:nowrap; }
   .lv .auto { font-size:9px; color:#5fd6a0; border:1px solid #2f6a4f; border-radius:4px; padding:0 4px; }
   .lv .del { background:none; border:none; color:#55555c; font-size:15px; padding:0 2px; }
@@ -271,16 +272,6 @@
     if (!f.count) return "";
     return "最大 " + f.max + "名の卓" + (f.count > 1 ? " ・ 合計 " + f.total + "席" : "");
   }
-  // 知りたいのは「何卓・何名・何時にチェック」の3つ。次に空く卓を1行で出す。
-  function nextCheckHtml(list) {
-    var now = Date.now();
-    var next = (list || []).slice().sort(function (a, b) { return a.t - b.t; })
-      .filter(function (e) { return e.t - now > -30 * 60e3; })[0];
-    if (!next) return '<span class="line">次のチェック なし</span>';
-    var d = Math.round((next.t - now) / 60000);
-    return '<span class="line">次のチェック ' + hhmm(next.t) + '（' + (d <= 0 ? "出てるはず" : "あと" + d + "分") + '）'
-      + ' ' + (next.guests || 0) + '名' + (next.memo ? ' ' + esc(next.memo) : '') + '</span>';
-  }
   function emptyDoc(id) {
     return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60 };
   }
@@ -399,17 +390,16 @@
     tables.forEach(function (t) {
       var busy = t.guests > 0 && t.startAt;
       var prep = t.guests > 0 && !t.startAt;
+      // 出すのは「卓名・何名・何時にチェック」だけ。細かい時刻はタップした先で見られる。
       if (prep) {
         h += '<button class="tcard prep" data-tap="' + t.id + '">'
           + '<div class="tl">' + esc(t.label) + '</div>'
           + '<div class="big">' + t.guests + '名</div>'
-          + '<div class="small">' + hhmm(t.planAt || Date.now()) + ' 入店 ・ ' + (t.min || 60) + '分</div>'
           + '<div class="wait">▶ スタート待ち</div>'
           + '</button>';
       } else if (!busy) {
         h += '<button class="tcard" data-tap="' + t.id + '"><div class="tl">' + esc(t.label) + '</div>'
-          + '<div class="empty">空席 ・ ' + capOf(t) + '席</div>'
-          + '<div class="empty">タップで入店</div></button>';
+          + '<div class="empty">空席 ' + capOf(t) + '席</div></button>';
       } else {
         var end = t.startAt + (t.min || 60) * 60000;
         var rem = Math.ceil((end - now) / 60000);
@@ -417,9 +407,7 @@
         h += '<button class="tcard busy ' + cls + '" data-tap="' + t.id + '">'
           + '<div class="tl">' + esc(t.label) + '</div>'
           + '<div class="big">' + t.guests + '名</div>'
-          + '<div class="small">' + hhmm(t.startAt) + ' IN ・ ' + (t.min || 60) + '分</div>'
           + '<div class="out">' + hhmm(end) + ' チェック</div>'
-          + '<div class="small">' + (rem <= 0 ? "時間超過 " + (-rem) + "分" : "あと" + rem + "分") + '</div>'
           + '</button>';
       }
     });
@@ -487,9 +475,9 @@
       manual.sort(function (a, b) { return a.t - b.t; }).forEach(function (e) {
         var diff = Math.round((e.t - now) / 60000);
         h += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
-          + '<span class="t">' + hhmm(e.t) + '</span><span class="g">' + (e.guests || 0) + '名</span>'
-          + (e.memo ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + '</span>' : '')
-          + '<span class="in">' + (diff <= 0 ? "出てるはず" : "あと" + diff + "分") + '</span>'
+          + (e.memo ? '<span class="tbl">' + esc(e.memo) + '</span>' : '')
+          + '<span class="g">' + (e.guests || 0) + '名</span>'
+          + '<span class="t">' + hhmm(e.t) + ' チェック</span>'
           + '<button class="del" data-del="' + e.id + '">×</button></div>';
       });
     }
@@ -502,21 +490,17 @@
   function theirPanel(id, isMine) {
     var doc = data[id] || emptyDoc(id), auto = autoLeaving[id], st = storeOf(id), now = Date.now();
     var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
-    var allLeaving = (doc.leaving || []).concat(auto ? auto.leaving : []);
-    var nextHtml = nextCheckHtml(allLeaving);
     var acc = doc.accept, accHtml;
     if (acc && Date.now() - acc.at < 3 * 3600e3) {
       var cls = acc.level === "ok" ? "a-ok" : acc.level === "soon" ? "a-soon" : "a-full";
       var txt = acc.level === "ok" ? "◯ 今すぐOK" : acc.level === "soon" ? "△ もう少しで空く" : "✕ 満席";
       accHtml = '<div class="accept ' + cls + '"><span class="big">' + txt + '</span>'
-        + (acc.level !== "full" ? '<span class="line">最大 ' + acc.seats + '名まで</span>' : '')
-        + nextHtml + '</div>';
+        + (acc.level !== "full" ? '<span class="line">最大 ' + acc.seats + '名まで</span>' : '') + '</div>';
     } else if (auto) {
       accHtml = '<div class="accept ' + (auto.free > 0 ? "a-ok" : "a-full") + '"><span class="big">'
         + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span>'
         + (auto.free > 0 && auto.maxSeat ? '<span class="line">最大 ' + auto.maxSeat + '名の卓'
             + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + '</span>' : '')
-        + nextHtml
         + '<span class="small">つけ回しツールから自動</span></div>';
     } else {
       // 卓の手入力から空き数と「何名まで入るか」を出す
@@ -525,7 +509,6 @@
       accHtml = tb.length
         ? '<div class="accept ' + (fi.count > 0 ? "a-ok" : "a-full") + '"><span class="big">' + (fi.count > 0 ? "◯ 空き " + fi.count + "卓" : "✕ 満席") + '</span>'
           + (fi.count > 0 ? '<span class="line">' + freeText(fi) + '</span>' : '')
-          + nextHtml
           + '<span class="small">卓の入力から自動</span></div>'
         : '<div class="accept a-none">受入状況 未入力</div>';
     }
@@ -536,11 +519,11 @@
     var lvHtml = list.length ? "" : '<div class="empty">チェック予定はまだありません</div>';
     list.forEach(function (e) {
       var diff = Math.round((e.t - now) / 60000);
+      // 1行に「卓名 何名 何時にチェック」だけ
       lvHtml += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
-        + '<span class="t">' + hhmm(e.t) + '</span><span class="g">' + (e.guests || 0) + '名</span>'
-        + (e.auto ? '<span class="auto">自動</span>' : '')
-        + (e.memo ? '<span class="in" style="margin-left:4px;color:#6a6a72">' + esc(e.memo) + (e.cap ? '(' + e.cap + '席)' : '') + '</span>' : '')
-        + '<span class="in">' + (diff <= 0 ? "出てるはず" : "あと" + diff + "分") + '</span></div>';
+        + (e.memo ? '<span class="tbl">' + esc(e.memo) + '</span>' : '')
+        + '<span class="g">' + (e.guests || 0) + '名</span>'
+        + '<span class="t">' + hhmm(e.t) + ' チェック</span></div>';
     });
 
     return '<div class="sec' + (isMine ? " mine" : "") + '"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
@@ -558,11 +541,10 @@
       if (s.to !== me || s.at <= seen) return;
       var d = document.createElement("div");
       d.className = "alert";
-      var when = s.checkAt
-        ? hhmm(s.checkAt) + ' チェック（' + (s.checkAt - Date.now() <= 0 ? "もう出てる" : "あと" + Math.round((s.checkAt - Date.now()) / 60000) + "分") + '）'
-        : hhmm(s.at) + ' 連絡';
-      d.innerHTML = '<div class="h">📨 ' + esc(storeOf(other(me)).name) + ' から ' + s.guests + '名 送客</div>'
-        + '<div class="b">' + when + (s.table ? ' ・ ' + esc(s.table) : '') + (s.memo ? ' ・ ' + esc(s.memo) : '') + '</div>'
+      d.innerHTML = '<div class="h">📨 ' + esc(storeOf(other(me)).name) + ' から</div>'
+        + '<div class="b" style="font-size:17px;font-weight:bold;color:#fff">'
+        + (s.table ? esc(s.table) + ' ' : '') + s.guests + '名 ・ ' + hhmm(s.checkAt || s.at) + ' チェック</div>'
+        + (s.memo ? '<div class="b">' + esc(s.memo) + '</div>' : '')
         + '<button data-ack="' + s.at + '">確認しました</button>';
       box.appendChild(d);
     });
