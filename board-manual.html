@@ -76,8 +76,9 @@
   <a href="#s0">0. これは何をする画面？</a>
   <a href="#s1">1. 最初の設定（1回だけ）</a>
   <a href="#s2">2. 画面の見方</a>
+  <a href="#s2b">★ 出勤キャストを入れる（これが要）</a>
   <a href="#s3">3. 一晩の流れ（覚えるのはこれだけ）</a>
-  <a href="#s4">4. 卓に入店を入れる（3タップ）</a>
+  <a href="#s4">4. 卓に人数を入れる（＋を押すだけ）</a>
   <a href="#s5">5. ▶スタートボタンの意味</a>
   <a href="#s6">6. 卓の色でわかること</a>
   <a href="#s7">7. 延長・退店・打ち間違いの直し方</a>
@@ -143,8 +144,12 @@
 
 <h2 id="s2">2. 画面の見方</h2>
 <div class="card">
-  <p><span class="gold">■ 上（金色の枠）＝ 自分のお店</span><br>
-  卓が並んでいます。ここをタップして入店・退店を入れます。</p>
+  <p><span class="gold">■ 一番上 ＝ いま相手にどう見えているか</span><br>
+  「◯ 2卓 ・ 4名までOK」。これが相手店にそのまま出ています。</p>
+  <p style="margin-top:10px;"><span class="gold">■ その下 ＝ 出勤キャストの人数</span><br>
+  今いる人数と、本日の出勤予定人数。＋−で打つだけです。</p>
+  <p style="margin-top:10px;"><span class="gold">■ その下 ＝ 卓が縦に1行ずつ</span><br>
+  ＋−で人数、▶でスタート。開いたり閉じたりせず、1画面で全部打てます。</p>
   <p style="margin-top:10px;"><span class="teal">■ 下 ＝ 相手のお店</span><br>
   見るだけです。相手の受入状況と、これから出るお客様の一覧が出ます。</p>
   <p style="margin-top:10px;"><b>■ 一番下のボタン2つ</b><br>
@@ -153,36 +158,62 @@
 </div>
 <p><b>10秒ごとに自動で更新</b>されます。自分で更新ボタンを押す必要はありません。画面を閉じて開き直した時も、すぐ最新になります。</p>
 
+<h2 id="s2b">★ 出勤キャストを入れる（これが要）</h2>
+<div class="card">
+  <p><b>卓が空いていても、女の子が手空きでなければ振れません。</b>だから相手が本当に知りたい「何名まで振れるか」は、卓だけでは出せません。</p>
+  <p style="margin-top:8px;">画面の上にある <b>👥 今いる</b> と <b>本日 出勤</b> を ＋− で打ってください。それだけで、相手店の画面に<b>「◯ 2卓 ・ 4名までOK」</b>が自動で出ます。</p>
+</div>
+<table>
+  <tr><th>👥 今いる</th><td>今お店に来ている女の子の人数。出勤するたびに ＋ を押すだけ</td></tr>
+  <tr><th>本日 出勤</th><td>今日の最終的な出勤予定人数。相手に「あと◯名 来る」と伝わります</td></tr>
+</table>
+<h3>どう計算されるか</h3>
+<div class="card">
+  <p><b>手空きの子＝ 今いる人数 − 今ついているお客様の人数</b></p>
+  <p style="margin-top:6px;">例：今いる 5名／接客中のお客様 3名 → 手空き 2名。<br>
+  空いてる卓が4席あっても、<b>振れるのは2名まで</b>と出ます。</p>
+</div>
+<table>
+  <tr><th>◯ 2卓 ・ 4名までOK</th><td>卓も女の子も足りている。すぐ送ってOK</td></tr>
+  <tr><th>△ キャスト待ち</th><td>卓は空いているが女の子が全員接客中。「卓は◯卓 空き」「あと◯名 来る」も一緒に出ます</td></tr>
+  <tr><th>✕ 満席</th><td>卓が全部埋まっている</td></tr>
+</table>
+<div class="tip">
+  キャストの人数を入れていないお店は、<b>今までどおり席数だけ</b>で「◯ 3卓 ・ 6名までOK」と出ます。入れなくても壊れません。
+</div>
+
 <h2 id="s3">3. 一晩の流れ（覚えるのはこれだけ）</h2>
 <div class="flow">
+  <span class="step">女の子が来た</span><span class="arr">→</span>
+  <span class="step">👥今いる の ＋</span>
+</div>
+<div class="flow">
   <span class="step">お客様が入った</span><span class="arr">→</span>
-  <span class="step">卓をタップ</span><span class="arr">→</span>
-  <span class="step">人数をタップ</span><span class="arr">→</span>
+  <span class="step">その卓の ＋ を人数ぶん</span><span class="arr">→</span>
   <span class="step">▶スタート</span>
 </div>
 <div class="flow">
   <span class="step">延長になった</span><span class="arr">→</span>
-  <span class="step">卓をタップ</span><span class="arr">→</span>
+  <span class="step">時刻をタップ</span><span class="arr">→</span>
   <span class="step">延長ボタン</span>
 </div>
 <div class="flow">
   <span class="step">お帰りになった</span><span class="arr">→</span>
-  <span class="step">卓をタップ</span><span class="arr">→</span>
-  <span class="step">退店した</span>
+  <span class="step">− を押して 0 に</span>
 </div>
 <p style="margin-top:10px;">これだけです。<b>チェック時刻は、入店時刻とセット時間から自動で計算されます。</b>頭で計算する必要はありません。</p>
 
-<h2 id="s4">4. 卓に入店を入れる（3タップ）</h2>
+<h2 id="s4">4. 卓に人数を入れる（＋を押すだけ）</h2>
 <ol class="steps">
-  <li><b>空いている卓をタップ</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">「空席 4席」と書かれている卓です。</span></li>
-  <li><b>セット時間と入店時刻を確認</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">セット時間は <b>5分刻み（30分〜180分）</b>のプルダウンから選べます。入店時刻には<b>今の時刻が自動で入って</b>いるので、たいていはそのままでOKです。</span></li>
-  <li><b>人数の数字をタップ</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">その卓の席数を超える数字は色が薄くなります（4席の卓なら5以上）。<b>薄くても押せます</b> — 詰めて座ることはあるので、止めはしません。</span></li>
+  <li><b>その卓の ＋ を人数ぶん押す</b><br>
+    <span style="font-size:12.5px;color:#8a8a92;">3名なら3回。押しすぎたら − で戻せます。画面を開いたり閉じたりする必要はありません。</span></li>
   <li><b><span class="btnstart">▶ スタート</span> を押す</b><br>
-    <span style="font-size:12.5px;color:#8a8a92;">ここから時間を計り始めます。</span></li>
+    <span style="font-size:12.5px;color:#8a8a92;">同じ行の右に出ます。ここから時間を計り始め、相手店にチェック時刻が流れます。</span></li>
 </ol>
+<p>入店時刻は<b>押した時の時刻（5分単位）</b>、セット時間は<b>設定で決めた標準</b>が自動で入ります。だいたいはこの2ステップで終わりです。</p>
+<div class="tip">
+  <b>時刻やセット時間を直したい時だけ</b>、卓名か時刻（例:「02:55 チェック ▾」）をタップしてください。入店時刻・セット時間・延長・退店が下に開きます。
+</div>
 
 <div class="card">
   <p style="font-size:12px;color:#8a8a92;margin-bottom:6px;">▼ 人数を入れた直後（まだ計っていない）</p>
