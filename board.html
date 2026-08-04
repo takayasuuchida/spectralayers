@@ -6,16 +6,16 @@
 <title>🔁 2店舗 振りっこボード</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
-  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:110px; }
+  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:96px; }
   .wrap { max-width:760px; margin:0 auto; padding:0 12px; }
   header { border-bottom:1px solid #1c1c22; padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .brand { font-family:Georgia,serif; letter-spacing:.15em; color:#c9a64e; font-size:15px; font-weight:bold; }
   .sub { color:#6a6a72; font-size:10px; }
   .me { font-size:10px; color:#a8e6e2; border:1px solid #2a6a66; border-radius:999px; padding:3px 10px; background:rgba(63,182,176,.08); white-space:nowrap; }
 
-  .sec { background:#141418; border:1px solid #22222a; border-radius:16px; padding:12px; margin-top:12px; }
+  .sec { background:#141418; border:1px solid #22222a; border-radius:16px; padding:10px; margin-top:8px; }
   .sec.mine { border-color:#c9a64e; }
-  .shead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .shead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
   .sname { font-family:Georgia,serif; font-size:17px; font-weight:bold; letter-spacing:.08em; }
   .mine .sname { color:#c9a64e; }
   .stale { color:#e08484; font-size:10px; font-weight:bold; }
@@ -54,8 +54,8 @@
   .a-cancel { background:#1c1c22; color:#888; }
   .a-start { width:100%; background:#3fb6b0; color:#04211f; border:none; border-radius:12px; padding:17px; font-size:17px; font-weight:bold; margin-top:4px; }
 
-  .lv-title { font-size:10px; color:#6a6a72; margin:12px 0 4px; }
-  .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
+  .lv-title { font-size:10px; color:#6a6a72; margin:8px 0 4px; }
+  .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:6px 10px; margin-bottom:4px; }
   .lv.soon { border-color:#7a5a1a; background:rgba(224,168,74,.07); }
   .lv.now  { border-color:#3f8f6a; background:rgba(95,214,160,.08); }
   .lv .tbl { font-size:15px; font-weight:bold; color:#e8e8ec; }
@@ -65,6 +65,17 @@
   .lv .auto { font-size:9px; color:#5fd6a0; border:1px solid #2f6a4f; border-radius:4px; padding:0 4px; }
   .lv .del { background:none; border:none; color:#55555c; font-size:15px; padding:0 2px; }
   .empty { font-size:11px; color:#4a4a52; padding:6px 0; }
+
+  .stat { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap;
+          border-radius:10px; padding:7px 10px; margin:6px 0; background:#0d0d10; border:1px solid #22222a; color:#8a8a92; }
+  .stat b { font-size:15px; color:#e8e8ec; }
+  .stat span { font-size:10px; }
+  .stat.s-ok   { background:rgba(95,214,160,.1); border-color:#3f8f6a; }
+  .stat.s-ok b { color:#7ee6ac; }
+  .stat.s-soon { background:rgba(224,168,74,.1); border-color:#7a5a1a; }
+  .stat.s-soon b { color:#e8c07a; }
+  .stat.s-full { background:rgba(224,85,85,.1); border-color:#a15050; }
+  .stat.s-full b { color:#f0a0a0; }
 
   .accept { border-radius:12px; padding:10px; text-align:center; margin:8px 0; font-weight:bold; }
   .a-ok   { background:rgba(95,214,160,.12); border:1px solid #3f8f6a; color:#7ee6ac; }
@@ -77,7 +88,7 @@
 
   /* 1画面で打ち切る卓の行 */
   .rows { display:flex; flex-direction:column; gap:6px; }
-  .row { display:flex; align-items:center; gap:6px; background:#0d0d10; border:1.5px solid #22222a; border-radius:12px; padding:7px 8px; }
+  .row { display:flex; align-items:center; gap:6px; background:#0d0d10; border:1.5px solid #22222a; border-radius:12px; padding:4px 8px; }
   .row.busy { border-color:#c9a64e; background:#15130d; }
   .row.prep { border-color:#3fb6b0; border-style:dashed; background:rgba(63,182,176,.06); }
   .row.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
@@ -86,14 +97,14 @@
   .row.busy .nm { color:#c9a64e; }
   .row.prep .nm { color:#3fb6b0; }
   .cnt { display:flex; align-items:center; gap:3px; }
-  .cnt button { width:38px; height:38px; border-radius:10px; background:#1c1c22; border:1px solid #3a3a42; color:#fff; font-size:19px; font-weight:bold; line-height:1; }
+  .cnt button { width:36px; height:36px; border-radius:10px; background:#1c1c22; border:1px solid #3a3a42; color:#fff; font-size:19px; font-weight:bold; line-height:1; }
   .cnt button:disabled { color:#3a3a42; border-color:#22222a; }
   .cnt .n { font-size:16px; font-weight:bold; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
   .row .rt { margin-left:auto; }
   .row .chk { background:#22222a; border:1px solid #3a3a42; color:#e8c07a; border-radius:10px; padding:9px 8px; font-size:13px; font-weight:bold; white-space:nowrap; }
   .row .go { background:#3fb6b0; color:#04211f; border:none; border-radius:10px; padding:10px 12px; font-size:14px; font-weight:bold; white-space:nowrap; }
   .row .cap2 { font-size:11px; color:#4a4a52; padding-right:4px; }
-  .castbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:7px 10px; margin:8px 0; }
+  .castbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:4px 10px; margin:6px 0; }
   .castbar .cg { display:flex; align-items:center; gap:6px; }
   .castbar .cl { font-size:11px; color:#8a8a92; font-weight:bold; white-space:nowrap; }
 
@@ -128,7 +139,7 @@
   .alert .h { color:#c9a64e; font-weight:bold; font-size:14px; }
   .alert .b { font-size:12px; color:#d8d8dd; margin-top:3px; }
   .alert button { margin-top:8px; background:#c9a64e; color:#000; border:none; border-radius:8px; padding:7px 16px; font-weight:bold; font-size:12px; }
-  .note { font-size:10px; color:#4a4a52; text-align:center; margin-top:16px; line-height:1.7; }
+  .note { font-size:10px; color:#4a4a52; text-align:center; margin-top:10px; line-height:1.6; }
   .err { background:rgba(224,85,85,.1); border:1px solid #a15050; color:#f0b0b0; border-radius:10px; padding:8px 10px; font-size:11px; margin-top:10px; }
 </style>
 </head>
@@ -147,9 +158,7 @@
   <div id="theirs"></div>
   <div id="err"></div>
   <p class="note">
-    10秒ごとに自動更新。<br>
-    このURLをホーム画面に追加しておくと1タップで開けます。<br>
-    <a href="board-manual.html" style="color:#a8e6e2;">📖 振りっこボードの使い方ガイド</a>
+    10秒ごとに自動更新 ・ <a href="board-manual.html" style="color:#a8e6e2;">📖 使い方ガイド</a>
   </p>
 </div>
 
@@ -312,19 +321,16 @@
       take: castNow ? Math.min(freeCast, maxSeat) : maxSeat
     };
   }
-  function castLine(a) {
-    if (!a.castNow && !a.castTotal) return "";
-    return '<span class="line">キャスト ' + a.castNow + '/' + a.castTotal + '名 出勤'
-      + (a.freeCast > 0 ? '（手空き ' + a.freeCast + '名）' : '（全員接客中）')
-      + (a.coming > 0 ? ' ・ あと' + a.coming + '名 来る' : '') + '</span>';
-  }
-  function availHtml(a) {
-    if (!a.freeTables) return '<div class="accept a-full"><span class="big">✕ 満席</span>' + castLine(a) + '</div>';
-    if (a.castNow && a.take <= 0)
-      return '<div class="accept a-soon"><span class="big">△ キャスト待ち</span>'
-        + '<span class="line">卓は ' + a.freeTables + '卓 空き</span>' + castLine(a) + '</div>';
-    return '<div class="accept a-ok"><span class="big">◯ ' + a.freeTables + '卓 ・ ' + a.take + '名までOK</span>'
-      + castLine(a) + '</div>';
+  // 大きな箱をやめて1行に。読むのは「空き何卓・何名まで」だけ。
+  function availLine(a) {
+    var cls = !a.freeTables ? "s-full" : (a.castNow && a.take <= 0) ? "s-soon" : "s-ok";
+    var main = !a.freeTables ? "✕ 満席"
+      : (a.castNow && a.take <= 0) ? "△ キャスト待ち（卓は " + a.freeTables + "卓 空き）"
+      : "◯ 空き " + a.freeTables + "卓 ・ " + a.take + "名までOK";
+    var sub = a.castNow
+      ? "キャスト " + a.castNow + "/" + a.castTotal + "（手空き " + a.freeCast + "）" + (a.coming ? " ・ あと" + a.coming + "名" : "")
+      : "";
+    return '<div class="stat ' + cls + '"><b>' + main + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
   }
   // 出勤キャストの打ち込み（＋−だけ）
   function castBar(doc) {
@@ -458,11 +464,11 @@
       + '<span>' + freshHtml(doc.at) + '</span></div>';
 
     // いま相手店にどう見えているか（自分でも確認できるように同じものを出す）
-    h += availHtml(availOf(doc));
+    h += availLine(availOf(doc));
     h += castBar(doc);
 
     // 1画面で打ち切れるように、卓は縦1行ずつ。＋−で人数、▶でスタート。
-    h += '<div class="lv-title">＋で人数 → ▶スタート。時刻を直すときは卓名か時刻をタップ</div><div class="rows">';
+    h += '<div class="lv-title">＋で人数 → ▶スタート（時刻を直すなら卓名をタップ）</div><div class="rows">';
     tables.forEach(function (t) {
       var busy = t.guests > 0 && t.startAt;
       var prep = t.guests > 0 && !t.startAt;
@@ -571,8 +577,8 @@
     if (acc && Date.now() - acc.at < 3 * 3600e3) {
       var cls = acc.level === "ok" ? "a-ok" : acc.level === "soon" ? "a-soon" : "a-full";
       var txt = acc.level === "ok" ? "◯ 今すぐOK" : acc.level === "soon" ? "△ もう少しで空く" : "✕ 満席";
-      accHtml = '<div class="accept ' + cls + '"><span class="big">' + txt + '</span>'
-        + (acc.level !== "full" ? '<span class="line">最大 ' + acc.seats + '名まで</span>' : '') + '</div>';
+      accHtml = '<div class="stat ' + (acc.level === "ok" ? "s-ok" : acc.level === "soon" ? "s-soon" : "s-full") + '"><b>' + txt + '</b>'
+        + (acc.level !== "full" ? '<span>最大 ' + acc.seats + '名まで</span>' : '') + '</div>';
     } else if (auto) {
       // つけ回しツール連携の店。キャスト人数も送ってくるので手入力の店と同じ見え方にする。
       var sc = auto.casts || null;
@@ -584,17 +590,17 @@
         coming: sc ? Math.max(0, (sc.total || 0) - (sc.now || 0)) : 0,
         take: sc && sc.now ? Math.min(sc.free || 0, auto.maxSeat) : auto.maxSeat
       };
-      accHtml = availHtml(aa).replace('</div>', '<span class="small">つけ回しツールから自動</span></div>');
+      accHtml = availLine(aa);
     } else {
       // 卓とキャストの入力から「何卓・何名まで振れるか」を自動で出す
       var tb = doc.tables || [];
-      accHtml = tb.length ? availHtml(availOf(doc)) : '<div class="accept a-none">受入状況 未入力</div>';
+      accHtml = tb.length ? availLine(availOf(doc)) : '<div class="stat">受入状況 未入力</div>';
     }
 
     var list = ((doc.leaving || []).concat(auto ? auto.leaving : []))
       .filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
       .sort(function (a, b) { return a.t - b.t; });
-    var lvHtml = list.length ? "" : '<div class="empty">チェック予定はまだありません</div>';
+    var lvHtml = list.length ? "" : '<div class="empty">今は誰も出る予定なし</div>';
     list.forEach(function (e) {
       var diff = Math.round((e.t - now) / 60000);
       // 1行に「卓名 何名 何時にチェック」だけ
@@ -605,8 +611,7 @@
     });
 
     return '<div class="sec' + (isMine ? " mine" : "") + '"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
-      + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml
-      + '<div class="lv-title">チェック予定（何時に何名出る）</div>' + lvHtml + '</div>';
+      + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml + lvHtml + '</div>';
   }
 
   function renderAlerts() {
