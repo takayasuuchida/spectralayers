@@ -278,12 +278,13 @@
   }
   // 時刻はすべて5分単位に丸める（ボードは5分刻みで見るため）
   function round5(ms) { return Math.round(ms / 300000) * 300000; }
-  // セット時間は5分刻み。過去に入れた5分刻みでない値も消さずに残す。
+  // セット時間は 50分 と 60分 だけ。延長などで別の値になっている卓は、その値も残して選べるようにする。
+  var SET_MINS = [50, 60];
   function minOptions(cur) {
-    var out = "", m;
-    for (m = 30; m <= 180; m += 5) out += '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '分</option>';
-    if (cur && (cur < 30 || cur > 180 || cur % 5)) out = '<option value="' + cur + '" selected>' + cur + '分</option>' + out;
-    return out;
+    var list = SET_MINS.indexOf(cur) < 0 && cur ? [cur].concat(SET_MINS) : SET_MINS;
+    return list.map(function (m) {
+      return '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '分</option>';
+    }).join("");
   }
   function makeTables(n) {
     var a = [];
@@ -711,7 +712,7 @@
     });
     drawTableRows();
     var sm = doc && doc.setMin ? doc.setMin : 60;
-    chipRow($("setminChips"), [40, 45, 50, 55, 60, 70, 80, 90, 120].map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
+    chipRow($("setminChips"), SET_MINS.map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
       updateMine(function (d) { d.setMin = v; }).then(drawMe);
     });
   }
