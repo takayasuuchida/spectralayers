@@ -406,7 +406,12 @@
       if (t.preparing || t.remainMin == null) return;
       out.push({ id: "auto-" + (t.label || ""), t: now + t.remainMin * 60e3, guests: t.guests || 0, auto: true, memo: t.label || "", cap: t.cap || 0 });
     });
-    return { leaving: out.sort(function (a, b) { return a.t - b.t; }), free: free, freeSeats: freeSeats, maxSeat: maxSeat, at: share.at || 0 };
+    var sc = share.casts || null;
+    return {
+      leaving: out.sort(function (a, b) { return a.t - b.t; }),
+      free: free, freeSeats: freeSeats, maxSeat: maxSeat,
+      casts: sc, at: share.at || 0
+    };
   }
 
   function poll() {
@@ -569,11 +574,17 @@
       accHtml = '<div class="accept ' + cls + '"><span class="big">' + txt + '</span>'
         + (acc.level !== "full" ? '<span class="line">最大 ' + acc.seats + '名まで</span>' : '') + '</div>';
     } else if (auto) {
-      accHtml = '<div class="accept ' + (auto.free > 0 ? "a-ok" : "a-full") + '"><span class="big">'
-        + (auto.free > 0 ? "◯ 空き " + auto.free + "卓" : "✕ 満席") + '</span>'
-        + (auto.free > 0 && auto.maxSeat ? '<span class="line">最大 ' + auto.maxSeat + '名の卓'
-            + (auto.free > 1 ? " ・ 合計 " + auto.freeSeats + "席" : "") + '</span>' : '')
-        + '<span class="small">つけ回しツールから自動</span></div>';
+      // つけ回しツール連携の店。キャスト人数も送ってくるので手入力の店と同じ見え方にする。
+      var sc = auto.casts || null;
+      var aa = {
+        freeTables: auto.free, maxSeat: auto.maxSeat,
+        castNow: sc ? (sc.now || 0) : 0,
+        castTotal: sc ? Math.max(sc.total || 0, sc.now || 0) : 0,
+        freeCast: sc ? (sc.free || 0) : 0,
+        coming: sc ? Math.max(0, (sc.total || 0) - (sc.now || 0)) : 0,
+        take: sc && sc.now ? Math.min(sc.free || 0, auto.maxSeat) : auto.maxSeat
+      };
+      accHtml = availHtml(aa).replace('</div>', '<span class="small">つけ回しツールから自動</span></div>');
     } else {
       // 卓とキャストの入力から「何卓・何名まで振れるか」を自動で出す
       var tb = doc.tables || [];

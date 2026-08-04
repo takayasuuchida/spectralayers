@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.6.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.7.0"; // 画面右上に表示。リリースごとに上げる
 const GOLD = "#c9a64e";
 const TEAL = "#3fb6b0";
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
@@ -910,8 +910,14 @@ export default function App() {
         const rotOver = t.casts.some(a => (a.at ?? t.setStart) + rotMs - nowMs <= 0);
         return { label: disp.label, cap: disp.cap, busy: true, guests: t.customers.length, remainMin, rotOver };
       }),
+      // 振りっこボード用: 卓が空いていてもキャストがいなければ振れないため人数だけ共有（名前は送らない）
+      casts: {
+        now: casts.filter(c => c.status === "出勤").length,
+        total: casts.filter(c => c.status !== "退勤済").length,
+        free: available.length,
+      },
     };
-  }, [loaded, settings.shareEnabled, ts, tables, merges, brainTick]);
+  }, [loaded, settings.shareEnabled, ts, tables, merges, brainTick, casts, available]);
 
   useEffect(() => {
     if (!sharePayload) return;
