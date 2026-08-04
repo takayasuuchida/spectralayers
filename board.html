@@ -110,8 +110,14 @@
 
   /* 卓の名前と席数の編集 */
   .trow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
-  .trow input[type=text] { flex:1; min-width:0; padding:9px 10px; font-size:15px; }
-  .trow select { background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:9px 6px; font-size:15px; font-weight:bold; }
+  .trow input[type=text] { flex:1 1 auto; width:auto; min-width:0; padding:9px 10px; font-size:15px; }
+  .trow select { flex:0 0 84px; width:84px; background:#0d0d10; border:1px solid #22222a; color:#fff;
+                 border-radius:10px; padding:9px 4px; font-size:15px; font-weight:bold; }
+  .foldbtn { width:100%; background:#1c1c22; border:1px solid #3a3a42; color:#c9a64e; border-radius:10px;
+             padding:11px; font-size:13px; font-weight:bold; text-align:left; }
+  .panel h3 { position:sticky; top:-16px; background:#15151a; z-index:2; padding:4px 0 8px; margin-top:-4px; }
+  .donebtn { width:100%; background:#c9a64e; color:#000; border:none; border-radius:12px;
+             padding:15px; font-weight:bold; font-size:15px; margin-top:16px; }
   .capnote { font-size:10px; color:#5a5a62; }
   .nums button.overcap { color:#7a6a3a; border-color:#3a3320; }
 
@@ -175,11 +181,12 @@
     <p class="lbl">選んだお店として書き込みます。両方のお店の状況はどちらを選んでも見られます。</p>
     <div class="lbl">卓の数（自分のお店を手入力する場合）</div>
     <div class="chips" id="tcountChips"></div>
-    <div class="lbl">卓の名前と席数（お店に合わせて変えてください）</div>
-    <div id="tableRows"></div>
-    <p class="lbl" style="margin-top:4px;">席数を入れておくと、相手店に「最大◯名まで入る」と伝わります。</p>
     <div class="lbl">セット時間（チェック時刻の自動計算に使います）</div>
     <div class="chips" id="setminChips"></div>
+    <div class="lbl">卓の名前と席数</div>
+    <button class="foldbtn" id="foldTables">▸ 卓の名前と席数を変える（ふだんは触らなくてOK）</button>
+    <div id="tableRows"></div>
+    <button class="donebtn" data-close>✓ 完了</button>
   </div>
 </div>
 
@@ -708,16 +715,24 @@
       updateMine(function (d) { d.setMin = v; }).then(drawMe);
     });
   }
-  // 卓の名前と席数の編集。お店ごとに卓の呼び方も広さも違うので、両方その場で直せるようにする。
+  // 卓の名前と席数の編集。ふだんは触らないので畳んでおく（開くと設定シートが埋まってしまうため）
+  var tableFold = false;
   function drawTableRows() {
-    var host = $("tableRows"); if (!host) return;
+    var host = $("tableRows"), btn = $("foldTables"); if (!host) return;
     var doc = (me && data[me]) || null;
     if (!doc || !doc.tables || autoLeaving[me]) {
+      if (btn) btn.style.display = "none";
       host.innerHTML = autoLeaving[me]
         ? '<p class="lbl" style="margin:0">つけ回しツールから自動で取り込んでいるので、ここでの卓設定は使いません。</p>' : "";
       return;
     }
-    host.innerHTML = doc.tables.map(function (t, i) {
+    if (btn) {
+      btn.style.display = "";
+      btn.textContent = (tableFold ? "▾" : "▸") + " 卓の名前と席数を変える（ふだんは触らなくてOK）";
+    }
+    if (!tableFold) { host.innerHTML = ""; return; }
+    host.innerHTML = '<p class="lbl" style="margin:8px 0 6px">席数を入れておくと、相手店に「最大◯名まで入る」と伝わります。</p>'
+      + doc.tables.map(function (t, i) {
       return '<div class="trow">'
         + '<input type="text" data-tname="' + t.id + '" value="' + esc(t.label) + '" placeholder="卓' + (i + 1) + '" maxlength="10">'
         + '<select data-tcap="' + t.id + '">'
@@ -725,7 +740,7 @@
             return '<option value="' + c + '"' + (c === capOf(t) ? ' selected' : '') + '>' + c + '席</option>';
           }).join("")
         + '</select></div>';
-    }).join("");
+      }).join("");
   }
   function needMe() { if (me) return true; drawMe(); openSheet("sheetMe"); return false; }
 
@@ -738,6 +753,7 @@
 
   document.addEventListener("click", function (ev) {
     var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-guest],[data-cast],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
+    if (t.id === "foldTables") { tableFold = !tableFold; drawTableRows(); return; }
     if (t.id === "addManual") { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); return; }
     if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
