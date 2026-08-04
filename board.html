@@ -49,7 +49,8 @@
   .erow .now { background:#22222a; border:1px solid #3fb6b0; color:#3fb6b0; border-radius:10px; padding:10px 12px; font-size:12px; font-weight:bold; }
   .acts { display:flex; gap:8px; flex-wrap:wrap; }
   .acts button { flex:1; min-width:88px; border:none; border-radius:12px; padding:14px 6px; font-size:14px; font-weight:bold; }
-  .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; }
+  .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; line-height:1.35; }
+  .a-ext .sub { display:block; font-size:10px; font-weight:normal; opacity:.8; }
   .a-out { background:#7a2222; color:#fff; }
   .a-cancel { background:#1c1c22; color:#888; }
   .a-start { width:100%; background:#3fb6b0; color:#04211f; border:none; border-radius:12px; padding:17px; font-size:17px; font-weight:bold; margin-top:4px; }
@@ -280,6 +281,7 @@
   function round5(ms) { return Math.round(ms / 300000) * 300000; }
   // セット時間は 50分 と 60分 だけ。延長などで別の値になっている卓は、その値も残して選べるようにする。
   var SET_MINS = [50, 60];
+  var EXT_HALF = 25, EXT_ONE = 50;   // 延長はハーフ(25分) / ワンタイム(50分)
   function minOptions(cur) {
     var list = SET_MINS.indexOf(cur) < 0 && cur ? [cur].concat(SET_MINS) : SET_MINS;
     return list.map(function (m) {
@@ -540,15 +542,18 @@
             + numPad(t2)
             + '<div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
         } else {
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(t2.startAt + (t2.min || 60) * 60000) + ' チェック）</div>'
+          var endT = t2.startAt + (t2.min || 60) * 60000;
+          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(endT) + ' チェック）</div>'
             + '<div class="erow">'
             + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
             + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(t2.startAt) + '">'
             + '</div>'
+            // 延長はハーフ(25分)かワンタイム(50分)。押すとチェック時刻がその分うしろへ動く。
             + '<div class="acts">'
-            + '<button class="a-ext" data-ext="' + t2.id + '|5">延長 ＋5分</button>'
-            + '<button class="a-ext" data-ext="' + t2.id + '|30">延長 ＋30分</button>'
-            + '<button class="a-ext" data-ext="' + t2.id + '|60">延長 ＋60分</button>'
+            + '<button class="a-ext" data-ext="' + t2.id + '|' + EXT_HALF + '">ハーフ ＋' + EXT_HALF + '分'
+            +   '<span class="sub">→ ' + hhmm(endT + EXT_HALF * 60000) + ' チェック</span></button>'
+            + '<button class="a-ext" data-ext="' + t2.id + '|' + EXT_ONE + '">ワンタイム ＋' + EXT_ONE + '分'
+            +   '<span class="sub">→ ' + hhmm(endT + EXT_ONE * 60000) + ' チェック</span></button>'
             + '</div>'
             + '<div class="acts" style="margin-top:8px">'
             + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
