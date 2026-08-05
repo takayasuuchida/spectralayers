@@ -6,7 +6,7 @@
 <title>🔁 2店舗 振りっこボード</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
-  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:96px; }
+  body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:24px; }
   .wrap { max-width:760px; margin:0 auto; padding:0 12px; }
   header { border-bottom:1px solid #1c1c22; padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .brand { font-family:Georgia,serif; letter-spacing:.15em; color:#c9a64e; font-size:15px; font-weight:bold; }
@@ -169,11 +169,6 @@
   </p>
 </div>
 
-<div class="bar">
-  <button class="b-teal" id="acceptBtn">受入状況</button>
-  <button class="b-gold" id="sendBtn">📨 送客を伝える</button>
-</div>
-
 <!-- 店舗選択 -->
 <div class="sheet hidden" id="sheetMe">
   <div class="panel">
@@ -191,50 +186,8 @@
   </div>
 </div>
 
-<!-- 退店予定（手入力・イレギュラー用） -->
-<div class="sheet hidden" id="sheetAdd">
-  <div class="panel">
-    <h3>チェック予定を直接入れる<button data-close>×</button></h3>
-    <div class="lbl">何分後に出る？</div>
-    <div class="chips" id="minChips"></div>
-    <div class="lbl">または時刻を直接</div>
-    <input type="time" id="timeInput">
-    <div class="lbl">何名様？</div>
-    <div class="chips" id="guestChips"></div>
-    <div class="lbl">ひとこと（任意）</div>
-    <input type="text" id="memoInput" placeholder="例: 男性3名・年配・お酒強め">
-    <button class="go" id="addGo">この内容で知らせる</button>
-  </div>
-</div>
 
-<!-- 受入状況 -->
-<div class="sheet hidden" id="sheetAccept">
-  <div class="panel">
-    <h3>今の受入状況<button data-close>×</button></h3>
-    <div class="lbl">お客様を受けられる？</div>
-    <div class="chips" id="lvChips"></div>
-    <div class="lbl">何名まで入れる？</div>
-    <div class="chips" id="seatChips"></div>
-    <button class="go" id="acceptGo">この状況で知らせる</button>
-  </div>
-</div>
 
-<!-- 送客 -->
-<div class="sheet hidden" id="sheetSend">
-  <div class="panel">
-    <h3>相手のお店へ送客を伝える<button data-close>×</button></h3>
-    <div class="lbl">どの卓のお客様？（選ぶと人数とチェック時刻が入ります）</div>
-    <div class="chips" id="sendTableChips"></div>
-    <div class="lbl">何名送る？</div>
-    <div class="chips" id="sendGuestChips"></div>
-    <div class="lbl">何時にチェック？（お店を出る時間）</div>
-    <input type="time" id="sendCheckAt" step="300">
-    <div class="chips" id="sendWhenChips" style="margin-top:6px;"></div>
-    <div class="lbl">ひとこと（任意）</div>
-    <input type="text" id="sendMemo" placeholder="例: ○○様のご紹介・お酒強め">
-    <button class="go" id="sendGo">送客を知らせる</button>
-  </div>
-</div>
 
 <script>
 (function () {
@@ -251,7 +204,7 @@
     { id: "vivace", name: "vivace", shareKeys: ["share:viverce", "share:vivace"] },
     { id: "anela",  name: "ANELA",  shareKeys: ["share:ANELA", "share:anela"] }
   ];
-  var LS_ME = "board-me", LS_SEEN = "board-seen-at";
+  var LS_ME = "board-me";
 
   var me = null;
   var data = {};              // { storeId: boardDoc }
@@ -260,7 +213,6 @@
   var openTid = null;         // 展開中の卓
   var openMin = null;         // 入店パネルで選択中のセット時間
   var openInAt = null;        // 入店パネルで選択中の入店時刻(ms)
-  var draft = { min: 30, guests: 2, level: "ok", seats: 4, sendGuests: 2, sendTable: "", sendLabel: "", sendCheckAt: 0 };
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
@@ -353,7 +305,7 @@
       + '</div>';
   }
   function emptyDoc(id) {
-    return { at: 0, name: storeOf(id).name, accept: null, leaving: [], sending: [], tables: makeTables(6), setMin: 60, casts: { now: 0, total: 0 } };
+    return { at: 0, name: storeOf(id).name, leaving: [], tables: makeTables(6), setMin: 60, casts: { now: 0, total: 0 } };
   }
 
   // ---------- 通信 ----------
@@ -391,7 +343,6 @@
       var doc = cur && typeof cur === "object" ? cur : emptyDoc(me);
       doc.name = storeOf(me).name;
       doc.leaving = doc.leaving || [];
-      doc.sending = doc.sending || [];
       if (!doc.tables) doc.tables = makeTables(6);
       doc.tables = doc.tables.map(function (t) { return { ...t, cap: capOf(t) }; });  // 古いデータに席数を補う
       doc.casts = Object.assign({ now: 0, total: 0 }, doc.casts || {});
@@ -400,7 +351,6 @@
       syncLeaving(doc);
       doc.at = Date.now();
       doc.leaving = prune(doc.leaving);
-      doc.sending = (doc.sending || []).filter(function (s) { return Date.now() - s.at < 2 * 3600e3; }).slice(-20);
       data[me] = doc;
       render();
       return putRow(key, doc);
@@ -447,7 +397,6 @@
     $("meBtn").textContent = me ? ("この端末: " + storeOf(me).name) : "▶ 店舗を選ぶ";
     $("mine").innerHTML = me ? myPanel() : "";
     $("theirs").innerHTML = theirPanel(me ? other(me) : "vivace") + (me ? "" : theirPanel("anela"));
-    renderAlerts();
     // 設定シートを開いている間は卓の一覧も追従させる（入力中は触らない）
     if (!$("sheetMe").classList.contains("hidden")
       && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#tableRows"))) drawTableRows();
@@ -577,7 +526,6 @@
           + '<button class="del" data-del="' + e.id + '">×</button></div>';
       });
     }
-    h += '<button class="link" id="addManual">＋ 卓を使わずにチェック予定を直接入れる</button>';
     h += '</div>';
     return h;
   }
@@ -586,13 +534,8 @@
   function theirPanel(id, isMine) {
     var doc = data[id] || emptyDoc(id), auto = autoLeaving[id], st = storeOf(id), now = Date.now();
     var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
-    var acc = doc.accept, accHtml;
-    if (acc && Date.now() - acc.at < 3 * 3600e3) {
-      var cls = acc.level === "ok" ? "a-ok" : acc.level === "soon" ? "a-soon" : "a-full";
-      var txt = acc.level === "ok" ? "◯ 今すぐOK" : acc.level === "soon" ? "△ もう少しで空く" : "✕ 満席";
-      accHtml = '<div class="stat ' + (acc.level === "ok" ? "s-ok" : acc.level === "soon" ? "s-soon" : "s-full") + '"><b>' + txt + '</b>'
-        + (acc.level !== "full" ? '<span>最大 ' + acc.seats + '名まで</span>' : '') + '</div>';
-    } else if (auto) {
+    var accHtml;
+    if (auto) {
       // つけ回しツール連携の店。キャスト人数も送ってくるので手入力の店と同じ見え方にする。
       var sc = auto.casts || null;
       var aa = {
@@ -627,28 +570,10 @@
       + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml + lvHtml + '</div>';
   }
 
-  function renderAlerts() {
-    var box = $("alerts"); box.innerHTML = "";
-    if (!me) return;
-    var seen = 0; try { seen = +localStorage.getItem(LS_SEEN) || 0; } catch (e) {}
-    var from = data[other(me)];
-    if (!from || !from.sending) return;
-    from.sending.forEach(function (s) {
-      if (s.to !== me || s.at <= seen) return;
-      var d = document.createElement("div");
-      d.className = "alert";
-      d.innerHTML = '<div class="h">📨 ' + esc(storeOf(other(me)).name) + ' から</div>'
-        + '<div class="b" style="font-size:17px;font-weight:bold;color:#fff">'
-        + (s.table ? esc(s.table) + ' ' : '') + s.guests + '名 ・ ' + hhmm(s.checkAt || s.at) + ' チェック</div>'
-        + (s.memo ? '<div class="b">' + esc(s.memo) + '</div>' : '')
-        + '<button data-ack="' + s.at + '">確認しました</button>';
-      box.appendChild(d);
-    });
-  }
 
   // ---------- 操作 ----------
   function openSheet(id) { $(id).classList.remove("hidden"); }
-  function closeSheets() { ["sheetMe", "sheetAdd", "sheetAccept", "sheetSend"].forEach(function (i) { $(i).classList.add("hidden"); }); }
+  function closeSheets() { $("sheetMe").classList.add("hidden"); }
 
   function chipRow(host, items, cur, onPick, wide) {
     host.innerHTML = "";
@@ -659,42 +584,6 @@
       b.onclick = function () { onPick(it.v); };
       host.appendChild(b);
     });
-  }
-  function drawAdd() {
-    chipRow($("minChips"), [{ l: "今すぐ", v: 0 }, { l: "15分後", v: 15 }, { l: "30分後", v: 30 }, { l: "45分後", v: 45 }, { l: "60分後", v: 60 }, { l: "90分後", v: 90 }],
-      draft.min, function (v) { draft.min = v; $("timeInput").value = ""; drawAdd(); });
-    chipRow($("guestChips"), [1, 2, 3, 4, 5, 6, 7, 8, 10].map(function (n) { return { l: n + "名", v: n }; }), draft.guests, function (v) { draft.guests = v; drawAdd(); });
-  }
-  function drawAccept() {
-    chipRow($("lvChips"), [{ l: "◯ 今すぐOK", v: "ok" }, { l: "△ もう少し", v: "soon" }, { l: "✕ 満席", v: "full" }], draft.level, function (v) { draft.level = v; drawAccept(); }, true);
-    chipRow($("seatChips"), [1, 2, 3, 4, 5, 6, 8, 10, 12].map(function (n) { return { l: n + "名", v: n }; }), draft.seats, function (v) { draft.seats = v; drawAccept(); });
-  }
-  // 送客で相手が知りたいのは「何卓・何名・何時にチェック」。卓を選べば残り2つが自動で入る。
-  function drawSend() {
-    var doc = data[me] || emptyDoc(me), auto = autoLeaving[me];
-    var busy = auto
-      ? (auto.leaving || []).map(function (e, i) { return { key: "a" + i, label: e.memo || "卓", guests: e.guests, t: e.t }; })
-      : (doc.tables || []).filter(function (t) { return t.guests > 0 && t.startAt; })
-          .map(function (t) { return { key: t.id, label: t.label, guests: t.guests, t: t.startAt + (t.min || 60) * 60000 }; });
-    busy.sort(function (a, b) { return a.t - b.t; });
-
-    var items = busy.map(function (b) { return { l: b.label + " " + b.guests + "名 " + hhmm(b.t), v: b.key }; });
-    items.push({ l: "卓を選ばない", v: "" });
-    chipRow($("sendTableChips"), items, draft.sendTable || "", function (v) {
-      draft.sendTable = v;
-      var hit = busy.filter(function (b) { return b.key === v; })[0];
-      if (hit) { draft.sendGuests = hit.guests; draft.sendCheckAt = hit.t; draft.sendLabel = hit.label; }
-      else { draft.sendLabel = ""; }
-      drawSend();
-    }, true);
-
-    chipRow($("sendGuestChips"), [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { l: n + "名", v: n }; }),
-      draft.sendGuests, function (v) { draft.sendGuests = v; drawSend(); });
-
-    if (!draft.sendCheckAt) draft.sendCheckAt = round5(Date.now());
-    $("sendCheckAt").value = hhmm(draft.sendCheckAt);
-    chipRow($("sendWhenChips"), [{ l: "今すぐ", v: 0 }, { l: "15分後", v: 15 }, { l: "30分後", v: 30 }, { l: "45分後", v: 45 }, { l: "60分後", v: 60 }],
-      null, function (v) { draft.sendCheckAt = round5(Date.now() + v * 60000); drawSend(); });
   }
   function drawMe() {
     chipRow($("meChips"), STORES.map(function (s) { return { l: s.name, v: s.id }; }), me, function (v) {
@@ -754,13 +643,10 @@
   if (!STORES.some(function (s) { return s.id === me; })) me = null;
 
   $("meBtn").onclick = function () { drawMe(); openSheet("sheetMe"); };
-  $("acceptBtn").onclick = function () { if (!needMe()) return; drawAccept(); openSheet("sheetAccept"); };
-  $("sendBtn").onclick = function () { if (!needMe()) return; drawSend(); openSheet("sheetSend"); };
 
   document.addEventListener("click", function (ev) {
-    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-guest],[data-cast],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-ack],[data-close],[data-close-exp]") || ev.target) : ev.target;
+    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-guest],[data-cast],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-close],[data-close-exp]") || ev.target) : ev.target;
     if (t.id === "foldTables") { tableFold = !tableFold; drawTableRows(); return; }
-    if (t.id === "addManual") { if (!needMe()) return; drawAdd(); openSheet("sheetAdd"); return; }
     if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
     if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
     if (t.hasAttribute && t.hasAttribute("data-close-exp")) { openTid = null; render(); return; }
@@ -852,13 +738,6 @@
     }
     var del = t.getAttribute && t.getAttribute("data-del");
     if (del) { updateMine(function (d) { d.leaving = (d.leaving || []).filter(function (e) { return e.id !== del; }); }); return; }
-    var ack = t.getAttribute && t.getAttribute("data-ack");
-    if (ack) {
-      var from = data[other(me)], newest = +ack;
-      if (from && from.sending) from.sending.forEach(function (s2) { if (s2.to === me && s2.at > newest) newest = s2.at; });
-      try { localStorage.setItem(LS_SEEN, String(newest)); } catch (e) {}
-      renderAlerts(); return;
-    }
   });
 
   // プルダウン・時刻の変更
@@ -905,38 +784,6 @@
     }
   });
 
-  $("addGo").onclick = function () {
-    var when, tv = $("timeInput").value;
-    if (tv) {
-      var p = tv.split(":"), d = new Date();
-      d.setHours(+p[0], +p[1], 0, 0);
-      if (d.getTime() < Date.now() - 6 * 3600e3) d.setDate(d.getDate() + 1);
-      when = d.getTime();
-    } else { when = Date.now() + draft.min * 60e3; }
-    var memo = $("memoInput").value.trim(), g = draft.guests;
-    $("addGo").disabled = true;
-    updateMine(function (doc) { doc.leaving.push({ id: uid(), t: when, guests: g, memo: memo, at: Date.now() }); })
-      .then(function () { $("addGo").disabled = false; $("memoInput").value = ""; $("timeInput").value = ""; closeSheets(); });
-  };
-  $("acceptGo").onclick = function () {
-    $("acceptGo").disabled = true;
-    updateMine(function (doc) { doc.accept = { level: draft.level, seats: draft.seats, at: Date.now() }; })
-      .then(function () { $("acceptGo").disabled = false; closeSheets(); });
-  };
-  $("sendGo").onclick = function () {
-    var memo = $("sendMemo").value.trim(), g = draft.sendGuests;
-    var cv = $("sendCheckAt").value;
-    var checkAt = cv ? round5(timeToMs(cv)) : round5(Date.now());
-    var tbl = draft.sendLabel || "";
-    $("sendGo").disabled = true;
-    updateMine(function (doc) {
-      doc.sending.push({ id: uid(), to: other(me), guests: g, memo: memo, checkAt: checkAt, table: tbl, at: Date.now() });
-    }).then(function () {
-      $("sendGo").disabled = false; $("sendMemo").value = "";
-      draft.sendTable = ""; draft.sendLabel = ""; draft.sendCheckAt = 0;
-      closeSheets();
-    });
-  };
 
   render();
   if (!me) { drawMe(); openSheet("sheetMe"); }
