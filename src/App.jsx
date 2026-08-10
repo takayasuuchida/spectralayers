@@ -1,9 +1,25 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.7.0"; // 画面右上に表示。リリースごとに上げる
-const GOLD = "#c9a64e";
-const TEAL = "#3fb6b0";
+const APP_VERSION = "3.8.0"; // 画面右上に表示。リリースごとに上げる
+
+// ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
+const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
+const GOLD_ON = "#221A08";
+const TEAL = "#34D399";        // 空席
+const BLUE = "#60A5FA";        // 場内・指名ランク
+const PURPLE = "#A78BFA";      // 延長中
+const BG = "#0F1013";          // 画面背景
+const BAR = "#131418";         // ヘッダー / タブバー
+const PANEL = "#16171B";       // パネル
+const CARD = "#1A1B20";        // カード（押下 #1E1F25）
+const SHEET = "#1C1D22";       // ボトムシート
+const LINE = "rgba(255,255,255,.07)";
+const LINE2 = "rgba(255,255,255,.12)";
+const TXT = "#F2F3F5";
+const SUB = "rgba(242,243,245,.5)";
+const FONT = "'Zen Kaku Gothic New', system-ui, sans-serif";
+const NUM = "'Space Grotesk', system-ui, sans-serif";   // タイマー・金額・カウント
 // URL パラメータで店舗を切り替え: ?store=viverce or ?store=ANELA など
 const URL_STORE = (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("store")) || "viverce";
 // 保存領域の識別子。"vivace" と "viverce" は同じ店の綴り違いなので同じ領域に寄せる
@@ -36,7 +52,7 @@ const GENRE_COLOR = { "綺麗": "#7aa7ff", "可愛い": "#ff8fc4", "おもしろ
 
 // 接客スタイル（異なるタイプを順に付けて「お客様の好み」を探るための軸）
 const STYLES = ["トーク", "聞き上手", "盛り上げ", "癒し"];
-const STYLE_COLOR = { "トーク": "#ffb347", "聞き上手": "#7aa7ff", "盛り上げ": "#ff6fa5", "癒し": "#5fd6a0" };
+const STYLE_COLOR = { "トーク": "#ffb347", "聞き上手": "#7aa7ff", "盛り上げ": "#ff6fa5", "癒し": "#34D399" };
 const STYLE_DESC = {
   "トーク": "会話力が高い・話題豊富",
   "聞き上手": "お客様の話をじっくり聞ける",
@@ -197,6 +213,13 @@ const NOM_ORDER = [NOM_HELP, NOM_FIELD, NOM_MAIN];
 const setMinOf = (t) => (t.setDuration || 0) + (t.extendMin || 0);
 const remainOf = (t, now) => t.setStart + setMinOf(t) * 60000 - now;
 const tstateOf = (t, now) => { const r = remainOf(t, now); if (r <= 0) return "over"; if (r <= 600000) return "soon"; return "ok"; };
+// 状態色に不透明度を足す（淡背景・枠線用）。#RRGGBB のみ扱う
+const hexA = (hex, a) => {
+  const h = String(hex).replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+const hhmmOf = (ms) => new Date(ms).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 const fmt = (ms) => { const a = Math.abs(ms); const m = Math.floor(a / 60000); const s = Math.floor((a % 60000) / 1000); return `${m}:${String(s).padStart(2, "0")}`; };
 // 業務日: AM6:00 未満は前日扱い（キャバクラの深夜業態向け）
 function businessDateOfNow(now = new Date()) {
@@ -1480,18 +1503,35 @@ export default function App() {
   }
 
   if (!loaded) return (
-    <div style={{ background: "#000", minHeight: "100vh" }} className="flex items-center justify-center">
-      <span style={{ fontFamily: "Georgia,serif", letterSpacing: "0.35em", color: GOLD }} className="text-base">{brandDisplay}</span>
+    <div style={{ background: "#0F1013", minHeight: "100vh" }} className="flex items-center justify-center">
+      <span style={{ color: GOLD }} className="text-base">{brandDisplay}</span>
     </div>
   );
 
+  const VIEW_TITLE = { floor: "フロア", cast: "キャスト", book: "客名帳", sales: "売上", stock: "在庫", admin: "設定" };
+  const occupiedCount = Object.values(ts).filter(x => x?.active).length;
+
   return (
-    <div style={{ background: "#000", minHeight: "100vh", color: "#fff", fontFamily: "system-ui, sans-serif" }} className="pb-24">
-      <div style={{ borderBottom: "1px solid #1c1c22", background: "#000" }} className="px-4 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div style={{ fontFamily: "Georgia, serif", letterSpacing: "0.35em", color: GOLD }} className="text-lg pl-1">{brandDisplay}</div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-zinc-700">v{APP_VERSION}</span>
-          <TopClock />
+    <div style={{ background: BG, minHeight: "100vh", color: TXT, fontFamily: FONT }} className="pb-24">
+      <div style={{ borderBottom: `1px solid ${LINE}`, background: BAR }} className="px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div>
+          <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1 }}>{VIEW_TITLE[view] || "フロア"}</div>
+          <div style={{ fontSize: 10.5, color: "rgba(242,243,245,.45)", marginTop: 4, whiteSpace: "nowrap" }}>
+            <span style={{ fontWeight: 700, color: GOLD }}>{settings.storeName || "viverce"}</span> つけ回し管理
+          </div>
+        </div>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid rgba(255,255,255,.09)", borderRadius: 10, padding: "9px 12px", background: CARD, whiteSpace: "nowrap" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: TEAL }} />
+            <span className="v-num" style={{ fontWeight: 700, fontSize: 14 }}>
+              {occupiedCount}<span style={{ color: "rgba(242,243,245,.4)", fontWeight: 500 }}>/{tables.length}</span>
+            </span>
+            <span style={{ fontSize: 10.5, color: SUB }}>稼働</span>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <TopClock />
+            <div style={{ fontSize: 9, color: "rgba(242,243,245,.28)" }}>v{APP_VERSION}</div>
+          </div>
         </div>
       </div>
 
@@ -1529,27 +1569,32 @@ export default function App() {
       )}
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.7)" }} onClick={() => setModal(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#15151a", border: `1px solid ${modal.type === "ng" ? "#7a2222" : "#7a5a1a"}` }} className="rounded-2xl p-5 max-w-sm w-full">
+        <div className="v-dim fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.7)" }} onClick={() => setModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${modal.type === "ng" ? hexA("#F2555A", .45) : hexA("#F0A64B", .45)}` }} className="v-sheet rounded-2xl p-5 max-w-sm w-full">
             <div className="flex items-start gap-2 mb-4">
-              <AlertTriangle size={20} color={modal.type === "ng" ? "#e05555" : "#e0a84a"} />
+              <AlertTriangle size={20} color={modal.type === "ng" ? "#F2555A" : "#F0A64B"} />
               <p className="text-sm leading-relaxed">{modal.msg}</p>
             </div>
             <div className="flex gap-2 justify-end">
               {modal.onOk && <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm text-zinc-400">やめる</button>}
-              <button onClick={() => { modal.onOk?.(); setModal(null); }} style={{ background: modal.onOk ? "#7a5a1a" : "#2a2a32" }} className="px-4 py-2 rounded-lg text-sm font-bold">{modal.onOk ? "続行する" : "OK"}</button>
+              <button onClick={() => { modal.onOk?.(); setModal(null); }} style={{ background: modal.onOk ? "#F0A64B" : "#2A2C33" }} className="px-4 py-2 rounded-lg text-sm font-bold">{modal.onOk ? "続行する" : "OK"}</button>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ background: "#0a0a0c", borderTop: "1px solid #1c1c22" }} className="fixed bottom-0 inset-x-0 z-30 flex">
-        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["book", Users, "客名帳"], ["sales", null, "売上"], ["stock", Package, "在庫"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => (
-          <button key={k} onClick={() => setView(k)} className="flex-1 py-2.5 flex flex-col items-center gap-1" style={{ color: view === k ? GOLD : "#5a5a62" }}>
-            {Icon ? <Icon size={20} /> : <span className="text-lg leading-none font-bold">¥</span>}
-            <span className="text-[10px]">{label}</span>
-          </button>
-        ))}
+      <div style={{ background: BAR, borderTop: `1px solid ${LINE}`, padding: "6px 6px calc(env(safe-area-inset-bottom, 0px) + 10px)" }} className="fixed bottom-0 inset-x-0 z-30 flex">
+        {[["floor", LayoutGrid, "フロア"], ["cast", Sparkles, "キャスト"], ["book", Users, "客名帳"], ["sales", null, "売上"], ["stock", Package, "在庫"], ["admin", Settings, "設定"]].map(([k, Icon, label]) => {
+          const on = view === k;
+          return (
+            <button key={k} onClick={() => setView(k)} className="flex-1 flex flex-col items-center relative"
+              style={{ gap: 3, padding: "8px 0 4px", color: on ? GOLD : "rgba(242,243,245,.45)" }}>
+              {on && <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 24, height: 3, borderRadius: 3, background: GOLD }} />}
+              {Icon ? <Icon size={21} /> : <span style={{ fontSize: 19, lineHeight: 1, fontWeight: 700 }}>¥</span>}
+              <span style={{ fontSize: 10, fontWeight: 700 }}>{label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1557,14 +1602,14 @@ export default function App() {
 
 function TopClock() {
   const now = useNow(true);
-  return <div className="text-xs text-zinc-500">{new Date(now).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</div>;
+  return <div className="v-num" style={{ fontSize: 12, color: SUB, fontWeight: 600 }}>{new Date(now).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</div>;
 }
 
 function DetailClock({ t }) {
   const now = useNow(true);
   const r = remainOf(t, now);
   const red = r <= 600000;
-  return <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-sm font-bold flex items-center gap-1"><Clock size={14} />{r <= 0 ? "+" : ""}{fmt(r)}{red && " ラスト"}</span>;
+  return <span style={{ color: red ? "#F2555A" : "#9a9aa2" }} className="text-sm font-bold flex items-center gap-1"><Clock size={14} />{r <= 0 ? "+" : ""}{fmt(r)}{red && " ラスト"}</span>;
 }
 
 function Chip({ k, name, boss }) {
@@ -1576,7 +1621,7 @@ function Chip({ k, name, boss }) {
   );
 }
 
-function FloorCard({ tt, disp, t, castById, onClick }) {
+function FloorCard({ tt, disp, t, castById, onClick, idx = 0 }) {
   const active = !!t?.active;
   const started = active && !!t.setStart;
   const now = useNow(started);
@@ -1587,43 +1632,89 @@ function FloorCard({ tt, disp, t, castById, onClick }) {
   const rotRemains = started ? t.casts.map(a => (a.at ?? t.setStart) + rotMs - now) : [];
   const rotOver = rotRemains.some(r => r <= 0);
   const rotSoon = !rotOver && rotRemains.some(r => r <= 3 * 60000);
+
+  // 状態色: 空席=緑 / 接客中=金 / 残りわずか=琥珀 / 超過=赤 / 準備中=紫
+  const stCol = !active ? TEAL : !started ? PURPLE : tstate === "over" ? "#F2555A" : tstate === "soon" ? "#F0A64B" : GOLD;
+  const stLabel = !active ? "空席" : !started ? "準備中" : tstate === "over" ? "超過" : tstate === "soon" ? "まもなく" : "接客中";
+  const blink = active && started && red;
+
+  const endAt = started ? t.setStart + setMinOf(t) * 60000 : 0;
+  const elapsed = started ? now - t.setStart : 0;
+  const prog = started ? Math.max(0, Math.min(100, (elapsed / (setMinOf(t) * 60000)) * 100)) : 0;
+
   return (
-    <button onClick={onClick} style={{ background: active ? "#141418" : "#0d0d10", border: `1.5px solid ${red ? "#a13b3b" : active ? GOLD : "#1c1c22"}`, borderStyle: active && !started ? "dashed" : "solid", boxShadow: red ? "0 0 14px rgba(180,60,60,.35)" : "none" }} className="rounded-2xl p-3 text-left min-h-[120px] flex flex-col">
-      <div className="flex items-center justify-between mb-1">
-        <span style={{ color: active ? "#fff" : "#555", fontFamily: "Georgia,serif" }} className="text-lg font-bold">{disp.label}</span>
-        {active ? (
-          started ? (
-            <span className="flex items-center gap-1.5">
-              {(rotOver || rotSoon) && (
-                <span style={{ color: rotOver ? "#ff6a6a" : "#e0a84a" }} className="text-[10px] font-bold">♻{rotOver ? "交代!" : "まもなく"}</span>
-              )}
-              <span style={{ color: red ? "#ff6a6a" : "#9a9aa2" }} className="text-[11px] font-bold flex items-center gap-0.5"><Clock size={11} />{tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}</span>
+    <button onClick={onClick} className="v-card text-left flex flex-col"
+      style={{
+        borderRadius: 16, background: CARD,
+        border: `1px solid ${active ? hexA(stCol, .45) : LINE}`,
+        padding: "13px 13px 12px", minHeight: 148, boxSizing: "border-box",
+        animationDelay: `${idx * 0.04}s`, transition: "border-color .3s",
+      }}>
+      <div className="flex items-center justify-between" style={{ gap: 6 }}>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1, color: active ? TXT : "rgba(242,243,245,.75)" }}>{disp.label}</span>
+          {(rotOver || rotSoon) && started && (
+            <span style={{ fontSize: 9, fontWeight: 700, color: rotOver ? "#F2555A" : "#F0A64B", border: `1px solid ${hexA(rotOver ? "#F2555A" : "#F0A64B", .45)}`, padding: "2.5px 6px", borderRadius: 5, whiteSpace: "nowrap" }}>
+              ♻{rotOver ? "交代" : "まもなく"}
             </span>
-          ) : (
-            <span style={{ color: "#e0a84a" }} className="text-[10px] font-bold">準備中 ▶押して開始</span>
-          )
-        ) : <span className="text-[10px] text-zinc-600">空席</span>}
+          )}
+        </div>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 700, padding: "5px 9px", borderRadius: 7, color: stCol, background: hexA(stCol, .13), whiteSpace: "nowrap" }}>
+          <span className={blink ? "v-pulse" : ""} style={{ width: 6, height: 6, borderRadius: "50%", background: stCol }} />{stLabel}
+        </span>
       </div>
-      {active ? (
+
+      {!active ? (
         <>
-          <div className="flex flex-wrap gap-1 mb-2">
-            {t.seats.map((s, i) => {
-              const name = s.k === "cust" ? t.customers.find(c => c.id === s.id)?.name : castById[s.id]?.name;
-              const boss = s.k === "cust" && t.customers.find(c => c.id === s.id)?.isBoss;
-              return <Chip key={i} k={s.k} name={name} boss={boss} />;
-            })}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, padding: "8px 0 4px" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, border: "1.5px dashed rgba(242,243,245,.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Plus size={16} color="rgba(242,243,245,.7)" />
+            </div>
+            <div style={{ fontSize: 11.5, color: SUB }}>タップでセット開始</div>
           </div>
-          <div className="mt-auto flex items-center justify-between text-[11px]">
-            <span className="text-zinc-500">
-              客{t.customers.length}
-              <span style={{ color: t.casts.length < t.customers.length ? "#e0a84a" : "#71717a" }} className={t.casts.length < t.customers.length ? "font-bold" : ""}>
-                {" / 嬢"}{t.casts.length}{t.casts.length < t.customers.length ? " 手薄" : ""}
-              </span>
-            </span>
-            <span style={{ color: GOLD }} className="font-bold">{yen(t.setType * t.customers.length + t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</span>
+          <div style={{ fontSize: 10.5, color: "rgba(242,243,245,.35)", textAlign: "center" }}>定員 {disp.cap}名</div>
+        </>
+      ) : !started ? (
+        <>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0 4px" }}>
+            <div className="v-num" style={{ fontSize: 30, fontWeight: 700, color: PURPLE }}>{t.customers.length}<span style={{ fontSize: 13, color: SUB, fontWeight: 500 }}>名</span></div>
+            <div style={{ fontSize: 11.5, color: SUB }}>▶ 押してセット開始</div>
+          </div>
+          <div style={{ fontSize: 10.5, color: "rgba(242,243,245,.35)", textAlign: "center" }}>嬢 {t.casts.length}名 ・ 定員 {disp.cap}名</div>
+        </>
+      ) : (
+        <>
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 10, color: "rgba(242,243,245,.45)" }}>残り時間</div>
+            <div className="v-num" style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.15, color: stCol }}>
+              {tstate === "over" ? "+" : ""}{fmt(remainOf(t, now))}
+            </div>
+            <div style={{ height: 4, borderRadius: 4, background: "rgba(255,255,255,.08)", marginTop: 6, overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 4, background: stCol, width: `${prog}%`, transition: "width 1s linear" }} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between" style={{ marginTop: 8, fontSize: 10.5, color: SUB }}>
+            <span>〜{hhmmOf(endAt)} ・ {t.customers.length}名</span>
+            <span className="v-num">経過 {fmt(elapsed)}</span>
+          </div>
+          <div className="flex flex-wrap" style={{ gap: 5, marginTop: 8 }}>
+            {t.casts.map((a, i) => {
+              const c = castById[a.castId];
+              if (!c) return null;
+              const nc = a.nomType === NOM_MAIN ? GOLD : a.nomType === NOM_FIELD ? BLUE : "rgba(242,243,245,.5)";
+              return (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, padding: "4px 8px", borderRadius: 7, background: "rgba(255,255,255,.05)", border: `1px solid ${LINE}`, whiteSpace: "nowrap" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: nc }} />{c.name}
+                  <span style={{ color: nc, fontSize: 9 }}>{NOM_LABEL[a.nomType] || ""}</span>
+                </span>
+              );
+            })}
+            {t.casts.length < t.customers.length && (
+              <span style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 7, color: "#F0A64B", background: hexA("#F0A64B", .13), whiteSpace: "nowrap" }}>手薄</span>
+            )}
           </div>
         </>
-      ) : <span className="text-[10px] text-zinc-600 mt-auto">定員 {disp.cap}名 ・ タップで開ける</span>}
+      )}
     </button>
   );
 }
@@ -1653,13 +1744,13 @@ function WatchView({ code, onExit }) {
   const soonFree = d ? d.tables.filter(t => t.busy && (t.remainMin ?? 99) <= 15) : [];
 
   return (
-    <div style={{ background: "#000", minHeight: "100vh", color: "#fff", fontFamily: "system-ui, sans-serif" }} className="pb-10">
+    <div style={{ background: "#0F1013", minHeight: "100vh", color: "#fff", fontFamily: FONT }} className="pb-10">
       <div style={{ borderBottom: "1px solid #1c1c22", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }} className="px-4 pb-3 flex items-center justify-between">
         <div>
-          <div style={{ fontFamily: "Georgia,serif", letterSpacing: "0.3em", color: GOLD }} className="text-base">{(code || "").toUpperCase()}</div>
+          <div style={{ color: GOLD }} className="text-base">{(code || "").toUpperCase()}</div>
           <div className="text-[10px] text-zinc-500">外用ビュー（読み取り専用）</div>
         </div>
-        <button onClick={onExit} style={{ background: "#1c1c22", color: "#999" }} className="text-xs px-3 py-1.5 rounded-lg">終了</button>
+        <button onClick={onExit} style={{ background: "rgba(255,255,255,.07)", color: "#999" }} className="text-xs px-3 py-1.5 rounded-lg">終了</button>
       </div>
 
       <div className="p-4">
@@ -1673,7 +1764,7 @@ function WatchView({ code, onExit }) {
         {d && (
           <>
             {stale && (
-              <div style={{ background: "rgba(224,85,85,.08)", border: "1px solid #a15050", color: "#e08484" }} className="rounded-xl p-2.5 mb-3 text-[11px] font-bold">
+              <div style={{ background: "rgba(224,85,85,.08)", border: "1px solid #a15050", color: "#F2555A" }} className="rounded-xl p-2.5 mb-3 text-[11px] font-bold">
                 ⚠ 店側の更新が {Math.floor((Date.now() - d.at) / 60000)}分前 から止まっています（電波 or 共有OFFの可能性）
               </div>
             )}
@@ -1683,20 +1774,20 @@ function WatchView({ code, onExit }) {
                 <div className="text-[11px] text-zinc-400 mt-1">今すぐ入れる卓</div>
               </div>
               <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #e0a84a" }} className="rounded-2xl p-4 text-center">
-                <div style={{ color: "#e0a84a" }} className="text-4xl font-bold">{soonFree.length}</div>
+                <div style={{ color: "#F0A64B" }} className="text-4xl font-bold">{soonFree.length}</div>
                 <div className="text-[11px] text-zinc-400 mt-1">15分以内に空きそう</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               {d.tables.map((t, i) => (
-                <div key={i} style={{ background: t.busy ? "#141418" : "rgba(63,182,176,.06)", border: `1.5px solid ${t.busy ? ((t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#2a2a32") : TEAL}` }} className="rounded-2xl p-3 min-h-[80px] flex flex-col">
+                <div key={i} style={{ background: t.busy ? "#1A1B20" : "rgba(63,182,176,.06)", border: `1.5px solid ${t.busy ? ((t.remainMin ?? 99) <= 15 ? "#F0A64B" : "#2A2C33") : TEAL}` }} className="rounded-2xl p-3 min-h-[80px] flex flex-col">
                   <div className="flex items-center justify-between">
-                    <span style={{ fontFamily: "Georgia,serif" }} className="text-base font-bold">{t.label}</span>
+                    <span style={{  }} className="text-base font-bold">{t.label}</span>
                     <span className="text-[10px] text-zinc-500">{t.cap}名卓</span>
                   </div>
                   {t.busy ? (
                     <div className="mt-auto">
-                      <span style={{ color: t.preparing ? "#e0a84a" : (t.remainMin ?? 99) <= 15 ? "#e0a84a" : "#999" }} className="text-sm font-bold">
+                      <span style={{ color: t.preparing ? "#F0A64B" : (t.remainMin ?? 99) <= 15 ? "#F0A64B" : "#999" }} className="text-sm font-bold">
                         {t.preparing ? "準備中" : `使用中${t.remainMin != null && t.remainMin > 0 ? ` 残${t.remainMin}分` : t.remainMin != null ? " 延長中" : ""}`}
                       </span>
                       <div className="text-[10px] text-zinc-500">{t.guests || 0}名{t.rotOver ? " ・♻交代中" : ""}</div>
@@ -1722,16 +1813,16 @@ function AdvisorPanel({ advices }) {
   if (!advices?.length) return null;
   const urgent = advices.filter(a => a.level === "act").length;
   const LEVEL_STYLE = {
-    act: { border: GOLD, bg: "rgba(201,166,78,.08)" },
-    warn: { border: "#a15050", bg: "rgba(224,85,85,.06)" },
-    info: { border: "#2a2a32", bg: "#141418" },
+    act: { border: hexA(GOLD, .35), bg: hexA(GOLD, .1) },
+    warn: { border: hexA("#F2555A", .35), bg: hexA("#F2555A", .1) },
+    info: { border: LINE, bg: "rgba(255,255,255,.03)" },
   };
   return (
     <div className="mb-3">
-      <button onClick={() => setOpen(o => !o)} style={{ background: urgent ? "rgba(201,166,78,.12)" : "#141418", border: `1px solid ${urgent ? GOLD : "#2a2a32"}` }} className="w-full rounded-xl px-3 py-2.5 flex items-center justify-between">
+      <button onClick={() => setOpen(o => !o)} style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: 14, minHeight: 48 }} className="w-full px-3.5 py-3 flex items-center justify-between">
         <span className="text-xs font-bold flex items-center gap-2">
           🧠 頭脳アドバイス
-          <span style={{ background: urgent ? GOLD : "#2a2a32", color: urgent ? "#000" : "#999" }} className="rounded-full px-2 py-0.5 text-[10px] font-bold">{advices.length}</span>
+          <span className="v-num" style={{ color: urgent ? GOLD : SUB, fontWeight: 700, fontSize: 12 }}>{advices.length}</span>
           {urgent > 0 && <span style={{ color: GOLD }} className="text-[10px]">今すぐ対応 {urgent}件</span>}
         </span>
         <span className="text-zinc-500 text-xs">{open ? "▲" : "▼"}</span>
@@ -1773,10 +1864,10 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
       <AdvisorPanel advices={advices} />
       {(bdToday.length > 0 || bdTomorrow.length > 0 || resToday.length > 0 || lowStock.length > 0) && (
         <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-2.5 mb-3 space-y-1 text-[11px]">
-          {bdToday.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 本日誕生日:</span> {bdToday.map(c => c.name).join("・")}</div>}
-          {bdTomorrow.length > 0 && <div><span style={{ color: "#e0a84a" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
+          {bdToday.length > 0 && <div><span style={{ color: "#F0A64B" }} className="font-bold">🎂 本日誕生日:</span> {bdToday.map(c => c.name).join("・")}</div>}
+          {bdTomorrow.length > 0 && <div><span style={{ color: "#F0A64B" }} className="font-bold">🎂 明日誕生日:</span> {bdTomorrow.map(c => c.name).join("・")}<span className="text-zinc-500">（ボトル/花の手配を）</span></div>}
           {resToday.length > 0 && <div><span style={{ color: TEAL }} className="font-bold">📅 本日予約:</span> {resToday.map(r => `${r.time || ""} ${custName(r.customerBookId)}`).join("・")}</div>}
-          {lowStock.length > 0 && <div><span style={{ color: "#e08484" }} className="font-bold">📦 在庫少:</span> {lowStock.map(p => `${p.name}(残${p.stock || 0})`).join("・")}</div>}
+          {lowStock.length > 0 && <div><span style={{ color: "#F2555A" }} className="font-bold">📦 在庫少:</span> {lowStock.map(p => `${p.name}(残${p.stock || 0})`).join("・")}</div>}
         </div>
       )}
       {minusInfo?.isMinus && (
@@ -1799,12 +1890,12 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
       )}
       {totalNeed > 0 && activeTableCount >= 1 && (
         <div className="mb-3">
-          <button onClick={autoAllTables} style={{ background: GOLD, color: "#000" }} className="w-full rounded-xl py-2.5 text-sm font-bold flex items-center justify-center gap-1.5">
+          <button onClick={autoAllTables} style={{ background: GOLD, color: "#221A08" }} className="w-full rounded-xl py-2.5 text-sm font-bold flex items-center justify-center gap-1.5">
             <Wand2 size={15} />⚖️ 全卓バランス付け回し
           </button>
           <div className="text-[10px] text-zinc-500 mt-1 text-center">
             空き {availCount}名 / 女の子待ちのお客様 {totalNeed}名
-            {availCount < totalNeed && activeTableCount >= 2 && <span style={{ color: "#e0a84a" }} className="font-bold">　※足りないので均等に配分します</span>}
+            {availCount < totalNeed && activeTableCount >= 2 && <span style={{ color: "#F0A64B" }} className="font-bold">　※足りないので均等に配分します</span>}
           </div>
         </div>
       )}
@@ -1814,7 +1905,7 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
           {groupEntries.map(([g, arr]) => {
             const label = arr.map(id => (tables.find(t => t.id === id)?.label || "?").replace(/^卓/, "")).join("+");
             return (
-              <button key={g} onClick={() => toggleMerge(g)} style={{ background: merges[g] ? "rgba(201,166,78,.2)" : "#15151a", border: `1px solid ${merges[g] ? GOLD : "#2a2a32"}`, color: merges[g] ? GOLD : "#777" }} className="text-[11px] rounded-full px-2.5 py-1 flex items-center gap-1">
+              <button key={g} onClick={() => toggleMerge(g)} style={{ background: merges[g] ? "rgba(201,166,78,.2)" : "#1C1D22", border: `1px solid ${merges[g] ? GOLD : "#2A2C33"}`, color: merges[g] ? GOLD : "#777" }} className="text-[11px] rounded-full px-2.5 py-1 flex items-center gap-1">
                 <Link2 size={11} />{label || g}
               </button>
             );
@@ -1826,9 +1917,9 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
           卓が登録されていません。<br />設定タブから卓を追加してください。
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          {visibleTables.map(tt => (
-            <FloorCard key={tt.id} tt={tt} disp={dispTable(tt)} t={ts[tt.id]} castById={castById} onClick={() => setSel(tt.id)} />
+        <div className="grid grid-cols-2" style={{ gap: 10 }}>
+          {visibleTables.map((tt, i) => (
+            <FloorCard key={tt.id} tt={tt} disp={dispTable(tt)} t={ts[tt.id]} castById={castById} idx={i} onClick={() => setSel(tt.id)} />
           ))}
         </div>
       )}
@@ -1875,25 +1966,25 @@ function Detail(p) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto" style={{ background: "#0a0a0c" }}>
-      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3" style={{ background: "#0a0a0c", borderBottom: "1px solid #1c1c22" }}>
+    <div className="v-dim fixed inset-0 z-40 overflow-y-auto" style={{ background: "#131418" }}>
+      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3" style={{ background: "#131418", borderBottom: "1px solid #1c1c22" }}>
         <div className="flex items-center gap-3">
           <button onClick={close}><X size={22} color="#888" /></button>
-          <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-xl font-bold">{disp.label}</span>
-          {active && (t.setStart ? <DetailClock t={t} /> : <span style={{ color: "#e0a84a" }} className="text-xs font-bold">準備中</span>)}
+          <span style={{ color: GOLD }} className="text-xl font-bold">{disp.label}</span>
+          {active && (t.setStart ? <DetailClock t={t} /> : <span style={{ color: "#F0A64B" }} className="text-xs font-bold">準備中</span>)}
         </div>
-        {active && <button onClick={() => closeTable(tableId)} style={{ background: "#1c1c22", color: GOLD }} className="text-xs px-3 py-1.5 rounded-lg font-bold">会計</button>}
+        {active && <button onClick={() => closeTable(tableId)} style={{ background: "rgba(255,255,255,.07)", color: GOLD }} className="text-xs px-3 py-1.5 rounded-lg font-bold">会計</button>}
       </div>
 
       {!active ? (
         <div className="p-10 text-center">
           <p className="text-zinc-500 mb-4 text-sm">この卓は空席です（定員 {disp.cap}名）</p>
-          <button onClick={() => openTable(tableId)} style={{ background: GOLD, color: "#000" }} className="px-6 py-3 rounded-xl font-bold">卓を開ける</button>
+          <button onClick={() => openTable(tableId)} style={{ background: GOLD, color: "#221A08" }} className="px-6 py-3 rounded-xl font-bold">卓を開ける</button>
         </div>
       ) : (
         <div className="p-4 space-y-5 pb-16">
           {!t.setStart && (
-            <button onClick={() => startTable(tableId)} style={{ background: GOLD, color: "#000" }} className="w-full rounded-2xl py-4 text-base font-bold shadow-lg">
+            <button onClick={() => startTable(tableId)} style={{ background: GOLD, color: "#221A08" }} className="w-full rounded-2xl py-4 text-base font-bold shadow-lg">
               ▶ セット開始（タイマースタート）
             </button>
           )}
@@ -1927,8 +2018,8 @@ function Detail(p) {
             const waiting = t.customers.filter(c => !assigned.has(c.id));
             if (!waiting.length) return null;
             return (
-              <div style={{ background: availCount > 0 ? "#141418" : "rgba(224,85,85,.08)", border: `1px solid ${availCount > 0 ? "#22222a" : "#a15050"}` }} className="rounded-xl p-3">
-                <div className="text-[11px] font-bold mb-1" style={{ color: availCount > 0 ? "#e0a84a" : "#ff9a9a" }}>
+              <div style={{ background: availCount > 0 ? "#1A1B20" : "rgba(224,85,85,.08)", border: `1px solid ${availCount > 0 ? "#22242A" : "#F2555A"}` }} className="rounded-xl p-3">
+                <div className="text-[11px] font-bold mb-1" style={{ color: availCount > 0 ? "#F0A64B" : "#ff9a9a" }}>
                   {availCount > 0 ? `女の子待ちのお客様 ${waiting.length}名（空き${availCount}名）` : `🈵 マイナス営業 — 女の子待ち ${waiting.length}名・空きキャスト0名`}
                 </div>
                 <p className="text-[10px] text-zinc-400 mb-2 leading-relaxed">
@@ -1943,7 +2034,7 @@ function Detail(p) {
 
           {t.setStart && <RotationPlan t={t} plusAssign={() => plusAssign(tableId)} availCount={availCount} castById={castById} reactions={reactions} tryAssign={(castId, custId) => tryAssign(tableId, castId, custId)} extendTable={(m) => extendTable(tableId, m)} />}
 
-          <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#000" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
+          <Section title="お客様 ＆ 付け回し" right={<button onClick={() => autoTable(tableId)} style={{ background: GOLD, color: "#221A08" }} className="text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1"><Wand2 size={12} />卓を自動付け回し</button>}>
             <div className="space-y-2">
               {t.customers.map(cust => {
                 const myAssigns = t.casts.filter(a => a.customerId === cust.id);
@@ -1954,10 +2045,10 @@ function Detail(p) {
                 const nextCast = nextPlan?.[cust.id] ? castById[nextPlan[cust.id]] : null;
                 const servedIds = served[cust.id] || [];
                 return (
-                  <div key={cust.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
+                  <div key={cust.id} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3">
                     <div className="flex items-center justify-between mb-2">
                       <button onClick={() => setBoss(tableId, cust.id)} className="flex items-center gap-1.5">
-                        <Crown size={15} color={cust.isBoss ? GOLD : "#3a3a42"} />
+                        <Crown size={15} color={cust.isBoss ? GOLD : "rgba(255,255,255,.12)"} />
                         <span className="font-bold text-sm">{cust.name}</span>
                         {cust.isBoss && <span style={{ color: GOLD }} className="text-[10px]">ボス</span>}
                       </button>
@@ -1966,7 +2057,7 @@ function Detail(p) {
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                       <span className="text-[10px] text-zinc-500">好み</span>
                       {GENRES.map(g => (
-                        <button key={g} onClick={() => setPref(tableId, cust.id, g)} style={{ background: cust.pref === g ? GENRE_COLOR[g] : "#1c1c22", color: cust.pref === g ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
+                        <button key={g} onClick={() => setPref(tableId, cust.id, g)} style={{ background: cust.pref === g ? GENRE_COLOR[g] : "rgba(255,255,255,.07)", color: cust.pref === g ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
                       ))}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1999,7 +2090,7 @@ function Detail(p) {
                       <div className="flex items-center gap-1 flex-wrap mt-1.5">
                         <span className="text-[9px] text-zinc-600">済:</span>
                         {pastCasts.map(c => (
-                          <span key={c.id} style={{ background: "#1a1a20", border: "1px solid #2a2a32", color: "#777" }} className="text-[10px] rounded-full px-1.5 py-0.5">{c.name}</span>
+                          <span key={c.id} style={{ background: "#1C1D22", border: "1px solid #2a2a32", color: "#777" }} className="text-[10px] rounded-full px-1.5 py-0.5">{c.name}</span>
                         ))}
                       </div>
                     )}
@@ -2007,9 +2098,9 @@ function Detail(p) {
                 );
               })}
               <div className="flex gap-2">
-                <input ref={cnameRef} placeholder="お客様名（新規）" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitCustomer(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
-                <button onClick={submitCustomer} style={{ background: "#22222a", color: GOLD }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><UserPlus size={14} />新規</button>
-                <button onClick={() => setBookPickOpen(true)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><Users size={14} />名帳</button>
+                <input ref={cnameRef} placeholder="お客様名（新規）" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitCustomer(); }} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+                <button onClick={submitCustomer} style={{ background: "#22242A", color: GOLD }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><UserPlus size={14} />新規</button>
+                <button onClick={() => setBookPickOpen(true)} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="px-3 rounded-lg text-sm font-bold flex items-center gap-1"><Users size={14} />名帳</button>
               </div>
             </div>
           </Section>
@@ -2018,45 +2109,45 @@ function Detail(p) {
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
               <span className="text-[10px] text-zinc-500">料金</span>
               {[4000, 4500, 5000, 5500].map(v => (
-                <button key={v} onClick={() => setSetType(tableId, v)} style={{ background: t.setType === v ? GOLD : "#1c1c22", color: t.setType === v ? "#000" : "#888" }} className="text-[11px] rounded-lg px-2 py-1 font-bold">{yen(v)}</button>
+                <button key={v} onClick={() => setSetType(tableId, v)} style={{ background: t.setType === v ? GOLD : "rgba(255,255,255,.07)", color: t.setType === v ? "#0F1013" : "#888" }} className="text-[11px] rounded-lg px-2 py-1 font-bold">{yen(v)}</button>
               ))}
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-zinc-500">時間</span>
               {[50, 60].map(v => (
-                <button key={v} onClick={() => setDur(tableId, v)} style={{ background: t.setDuration === v ? GOLD : "#1c1c22", color: t.setDuration === v ? "#000" : "#888" }} className="text-[11px] rounded-lg px-2.5 py-1 font-bold">{v}分</button>
+                <button key={v} onClick={() => setDur(tableId, v)} style={{ background: t.setDuration === v ? GOLD : "rgba(255,255,255,.07)", color: t.setDuration === v ? "#0F1013" : "#888" }} className="text-[11px] rounded-lg px-2.5 py-1 font-bold">{v}分</button>
               ))}
             </div>
           </Section>
 
           <Section title="ドリンク・ボトル">
             <div className="flex gap-2 mb-2">
-              <button onClick={() => setDrinkPick({ label: "ドリンク", price: 1500, kind: "drink" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ドリンク ¥1,500</button>
-              <button onClick={() => setDrinkPick({ label: "ショット", price: 3000, kind: "shot" })} style={{ background: "#141418", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ショット ¥3,000</button>
+              <button onClick={() => setDrinkPick({ label: "ドリンク", price: 1500, kind: "drink" })} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ドリンク ¥1,500</button>
+              <button onClick={() => setDrinkPick({ label: "ショット", price: 3000, kind: "shot" })} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">＋ショット ¥3,000</button>
             </div>
             {(products || []).length > 0 && (
               <div className="grid grid-cols-2 gap-2 mb-2">
                 {products.slice(0, 8).map(pr => (
-                  <button key={pr.id} onClick={() => setDrinkPick({ label: pr.name, price: pr.price, kind: pr.category || "drink", productId: pr.id, backPct: pr.backPct ?? null })} style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-lg py-2 px-2 text-[11px] font-bold text-left">
+                  <button key={pr.id} onClick={() => setDrinkPick({ label: pr.name, price: pr.price, kind: pr.category || "drink", productId: pr.id, backPct: pr.backPct ?? null })} style={{ background: "#1A1B20", border: "1px solid #2a2a32" }} className="rounded-lg py-2 px-2 text-[11px] font-bold text-left">
                     <span className="block truncate">{pr.name}</span>
                     <span className="text-zinc-500">{yen(pr.price)}</span>
                     {pr.backPct != null && <span style={{ color: GOLD }}> ・バック{pr.backPct}%</span>}
-                    {pr.lowStockAt != null && (pr.stock || 0) <= pr.lowStockAt && <span style={{ color: "#e0a84a" }}> 残{pr.stock || 0}</span>}
+                    {pr.lowStockAt != null && (pr.stock || 0) <= pr.lowStockAt && <span style={{ color: "#F0A64B" }}> 残{pr.stock || 0}</span>}
                   </button>
                 ))}
               </div>
             )}
             <div className="flex gap-2 mb-1.5">
-              <input ref={chLabelRef} placeholder="シャンパン等" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-2 py-2 outline-none min-w-0" />
-              <input ref={chPriceRef} placeholder="価格" inputMode="numeric" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitChampagne(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-24 rounded-lg px-2 py-2 outline-none" />
-              <button onClick={submitChampagne} style={{ background: "#22222a", color: GOLD }} className="px-3 rounded-lg text-xs font-bold">追加</button>
+              <input ref={chLabelRef} placeholder="シャンパン等" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-2 py-2 outline-none min-w-0" />
+              <input ref={chPriceRef} placeholder="価格" inputMode="numeric" enterKeyHint="done" onKeyDown={e => { if (e.key === "Enter") submitChampagne(); }} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-24 rounded-lg px-2 py-2 outline-none" />
+              <button onClick={submitChampagne} style={{ background: "#22242A", color: GOLD }} className="px-3 rounded-lg text-xs font-bold">追加</button>
             </div>
             {/* 銘柄ごとにバック率が違うので、その場で選べるようにする */}
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
               <span className="text-[10px] text-zinc-500">バック</span>
-              <button onClick={() => setChBack(null)} style={{ background: chBack == null ? GOLD : "#1c1c22", color: chBack == null ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">既定</button>
+              <button onClick={() => setChBack(null)} style={{ background: chBack == null ? GOLD : "rgba(255,255,255,.07)", color: chBack == null ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">既定</button>
               {(backPresets || []).map(v => (
-                <button key={v} onClick={() => setChBack(v)} style={{ background: chBack === v ? GOLD : "#1c1c22", color: chBack === v ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{v}%</button>
+                <button key={v} onClick={() => setChBack(v)} style={{ background: chBack === v ? GOLD : "rgba(255,255,255,.07)", color: chBack === v ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{v}%</button>
               ))}
               <span className="text-[9px] text-zinc-600">よく出す銘柄は 在庫タブの商品マスタに登録すると率が自動で入ります</span>
             </div>
@@ -2064,9 +2155,9 @@ function Detail(p) {
               {t.orders.map(o => (
                 <div key={o.id} className="flex items-center gap-2 text-sm">
                   <span className="flex-1 truncate">{o.label} <span className="text-zinc-500 text-xs">{yen(o.price)}</span>{o.backPct != null && <span style={{ color: GOLD }} className="text-[10px] ml-1">バック{o.backPct}%</span>}</span>
-                  <button onClick={() => ordQty(tableId, o.id, -1)} style={{ background: "#1c1c22" }} className="w-7 h-7 rounded text-zinc-400">−</button>
+                  <button onClick={() => ordQty(tableId, o.id, -1)} style={{ background: "rgba(255,255,255,.07)" }} className="w-7 h-7 rounded text-zinc-400">−</button>
                   <span className="w-5 text-center text-sm">{o.qty}</span>
-                  <button onClick={() => ordQty(tableId, o.id, 1)} style={{ background: "#1c1c22" }} className="w-7 h-7 rounded text-zinc-400">＋</button>
+                  <button onClick={() => ordQty(tableId, o.id, 1)} style={{ background: "rgba(255,255,255,.07)" }} className="w-7 h-7 rounded text-zinc-400">＋</button>
                   <span style={{ color: GOLD }} className="w-20 text-right text-sm font-bold">{yen(o.price * o.qty)}</span>
                   <button onClick={() => delOrder(tableId, o.id)}><Trash2 size={13} color="#555" /></button>
                 </div>
@@ -2074,7 +2165,7 @@ function Detail(p) {
             </div>
           </Section>
 
-          <div style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-4">
+          <div style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-2xl p-4">
             <div className="text-xs text-zinc-400 mb-2 space-y-0.5">
               <div className="flex justify-between"><span>セット {yen(t.setType)} × {t.customers.length}名</span><span>{yen(t.setType * t.customers.length)}</span></div>
               <div className="flex justify-between"><span>飲食</span><span>{yen(t.orders.reduce((a, o) => a + o.price * o.qty, 0))}</span></div>
@@ -2090,15 +2181,15 @@ function Detail(p) {
               <div className="flex items-center gap-1.5 pt-2">
                 <span className="text-[10px] text-zinc-500 w-14">お支払い</span>
                 <button onClick={() => setPayMethod(tableId, "cash")}
-                  style={{ background: (t.payMethod || "cash") === "cash" ? GOLD : "#1c1c22", color: (t.payMethod || "cash") === "cash" ? "#000" : "#888" }}
+                  style={{ background: (t.payMethod || "cash") === "cash" ? GOLD : "rgba(255,255,255,.07)", color: (t.payMethod || "cash") === "cash" ? "#0F1013" : "#888" }}
                   className="flex-1 rounded-lg py-1.5 text-xs font-bold">💴 現金</button>
                 <button onClick={() => setPayMethod(tableId, "card")}
-                  style={{ background: t.payMethod === "card" ? GOLD : "#1c1c22", color: t.payMethod === "card" ? "#000" : "#888" }}
+                  style={{ background: t.payMethod === "card" ? GOLD : "rgba(255,255,255,.07)", color: t.payMethod === "card" ? "#0F1013" : "#888" }}
                   className="flex-1 rounded-lg py-1.5 text-xs font-bold">💳 カード（+{cardFeePct}%）</button>
               </div>
 
               {tableCardFee(t) > 0 && (
-                <div className="flex justify-between text-xs" style={{ color: "#e0a84a" }}>
+                <div className="flex justify-between text-xs" style={{ color: "#F0A64B" }}>
                   <span>カード決済サービス料 {cardFeePct}%</span><span>{yen(tableCardFee(t))}</span>
                 </div>
               )}
@@ -2112,7 +2203,7 @@ function Detail(p) {
                 <span style={{ color: GOLD }} className="text-2xl font-bold">{yen(tablePayable(t))}</span>
               </div>
             </div>
-            <button onClick={() => { const r = saveReceipt(tableId); if (r) setReceiptOpen(r); }} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
+            <button onClick={() => { const r = saveReceipt(tableId); if (r) setReceiptOpen(r); }} style={{ background: "#22242A", color: GOLD, border: `1px solid ${GOLD}` }} className="w-full rounded-lg py-2.5 text-sm font-bold mt-3">
               🧾 伝票を印刷する
             </button>
             <p className="text-[10px] text-zinc-600 mt-1.5 text-center">印刷しても金額は保存されます（売上タブ →「🧾 伝票」）</p>
@@ -2172,13 +2263,13 @@ function CustomerBookPicker({ customerBook, bottleKeeps, onPick, onClose }) {
     .filter(c => !q || c.name.includes(q))
     .sort((a, b) => (b.lastVisitAt || 0) - (a.lastVisitAt || 0));
   return (
-    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[80vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, borderTop: `1px solid ${LINE}` }} className="v-sheet w-full rounded-t-[20px] p-4 max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold">客名帳から選ぶ</h3>
           <button onClick={onClose}><X size={20} color="#888" /></button>
         </div>
-        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="名前で検索" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="名前で検索" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
         {filtered.length === 0 ? (
           <p className="text-center text-zinc-500 text-sm py-6">
             {customerBook?.length ? "該当なし" : "客名帳がまだ空です。新規で追加すると自動で登録されます。"}
@@ -2190,12 +2281,12 @@ function CustomerBookPicker({ customerBook, bottleKeeps, onPick, onClose }) {
               const nearBd = days !== null && days <= 30;
               const last = c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "未来店";
               return (
-                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: "#141418", border: `1px solid ${nearBd ? "#e0a84a" : "#22222a"}` }} className="rounded-xl p-3 text-left">
+                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: "#1A1B20", border: `1px solid ${nearBd ? "#F0A64B" : "#22242A"}` }} className="rounded-xl p-3 text-left">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm">{c.name}</span>
-                      {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22222a", color: "#000" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
-                      {nearBd && <span style={{ color: "#e0a84a" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />誕生日 {days === 0 ? "本日" : `あと${days}日`}</span>}
+                      {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22242A", color: "#221A08" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
+                      {nearBd && <span style={{ color: "#F0A64B" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />誕生日 {days === 0 ? "本日" : `あと${days}日`}</span>}
                       {keepCountByCust[c.id] > 0 && <span style={{ color: "#e8d29a", background: "rgba(201,166,78,.15)" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">🍾 キープ{keepCountByCust[c.id]}本</span>}
                     </div>
                     <span className="text-[10px] text-zinc-500">{c.visits || 0}回 / {last}</span>
@@ -2216,8 +2307,8 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
   // お気に入りキャストを先頭に（同グループ内は元の並び順を維持）
   const sorted = [...castsInTable].sort((a, b) => (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0));
   return (
-    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[70vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, borderTop: `1px solid ${LINE}` }} className="v-sheet w-full rounded-t-[20px] p-4 max-h-[70vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold">
             <span className="text-zinc-500">{drink.label} </span>
@@ -2233,7 +2324,7 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
             {sorted.map(c => {
               const isFav = fav.has(c.id);
               return (
-                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: isFav ? "rgba(201,166,78,.1)" : "#141418", border: `1px solid ${isFav ? GOLD : TEAL}` }} className="rounded-xl p-3 text-left">
+                <button key={c.id} onClick={() => onPick(c.id)} style={{ background: isFav ? "rgba(201,166,78,.1)" : "#1A1B20", border: `1px solid ${isFav ? GOLD : TEAL}` }} className="rounded-xl p-3 text-left">
                   <div className="flex items-center gap-1">
                     <span className="font-bold text-sm">{c.name}</span>
                     {isFav && <span style={{ color: GOLD }} className="text-[10px] font-bold">⭐ お気に入り</span>}
@@ -2248,7 +2339,7 @@ function DrinkCastPicker({ drink, castsInTable, favCastIds, onPick, onFree, onCl
             })}
           </div>
         )}
-        <button onClick={onFree} style={{ background: "#22222a", color: "#aaa", border: "1px dashed #444" }} className="w-full rounded-lg py-2 text-xs font-bold">キャスト指定なし（フリー）で追加</button>
+        <button onClick={onFree} style={{ background: "#22242A", color: "#aaa", border: "1px dashed #444" }} className="w-full rounded-lg py-2 text-xs font-bold">キャスト指定なし（フリー）で追加</button>
       </div>
     </div>
   );
@@ -2276,8 +2367,8 @@ function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-t-2xl p-4 w-full max-w-md max-h-[85vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-t-[20px] p-4 w-full max-w-md max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-bold">🆘 {label} へ応援を呼ぶ</h3>
           <button onClick={onClose}><X size={18} color="#888" /></button>
@@ -2300,15 +2391,15 @@ function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById,
                   return (
                     <button key={c.castId} onClick={() => go(c)}
                       style={{
-                        background: confirming ? "#7a2222" : risky ? "#161013" : "#0d0d10",
-                        border: `1px solid ${confirming ? "#a13b3b" : risky ? "#5a4422" : TEAL}`,
+                        background: confirming ? "#7a2222" : risky ? "#161013" : "#1A1B20",
+                        border: `1px solid ${confirming ? "#F2555A" : risky ? "#5a4422" : TEAL}`,
                       }} className="w-full rounded-xl p-3 text-left">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-sm">{c.name}
                           <span style={{ color: STYLE_COLOR[c.style] }} className="text-[10px] ml-1.5">{c.style}</span>
                           <span style={{ color: RANK_COLOR[c.rank] }} className="text-[10px] ml-1">{c.rank}</span>
                         </span>
-                        <span style={{ color: c.rotRemainMs <= 0 ? "#ff6a6a" : c.rotRemainMs <= 5 * 60000 ? "#e0a84a" : "#8a8a92" }} className="text-[11px] font-bold">
+                        <span style={{ color: c.rotRemainMs <= 0 ? "#F2555A" : c.rotRemainMs <= 5 * 60000 ? "#F0A64B" : "#8a8a92" }} className="text-[11px] font-bold">
                           {c.rotRemainMs <= 0 ? "交代時間 超過" : `交代まで ${mins(c.rotRemainMs)}分`}
                         </span>
                       </div>
@@ -2316,7 +2407,7 @@ function RecallPicker({ t, tableId, label, recallCandidates, recallTo, castById,
                         {c.fromLabel} の {c.fromCustName}さんに着席中 ・ 着席 {mins(c.satMs)}分 ・ 卓の残り {mins(c.tableRemainMs)}分
                       </div>
                       {risky && (
-                        <div style={{ color: confirming ? "#fff" : "#e0a84a" }} className="text-[10px] font-bold mt-1">
+                        <div style={{ color: confirming ? "#fff" : "#F0A64B" }} className="text-[10px] font-bold mt-1">
                           {confirming ? "⚠ もう一度タップで確定" : [
                             c.fresh ? "付けたばかり" : null,
                             c.lastOne ? "抜くとその卓が女の子ゼロ" : null,
@@ -2364,7 +2455,7 @@ function ReceiptHistory({ receipts }) {
           <p className="text-[11px] text-zinc-500">印刷・会計した伝票が全部残ります（{list.length}件）</p>
         </div>
         {list.length > 0 && (
-          <button onClick={csv} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="text-xs px-3 py-2 rounded-lg font-bold">📄 CSV</button>
+          <button onClick={csv} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="text-xs px-3 py-2 rounded-lg font-bold">📄 CSV</button>
         )}
       </div>
       {list.length === 0 && (
@@ -2375,18 +2466,18 @@ function ReceiptHistory({ receipts }) {
           <div className="text-[11px] text-zinc-500 mb-1.5">{d}（{byDate[d].length}件 / 合計 {yen(byDate[d].reduce((s, r) => s + r.payable, 0))}）</div>
           <div className="space-y-2">
             {byDate[d].sort((a, b) => b.at - a.at).map(r => (
-              <button key={r.id} onClick={() => setOpen(r)} style={{ background: "#141418", border: `1px solid ${r.settled ? "#22222a" : "#7a5a1a"}` }} className="w-full rounded-xl p-3 text-left">
+              <button key={r.id} onClick={() => setOpen(r)} style={{ background: "#1A1B20", border: `1px solid ${r.settled ? "#22242A" : "#F0A64B"}` }} className="w-full rounded-xl p-3 text-left">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
-                    <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-base font-bold">{r.tableLabel}</span>
+                    <span style={{ color: GOLD }} className="text-base font-bold">{r.tableLabel}</span>
                     <span className="text-[11px] text-zinc-500">{new Date(r.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })} ・ {r.setCount}名</span>
-                    {!r.settled && <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">接客中</span>}
+                    {!r.settled && <span style={{ color: "#F0A64B" }} className="text-[9px] font-bold">接客中</span>}
                   </span>
                   <span style={{ color: GOLD }} className="text-lg font-bold">{yen(r.payable)}</span>
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5">
                   {r.customerNames.join(" / ") || "（お客様名なし）"}
-                  {r.payMethod === "card" && <span style={{ color: "#e0a84a" }}> ・💳カード（サービス料 {yen(r.cardFee)}）</span>}
+                  {r.payMethod === "card" && <span style={{ color: "#F0A64B" }}> ・💳カード（サービス料 {yen(r.cardFee)}）</span>}
                 </div>
                 {r.castNames.length > 0 && <div className="text-[10px] text-zinc-600 mt-0.5">担当: {r.castNames.join("・")}</div>}
               </button>
@@ -2406,7 +2497,7 @@ function ReceiptModal({ r, onClose }) {
   const stamp = new Date(r.at).toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const line = { display: "flex", justifyContent: "space-between", gap: "2mm" };
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(0,0,0,.85)" }}>
+    <div className="v-dim fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(0,0,0,.85)" }}>
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -2415,18 +2506,18 @@ function ReceiptModal({ r, onClose }) {
           @page { size: ${w}mm auto; margin: 3mm; }
         }
       `}</style>
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: "#0a0a0c", borderBottom: "1px solid #1c1c22" }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: "#131418", borderBottom: "1px solid #1c1c22" }}>
         <button onClick={onClose}><X size={22} color="#888" /></button>
         <div className="flex gap-2">
           {[58, 80].map(v => (
-            <button key={v} onClick={() => setW(v)} style={{ background: w === v ? GOLD : "#1c1c22", color: w === v ? "#000" : "#888" }} className="text-xs px-3 py-1.5 rounded-lg font-bold">{v}mm</button>
+            <button key={v} onClick={() => setW(v)} style={{ background: w === v ? GOLD : "rgba(255,255,255,.07)", color: w === v ? "#0F1013" : "#888" }} className="text-xs px-3 py-1.5 rounded-lg font-bold">{v}mm</button>
           ))}
         </div>
-        <button onClick={() => window.print()} style={{ background: GOLD, color: "#000" }} className="text-sm px-4 py-1.5 rounded-lg font-bold">🖨 印刷</button>
+        <button onClick={() => window.print()} style={{ background: GOLD, color: "#221A08" }} className="text-sm px-4 py-1.5 rounded-lg font-bold">🖨 印刷</button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 flex justify-center">
         <div id="receipt-paper" style={{
-          width: `${w}mm`, background: "#fff", color: "#000", padding: "4mm 3mm",
+          width: `${w}mm`, background: "#fff", color: "#221A08", padding: "4mm 3mm",
           fontFamily: '"Hiragino Sans", system-ui, sans-serif', fontSize: w === 58 ? "9pt" : "10pt", lineHeight: 1.5,
         }}>
           <div style={{ textAlign: "center", fontWeight: "bold", fontSize: w === 58 ? "12pt" : "14pt", letterSpacing: "0.1em", marginBottom: "2mm" }}>
@@ -2508,7 +2599,7 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
   const fields = t.casts.filter(a => a.nomType === "field");
   const nameOf = (a) => castById[a.castId]?.name || "?";
   return (
-    <div style={{ background: closing ? "rgba(224,168,74,.08)" : "#141418", border: `1px solid ${closing ? "#7a5a1a" : "#22222a"}` }} className="rounded-xl p-3">
+    <div style={{ background: closing ? "rgba(224,168,74,.08)" : "#1A1B20", border: `1px solid ${closing ? "#F0A64B" : "#22242A"}` }} className="rounded-xl p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-bold text-zinc-400">接客プラン（交代の目安）</span>
         <span className="text-[10px] text-zinc-500">経過 {elapsedMin}分 / 残り {remainMin > 0 ? `${remainMin}分` : "超過"}</span>
@@ -2519,15 +2610,15 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
           const isNow = passed && (i + 1 >= sched.length || elapsedMin < sched[i + 1]);
           return (
             <div key={i} className="flex-1 text-center">
-              <div style={{ height: 4, background: isNow ? GOLD : passed ? "#4a4a52" : "#22222a" }} className="rounded-full mb-1" />
+              <div style={{ height: 4, background: isNow ? GOLD : passed ? "#4a4a52" : "#22242A" }} className="rounded-full mb-1" />
               <div style={{ color: isNow ? GOLD : "#6a6a72" }} className="text-[9px] font-bold">{i + 1}人目 {m}分〜</div>
             </div>
           );
         })}
       </div>
       {closing && (
-        <div style={{ background: urgent ? "rgba(224,85,85,.12)" : "transparent", border: `1px dashed ${urgent ? "#a15050" : "#7a5a1a"}` }} className="rounded-lg p-2 mb-2">
-          <div style={{ color: urgent ? "#ff9a9a" : "#e0a84a" }} className="text-[11px] font-bold mb-1">
+        <div style={{ background: urgent ? "rgba(224,85,85,.12)" : "transparent", border: `1px dashed ${urgent ? "#F2555A" : "#F0A64B"}` }} className="rounded-lg p-2 mb-2">
+          <div style={{ color: urgent ? "#ff9a9a" : "#F0A64B" }} className="text-[11px] font-bold mb-1">
             {urgent ? "⏰ 今すぐ延長交渉を！" : "⏰ 延長クロージングの時間です（残り10分）"}
           </div>
           <div className="text-[10px] text-zinc-400 leading-relaxed">
@@ -2545,7 +2636,7 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
         </div>
       )}
       {/* ボトルバックの行き先。本指名で折半、いなければ入れた子へ */}
-      <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
+      <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
         <div className="text-[10px] text-zinc-500 mb-1">🍾 ボトルバックの行き先</div>
         {mains.length ? (
           <div className="text-[11px]" style={{ color: GOLD }}>
@@ -2567,13 +2658,13 @@ function RotationPlan({ t, plusAssign, availCount, castById, reactions, tryAssig
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500">延長</span>
         {[30, 60].map(m => (
-          <button key={m} onClick={() => extendTable(m)} style={{ background: "#22222a", color: GOLD, border: `1px solid ${GOLD}` }} className="text-[11px] rounded-lg px-3 py-1.5 font-bold">＋{m}分</button>
+          <button key={m} onClick={() => extendTable(m)} style={{ background: "#22242A", color: GOLD, border: `1px solid ${GOLD}` }} className="text-[11px] rounded-lg px-3 py-1.5 font-bold">＋{m}分</button>
         ))}
         {(t.extendMin || 0) > 0 && <span style={{ color: GOLD }} className="text-[10px] font-bold">延長中 +{t.extendMin}分</span>}
       </div>
 
       <button onClick={plusAssign} disabled={!canPlus}
-        style={{ background: canPlus ? "#22222a" : "#141418", color: canPlus ? TEAL : "#4a4a52", border: `1px solid ${canPlus ? TEAL : "#2a2a32"}` }}
+        style={{ background: canPlus ? "#22242A" : "#1A1B20", color: canPlus ? TEAL : "#4a4a52", border: `1px solid ${canPlus ? TEAL : "#2A2C33"}` }}
         className="w-full rounded-lg py-2 text-[11px] font-bold">
         ＋ プラス付け（客数より多く付ける）{canPlus ? `　空き${availCount}名` : "　空きなし"}
       </button>
@@ -2594,7 +2685,7 @@ function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction
   // 指名バッジ。タップで ヘルプ→場内→本 と切り替わる。本指名だけボトルバックの折半対象。
   const nomBadge = onNom ? (
     <button onClick={onNom} title="タップで 本指名/場内/ヘルプ を切替"
-      style={{ background: nomType === "main" ? GOLD : nomType === "field" ? TEAL : "#2a2a32", color: nomType === "help" ? "#9a9aa2" : "#000" }}
+      style={{ background: nomType === "main" ? GOLD : nomType === "field" ? TEAL : "#2A2C33", color: nomType === "help" ? "#9a9aa2" : "#0F1013" }}
       className="text-[8px] rounded px-1 font-bold leading-tight">{NOM_LABEL[nomType] || "ヘルプ"}</button>
   ) : null;
   if (!started || !at) {
@@ -2612,7 +2703,7 @@ function RotationChip({ cast, at, rotMs, started = true, onRemove, nth, reaction
   const over = remain <= 0;
   const soon = !over && remain <= 3 * 60000;
   const good = reaction === REACT_GOOD;
-  const color = over ? "#ff6a6a" : soon ? "#e0a84a" : good ? GOLD : TEAL;
+  const color = over ? "#F2555A" : soon ? "#F0A64B" : good ? GOLD : TEAL;
   const bg = over ? "rgba(224,85,85,.12)" : soon ? "rgba(224,168,74,.12)" : good ? "rgba(201,166,78,.18)" : "rgba(63,182,176,.15)";
   const fg = over ? "#ffb3b3" : soon ? "#f0cf9a" : good ? "#e8d29a" : "#a8e6e2";
   return (
@@ -2645,8 +2736,8 @@ function CastPicker({ pick, close, available, tableCasts, served, castById, cast
     .filter(id => !tableCasts.some(a => a.customerId === cust?.id && a.castId === id))
     .map(id => castById[id]?.name).filter(Boolean);
   return (
-    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={close}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d10", borderTop: "1px solid #22222a" }} className="w-full rounded-t-3xl p-4 max-h-[70vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-end" style={{ background: "rgba(0,0,0,.6)" }} onClick={close}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, borderTop: `1px solid ${LINE}` }} className="v-sheet w-full rounded-t-[20px] p-4 max-h-[70vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-bold">{cust?.name}さんに付ける（好み: <span style={{ color: GENRE_COLOR[cust?.pref] }}>{cust?.pref}</span>）</h3>
           <button onClick={close}><X size={20} color="#888" /></button>
@@ -2668,15 +2759,15 @@ function CastPicker({ pick, close, available, tableCasts, served, castById, cast
             const blocked = ng || ngPair;
             return (
               <button key={c.id} onClick={() => tryAssign(pick.tableId, c.id, pick.customerId)} disabled={blocked}
-                style={{ background: blocked ? "#161013" : "#141418", border: `1px solid ${blocked ? "#5a2222" : match ? TEAL : "#22222a"}`, opacity: blocked ? 0.55 : 1 }} className="rounded-xl p-3 text-left">
+                style={{ background: blocked ? "#161013" : "#1A1B20", border: `1px solid ${blocked ? "#5a2222" : match ? TEAL : "#22242A"}`, opacity: blocked ? 0.55 : 1 }} className="rounded-xl p-3 text-left">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm">{c.name}</span>
-                  {ngPair ? <span style={{ color: "#e05555" }} className="text-[9px] font-bold">本人NG</span>
-                    : ng ? <span style={{ color: "#e05555" }} className="text-[9px] font-bold">NG重複</span>
-                      : here ? <span style={{ color: "#e0a84a" }} className="text-[9px] font-bold">在卓⚠</span> : null}
+                  {ngPair ? <span style={{ color: "#F2555A" }} className="text-[9px] font-bold">本人NG</span>
+                    : ng ? <span style={{ color: "#F2555A" }} className="text-[9px] font-bold">NG重複</span>
+                      : here ? <span style={{ color: "#F0A64B" }} className="text-[9px] font-bold">在卓⚠</span> : null}
                 </div>
                 <div className="flex gap-1 mt-1 flex-wrap items-center">
-                  <span style={{ background: STYLE_COLOR[c.style] || "#333", color: "#000", opacity: usedStyle ? 0.4 : 1 }} className="text-[9px] rounded px-1 font-bold">{c.style}{usedStyle ? "(済)" : ""}</span>
+                  <span style={{ background: STYLE_COLOR[c.style] || "#333", color: "#221A08", opacity: usedStyle ? 0.4 : 1 }} className="text-[9px] rounded px-1 font-bold">{c.style}{usedStyle ? "(済)" : ""}</span>
                   <span style={{ color: RANK_COLOR[c.rank] || "#888", border: `1px solid ${RANK_COLOR[c.rank] || "#444"}` }} className="text-[9px] rounded px-1 font-bold">{c.rank}</span>
                   {c.genres.map(g => <span key={g} style={{ color: GENRE_COLOR[g], border: `1px solid ${GENRE_COLOR[g]}` }} className="text-[9px] rounded px-1">{g}</span>)}
                 </div>
@@ -2708,8 +2799,8 @@ function CastView({ casts, busy, clockIn, clockOut, bumpCastCounter, salaryHisto
 function CastTabBar({ tab, setTab }) {
   return (
     <div className="flex gap-2 mb-4">
-      <button onClick={() => setTab("today")} style={{ background: tab === "today" ? GOLD : "#141418", color: tab === "today" ? "#000" : "#888", border: `1px solid ${tab === "today" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">出勤・稼働</button>
-      <button onClick={() => setTab("salary")} style={{ background: tab === "salary" ? GOLD : "#141418", color: tab === "salary" ? "#000" : "#888", border: `1px solid ${tab === "salary" ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">給料集計（月次）</button>
+      <button onClick={() => setTab("today")} style={{ background: tab === "today" ? GOLD : "#1A1B20", color: tab === "today" ? "#0F1013" : "#888", border: `1px solid ${tab === "today" ? GOLD : "#22242A"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">出勤・稼働</button>
+      <button onClick={() => setTab("salary")} style={{ background: tab === "salary" ? GOLD : "#1A1B20", color: tab === "salary" ? "#0F1013" : "#888", border: `1px solid ${tab === "salary" ? GOLD : "#22242A"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">給料集計（月次）</button>
     </div>
   );
 }
@@ -2725,17 +2816,17 @@ function RosterBrief({ casts }) {
   const missing = STYLES.filter(s => !on.some(c => c.style === s));
   return (
     <div className="mb-4">
-      <button onClick={() => setOpen(o => !o)} style={{ background: "#141418", border: "1px solid #22222a", color: GOLD }} className="w-full rounded-xl py-2 text-[11px] font-bold">
+      <button onClick={() => setOpen(o => !o)} style={{ background: "#1A1B20", border: "1px solid #22222a", color: GOLD }} className="w-full rounded-xl py-2 text-[11px] font-bold">
         {open ? "▲ 閉じる" : `📋 開店前チェック — 出勤${on.length}名のタイプ構成を見る`}
       </button>
       {open && (
-        <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-xl p-3 mt-2 space-y-2.5">
+        <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3 mt-2 space-y-2.5">
           <div>
             <div className="text-[10px] text-zinc-500 mb-1">接客レベル</div>
             <div className="space-y-1">
               {byRank.map(([r, arr]) => (
                 <div key={r} className="flex items-start gap-2">
-                  <span style={{ background: RANK_COLOR[r], color: "#000" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{r}</span>
+                  <span style={{ background: RANK_COLOR[r], color: "#221A08" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{r}</span>
                   <span className="text-[11px] text-zinc-300">{arr.map(c => c.name).join("・")}</span>
                 </div>
               ))}
@@ -2746,13 +2837,13 @@ function RosterBrief({ casts }) {
             <div className="space-y-1">
               {byStyle.map(([s, arr]) => (
                 <div key={s} className="flex items-start gap-2">
-                  <span style={{ background: STYLE_COLOR[s], color: "#000" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{s}</span>
+                  <span style={{ background: STYLE_COLOR[s], color: "#221A08" }} className="text-[10px] rounded px-1.5 font-bold shrink-0">{s}</span>
                   <span className="text-[11px] text-zinc-300">{arr.map(c => c.name).join("・")}</span>
                 </div>
               ))}
             </div>
             {missing.length > 0 && (
-              <div style={{ color: "#e0a84a" }} className="text-[10px] mt-1.5 font-bold">
+              <div style={{ color: "#F0A64B" }} className="text-[10px] mt-1.5 font-bold">
                 ⚠ 今夜いないタイプ: {missing.join("・")} — 変化をつけた付け回しがしづらくなります
               </div>
             )}
@@ -2784,7 +2875,7 @@ function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTa
     <div className="p-4 pb-4">
       <CastTabBar tab={tab} setTab={setTab} />
       <p className="text-xs text-zinc-500 mb-1">キャスト稼働・指名・給料</p>
-      <h2 className="text-2xl font-bold mb-4" style={{ fontFamily: "Georgia,serif" }}>稼働中 {working.length}名</h2>
+      <h2 className="text-2xl font-bold mb-4" style={{  }}>稼働中 {working.length}名</h2>
 
       <RosterBrief casts={casts} />
 
@@ -2800,8 +2891,8 @@ function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTa
           <p className="text-xs text-zinc-500 mb-2">未出勤（タップで出勤）</p>
           <div className="grid grid-cols-3 gap-2 mb-6">
             {notYet.map(c => (
-              <button key={c.id} onClick={() => clockIn(c.id)} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-2 flex flex-col items-center gap-1">
-                <div style={{ background: "#1c1c22" }} className="w-11 h-11 rounded-full flex items-center justify-center text-sm text-zinc-400">{c.name.slice(0, 2)}</div>
+              <button key={c.id} onClick={() => clockIn(c.id)} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-2 flex flex-col items-center gap-1">
+                <div style={{ background: "rgba(255,255,255,.07)" }} className="w-11 h-11 rounded-full flex items-center justify-center text-sm text-zinc-400">{c.name.slice(0, 2)}</div>
                 <span className="text-xs">{c.name}</span>
                 <span style={{ color: GOLD }} className="text-[10px] font-bold">＋ 出勤</span>
               </button>
@@ -2816,7 +2907,7 @@ function CastToday({ casts, busy, clockIn, clockOut, bumpCastCounter, tab, setTa
           <div className="flex gap-3 flex-wrap">
             {done.map(c => (
               <div key={c.id} className="flex flex-col items-center gap-1">
-                <div style={{ background: "#0d0d10" }} className="w-11 h-11 rounded-full flex items-center justify-center text-sm text-zinc-600">{c.name.slice(0, 2)}</div>
+                <div style={{ background: "#1A1B20" }} className="w-11 h-11 rounded-full flex items-center justify-center text-sm text-zinc-600">{c.name.slice(0, 2)}</div>
                 <span className="text-[10px] text-zinc-600">{c.name}</span>
               </div>
             ))}
@@ -2871,7 +2962,7 @@ function SalaryView({ salaryHistory, salaryAdjust, setSalaryAdjust, settings, ca
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-xs text-zinc-500">対象月</span>
         {(months.length ? months : [month]).map(m => (
-          <button key={m} onClick={() => setMonth(m)} style={{ background: month === m ? GOLD : "#141418", color: month === m ? "#000" : "#888", border: `1px solid ${month === m ? GOLD : "#22222a"}` }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">{m}</button>
+          <button key={m} onClick={() => setMonth(m)} style={{ background: month === m ? GOLD : "#1A1B20", color: month === m ? "#0F1013" : "#888", border: `1px solid ${month === m ? GOLD : "#22242A"}` }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">{m}</button>
         ))}
       </div>
 
@@ -2886,10 +2977,10 @@ function SalaryView({ salaryHistory, salaryAdjust, setSalaryAdjust, settings, ca
             <span className="text-xs text-zinc-400">{month} 人件費合計（{rows.length}名）</span>
             <span style={{ color: GOLD }} className="text-xl font-bold">{yen(total)}</span>
           </div>
-          <button onClick={exportCsv} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2 text-xs font-bold mb-3">📄 振込用CSVを書き出す</button>
+          <button onClick={exportCsv} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2 text-xs font-bold mb-3">📄 振込用CSVを書き出す</button>
           <div className="space-y-2">
             {rows.map(r => (
-              <button key={r.castId} onClick={() => setDetailCastId(r.castId)} style={{ background: "#141418", border: "1px solid #22222a" }} className="w-full rounded-xl p-3 text-left">
+              <button key={r.castId} onClick={() => setDetailCastId(r.castId)} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="w-full rounded-xl p-3 text-left">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold">{r.name}</span>
                   <span style={{ color: GOLD }} className="font-bold">{yen(r.final)}</span>
@@ -2898,7 +2989,7 @@ function SalaryView({ salaryHistory, salaryAdjust, setSalaryAdjust, settings, ca
                   <span>{r.dayCount}日 / {r.hours.toFixed(1)}h</span>
                   <span>本指{r.mainNominationCount} 場内{r.fieldNominationCount} 同伴{r.dohanCount}</span>
                   <span>Dr{r.drinkCount} 🍾{yen(r.bottleSales)}</span>
-                  {r.lateMinutes > 0 && <span style={{ color: "#e0a84a" }}>遅刻{r.lateMinutes}分</span>}
+                  {r.lateMinutes > 0 && <span style={{ color: "#F0A64B" }}>遅刻{r.lateMinutes}分</span>}
                   {(r.bonus > 0 || r.deduct > 0 || r.tax > 0) && <span>調整 +{r.bonus}/-{r.deduct}{r.tax > 0 ? ` 源泉-${r.tax}` : ""}</span>}
                 </div>
               </button>
@@ -2923,7 +3014,7 @@ function MiniBar({ label, value, max, color }) {
   return (
     <div className="flex items-center gap-2 text-[11px]">
       <span className="w-12 text-zinc-500">{label}</span>
-      <div className="flex-1 h-3 rounded overflow-hidden" style={{ background: "#1c1c22" }}>
+      <div className="flex-1 h-3 rounded overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}>
         <div style={{ width: pct + "%", background: color, minWidth: value > 0 ? 4 : 0 }} className="h-full" />
       </div>
       <span className="w-8 text-right font-bold">{value}</span>
@@ -2961,17 +3052,17 @@ function CastSalaryDetail({ r, month, settings, onAdjust, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
-          <h3 style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-xl font-bold">{r.name}</h3>
+          <h3 style={{ color: GOLD }} className="text-xl font-bold">{r.name}</h3>
           <button onClick={onClose}><X size={20} color="#888" /></button>
         </div>
         <p className="text-xs text-zinc-500 mb-3">{month} 月次明細 ・ {r.dayCount}日 / {r.hours.toFixed(1)}h</p>
 
         <div className="space-y-1.5 mb-4">
           <MiniBar label="本指名" value={r.mainNominationCount} max={maxCount} color={GOLD} />
-          <MiniBar label="場内" value={r.fieldNominationCount} max={maxCount} color="#e0a84a" />
+          <MiniBar label="場内" value={r.fieldNominationCount} max={maxCount} color="#F0A64B" />
           <MiniBar label="同伴" value={r.dohanCount} max={maxCount} color={TEAL} />
           <MiniBar label="ドリンク" value={r.drinkCount} max={maxCount} color="#7aa7ff" />
           <MiniBar label="ショット" value={r.shotCount} max={maxCount} color="#a78bfa" />
@@ -2985,12 +3076,12 @@ function CastSalaryDetail({ r, month, settings, onAdjust, onClose }) {
         <div className="border-t border-[#22222a] pt-3 mb-3 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">賞与</span>
-            <input type="number" value={r.bonus || ""} placeholder="0" onChange={e => onAdjust("bonus", +e.target.value || 0)} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
+            <input type="number" value={r.bonus || ""} placeholder="0" onChange={e => onAdjust("bonus", +e.target.value || 0)} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
             <span className="text-[10px] text-zinc-500">円</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">追加控除</span>
-            <input type="number" value={r.deduct || ""} placeholder="0" onChange={e => onAdjust("deduct", +e.target.value || 0)} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
+            <input type="number" value={r.deduct || ""} placeholder="0" onChange={e => onAdjust("deduct", +e.target.value || 0)} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
             <span className="text-[10px] text-zinc-500">円</span>
           </div>
           {r.tax > 0 && <div className="flex justify-between text-xs"><span className="text-zinc-500">源泉徴収 10.21%</span><span style={{ color: "#ff8888" }}>-{yen(r.tax)}</span></div>}
@@ -3005,7 +3096,7 @@ function CastSalaryDetail({ r, month, settings, onAdjust, onClose }) {
           <p className="text-[10px] text-zinc-500 mb-1.5">日別</p>
           <div className="space-y-1 max-h-40 overflow-y-auto">
             {r.records.map(rec => (
-              <div key={rec.id} className="flex items-center justify-between text-[11px]" style={{ background: "#0d0d10", border: "1px solid #1c1c22" }}>
+              <div key={rec.id} className="flex items-center justify-between text-[11px]" style={{ background: "#1A1B20", border: "1px solid #1c1c22" }}>
                 <span className="px-2 py-1 text-zinc-400">{rec.businessDate.slice(5).replace("-", "/")} ・ {rec.hours.toFixed(1)}h{rec.lateMinutes > 0 ? ` ・遅${rec.lateMinutes}分` : ""}</span>
                 <span className="px-2 py-1 font-bold">{yen(rec.net)}</span>
               </div>
@@ -3013,9 +3104,9 @@ function CastSalaryDetail({ r, month, settings, onAdjust, onClose }) {
           </div>
         </div>
 
-        <button onClick={copySlip} style={{ background: GOLD, color: "#000" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{copied ? "✅ コピーしました（LINE等に貼り付け）" : "📋 明細テキストをコピー"}</button>
+        <button onClick={copySlip} style={{ background: GOLD, color: "#221A08" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{copied ? "✅ コピーしました（LINE等に貼り付け）" : "📋 明細テキストをコピー"}</button>
         {showText && (
-          <textarea readOnly value={slipText} rows={8} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "12px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
+          <textarea readOnly value={slipText} rows={8} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "12px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
         )}
       </div>
     </div>
@@ -3029,14 +3120,14 @@ function WorkingCastCard({ c, busy, onToggle, expanded, clockOut, bumpCastCounte
   const m = Math.floor((elapsed % 3600000) / 60000);
   const isBusy = busy.has(c.id);
   return (
-    <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-2xl overflow-hidden">
+    <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-2xl overflow-hidden">
       <div className="p-3 flex items-center gap-3">
         <div style={{ border: `2px solid ${isBusy ? GOLD : TEAL}` }} className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold">{c.name.slice(0, 2)}</div>
         <div className="flex-1 min-w-0">
           <div className="font-bold">{c.name}</div>
           <div className="text-[11px] text-zinc-500">稼働 {h}h {String(m).padStart(2,"0")}m ・ {isBusy ? "接客中" : "フリー"}</div>
         </div>
-        <button onClick={onToggle} style={{ background: "#1c1c22", color: GOLD }} className="text-[11px] rounded-full px-3 py-1 font-bold">{expanded ? "閉じる" : "詳細"}</button>
+        <button onClick={onToggle} style={{ background: "rgba(255,255,255,.07)", color: GOLD }} className="text-[11px] rounded-full px-3 py-1 font-bold">{expanded ? "閉じる" : "詳細"}</button>
         <button onClick={() => clockOut(c.id)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-3 py-1 font-bold">退勤</button>
       </div>
       {expanded && (
@@ -3061,9 +3152,9 @@ function CounterRow({ label, val, onDelta, back }) {
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className="w-16 text-xs text-zinc-500">{label}</span>
-      <button onClick={() => onDelta(-1)} style={{ background: "#1c1c22" }} className="w-8 h-8 rounded text-zinc-400">−</button>
+      <button onClick={() => onDelta(-1)} style={{ background: "rgba(255,255,255,.07)" }} className="w-8 h-8 rounded text-zinc-400">−</button>
       <span className="w-8 text-center text-base font-bold">{val || 0}</span>
-      <button onClick={() => onDelta(1)} style={{ background: "#1c1c22" }} className="w-8 h-8 rounded text-zinc-400">＋</button>
+      <button onClick={() => onDelta(1)} style={{ background: "rgba(255,255,255,.07)" }} className="w-8 h-8 rounded text-zinc-400">＋</button>
       <span className="text-[10px] text-zinc-500 ml-auto">{back}</span>
     </div>
   );
@@ -3073,11 +3164,11 @@ function SalaryModal({ cast, breakdown, overheadPct, onConfirm, onClose }) {
   const b = breakdown;
   const hDisp = `${Math.floor(b.hoursMs / 3600000)}h ${String(Math.floor((b.hoursMs % 3600000) / 60000)).padStart(2, "0")}m`;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="mb-4">
           <p className="text-xs text-zinc-500">給料明細</p>
-          <h3 style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-2xl font-bold">{cast.name}</h3>
+          <h3 style={{ color: GOLD }} className="text-2xl font-bold">{cast.name}</h3>
           <p className="text-xs text-zinc-500 mt-1">稼働 {hDisp}</p>
         </div>
         <div className="space-y-1 text-sm mb-4">
@@ -3105,8 +3196,8 @@ function SalaryModal({ cast, breakdown, overheadPct, onConfirm, onClose }) {
           <span style={{ color: GOLD }} className="text-2xl font-bold">¥{b.net.toLocaleString()}</span>
         </div>
         <div className="flex gap-2 mt-4">
-          <button onClick={onClose} style={{ background: "#22222a", color: "#aaa" }} className="flex-1 py-2 rounded-lg text-sm">戻る</button>
-          <button onClick={onConfirm} style={{ background: GOLD, color: "#000" }} className="flex-1 py-2 rounded-lg text-sm font-bold">退勤確定</button>
+          <button onClick={onClose} style={{ background: "#22242A", color: "#aaa" }} className="flex-1 py-2 rounded-lg text-sm">戻る</button>
+          <button onClick={onConfirm} style={{ background: GOLD, color: "#221A08" }} className="flex-1 py-2 rounded-lg text-sm font-bold">退勤確定</button>
         </div>
       </div>
     </div>
@@ -3125,7 +3216,7 @@ function SalaryLine({ l, v, cut }) {
 function Sales({ receipts, ts, dispTable, tables, tableTotal, tableCardFee, closed, target, taxRate, history, salesLog, salaryHistory, customerBook }) {
   const [tab, setTab] = useState("today");
   const TabBtn = ({ k, children }) => (
-    <button onClick={() => setTab(k)} style={{ background: tab === k ? GOLD : "#141418", color: tab === k ? "#000" : "#888", border: `1px solid ${tab === k ? GOLD : "#22222a"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">{children}</button>
+    <button onClick={() => setTab(k)} style={{ background: tab === k ? GOLD : "#1A1B20", color: tab === k ? "#0F1013" : "#888", border: `1px solid ${tab === k ? GOLD : "#22242A"}` }} className="flex-1 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1">{children}</button>
   );
   return (
     <div className="p-4">
@@ -3207,7 +3298,7 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
     <div className="space-y-5">
       <div className="flex items-center gap-1.5 flex-wrap">
         {[[7, "7日"], [30, "30日"], [90, "90日"], [9999, "全部"]].map(([d, l]) => (
-          <button key={d} onClick={() => setRange(d)} style={{ background: range === d ? GOLD : "#141418", color: range === d ? "#000" : "#888", border: `1px solid ${range === d ? GOLD : "#22222a"}` }} className="text-[11px] rounded-full px-3 py-1 font-bold">{l}</button>
+          <button key={d} onClick={() => setRange(d)} style={{ background: range === d ? GOLD : "#1A1B20", color: range === d ? "#0F1013" : "#888", border: `1px solid ${range === d ? GOLD : "#22242A"}` }} className="text-[11px] rounded-full px-3 py-1 font-bold">{l}</button>
         ))}
         <span className="text-[10px] text-zinc-500 ml-auto">計{yen(totalSales)} / 平均{yen(avgDay)}/日</span>
       </div>
@@ -3278,7 +3369,7 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
                     {heatDays.map(h => {
                       const v = (h.byTable || {})[tl] || 0;
                       const alpha = v > 0 ? 0.15 + (v / heatMax) * 0.85 : 0;
-                      return <td key={h.businessDate}><div title={yen(v)} style={{ width: 18, height: 18, borderRadius: 3, background: v > 0 ? `rgba(201,166,78,${alpha})` : "#141418", border: "1px solid #1c1c22" }} /></td>;
+                      return <td key={h.businessDate}><div title={yen(v)} style={{ width: 18, height: 18, borderRadius: 3, background: v > 0 ? `rgba(201,166,78,${alpha})` : "#1A1B20", border: "1px solid #1c1c22" }} /></td>;
                     })}
                   </tr>
                 ))}
@@ -3291,8 +3382,8 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
       <div>
         <p className="text-xs text-zinc-500 mb-2">顧客セグメント（累計利用額）</p>
         <div className="grid grid-cols-4 gap-2 mb-2">
-          {[["A", "10万〜", "#e0a84a"], ["B", "3万〜", TEAL], ["C", "〜3万", "#7aa7ff"], ["休眠", "30日〜", "#888"]].map(([k, sub, color]) => (
-            <div key={k} style={{ background: "#141418", border: `1px solid ${color}` }} className="rounded-xl p-2 text-center">
+          {[["A", "10万〜", "#F0A64B"], ["B", "3万〜", TEAL], ["C", "〜3万", "#7aa7ff"], ["休眠", "30日〜", "#888"]].map(([k, sub, color]) => (
+            <div key={k} style={{ background: "#1A1B20", border: `1px solid ${color}` }} className="rounded-xl p-2 text-center">
               <div style={{ color }} className="text-lg font-bold">{segs[k].length}</div>
               <div className="text-[9px] text-zinc-500">{k}ランク<br />{sub}</div>
             </div>
@@ -3304,8 +3395,8 @@ function AnalyticsView({ history, salesLog, salaryHistory, customerBook }) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,カード決済サービス料,お預り合計,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.cardFee || 0, h.grand + (h.cardFee || 0), h.tableCount].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
-        <button onClick={() => csvDownload(`顧客_${businessDateOfNow()}.csv`, "名前,来店回数,累計利用額,最終来店", (customerBook || []).map(c => [c.name, c.visits || 0, c.totalSpent || 0, c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : ""].join(",")))} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 顧客CSV</button>
+        <button onClick={() => csvDownload(`売上日別_${businessDateOfNow()}.csv`, "日付,税抜売上,消費税,税込,カード決済サービス料,お預り合計,会計卓数", (history || []).map(h => [h.businessDate, h.subtotal, h.tax, h.grand, h.cardFee || 0, h.grand + (h.cardFee || 0), h.tableCount].join(",")))} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 日別売上CSV</button>
+        <button onClick={() => csvDownload(`顧客_${businessDateOfNow()}.csv`, "名前,来店回数,累計利用額,最終来店", (customerBook || []).map(c => [c.name, c.visits || 0, c.totalSpent || 0, c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP") : ""].join(",")))} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2 text-xs font-bold">📄 顧客CSV</button>
       </div>
     </div>
   );
@@ -3332,18 +3423,18 @@ function SalesToday({ ts, dispTable, tables, tableTotal, tableCardFee, closed, t
       <div style={{ background: "linear-gradient(180deg,#f3e2a0,#c9a64e)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }} className="text-5xl font-bold">{yen(total)}</div>
       <p className="text-xs text-zinc-500 mb-1">税込 {yen(grand)}（内税 {yen(totalTax)}）</p>
       {cardFee > 0 && (
-        <p className="text-xs mb-4" style={{ color: "#e0a84a" }}>💳 カード決済サービス料 {yen(cardFee)} ・ お預り合計 {yen(grand + cardFee)}</p>
+        <p className="text-xs mb-4" style={{ color: "#F0A64B" }}>💳 カード決済サービス料 {yen(cardFee)} ・ お預り合計 {yen(grand + cardFee)}</p>
       )}
       {cardFee === 0 && <div className="mb-4" />}
       <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">目標 {yen(target)}</span><span style={{ color: GOLD }} className="font-bold">{pct}%</span></div>
-      <div style={{ background: "#1c1c22" }} className="h-2 rounded-full overflow-hidden mb-6">
+      <div style={{ background: "rgba(255,255,255,.07)" }} className="h-2 rounded-full overflow-hidden mb-6">
         <div style={{ width: pct + "%", background: "linear-gradient(90deg,#f3e2a0,#c9a64e)" }} className="h-full" />
       </div>
       <p className="text-xs text-zinc-500 mb-2">卓別 売上</p>
       <div className="space-y-2">
         {rows.map((r, i) => (
-          <div key={i} style={{ background: "#141418", border: `1px solid ${i === 0 ? GOLD : "#22222a"}` }} className="rounded-xl px-4 py-3 flex items-center justify-between">
-            <span className="flex items-center gap-2"><span style={{ fontFamily: "Georgia,serif", color: i === 0 ? GOLD : "#fff" }} className="text-lg font-bold">{r.label}</span><span className="text-xs text-zinc-500">{r.n}名{!r.live && " ・会計済"}</span></span>
+          <div key={i} style={{ background: "#1A1B20", border: `1px solid ${i === 0 ? GOLD : "#22242A"}` }} className="rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="flex items-center gap-2"><span style={{ color: i === 0 ? GOLD : "#fff" }} className="text-lg font-bold">{r.label}</span><span className="text-xs text-zinc-500">{r.n}名{!r.live && " ・会計済"}</span></span>
             <span style={{ color: GOLD }} className="text-lg font-bold">{yen(r.total)}</span>
           </div>
         ))}
@@ -3377,7 +3468,7 @@ function SalesHistory({ history }) {
       {months.map(([ym, m]) => (
         <div key={ym} className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <span style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-lg font-bold">{ym.replace("-", "年") + "月"}</span>
+            <span style={{ color: GOLD }} className="text-lg font-bold">{ym.replace("-", "年") + "月"}</span>
             <div className="text-right">
               <div style={{ color: GOLD }} className="text-sm font-bold">{yen(m.subtotal)}</div>
               <div className="text-[10px] text-zinc-500">税込 {yen(m.grand)} / {m.days}日 / 卓 {m.tableCount}</div>
@@ -3388,7 +3479,7 @@ function SalesHistory({ history }) {
               const d = new Date(h.businessDate + "T00:00:00");
               const wd = ["日","月","火","水","木","金","土"][d.getDay()];
               return (
-                <div key={i} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-lg px-3 py-2 flex items-center justify-between">
+                <div key={i} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-lg px-3 py-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold">{h.businessDate.slice(5).replace("-", "/")}</span>
                     <span className="text-[10px] text-zinc-500">({wd})</span>
@@ -3457,14 +3548,14 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
 
       {upcomingBd.length > 0 && (
         <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #e0a84a" }} className="rounded-xl p-3 mb-3">
-          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#e0a84a" }}>
+          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#F0A64B" }}>
             <Cake size={14} />誕生日が近い（30日以内）
           </div>
           <div className="space-y-1">
             {upcomingBd.slice(0, 5).map(({ c, days }) => (
               <div key={c.id} className="flex items-center justify-between text-xs">
                 <span className="font-bold">{c.name}</span>
-                <span style={{ color: "#e0a84a" }}>{days === 0 ? "本日🎉" : `あと ${days}日`}</span>
+                <span style={{ color: "#F0A64B" }}>{days === 0 ? "本日🎉" : `あと ${days}日`}</span>
               </div>
             ))}
           </div>
@@ -3473,7 +3564,7 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
 
       {expiringKeeps.length > 0 && (
         <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3 mb-3">
-          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#e08484" }}>
+          <div className="flex items-center gap-2 mb-2 text-xs font-bold" style={{ color: "#F2555A" }}>
             🍾 期限が近いキープ本（14日以内）
           </div>
           <div className="space-y-1">
@@ -3483,7 +3574,7 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
               return (
                 <div key={k.id} className="flex items-center justify-between text-xs">
                   <span><span className="font-bold">{cust?.name || "?"}</span> <span className="text-zinc-500">/ {k.label}</span></span>
-                  <span style={{ color: daysLeft <= 0 ? "#ff6a6a" : "#e08484" }}>{daysLeft <= 0 ? "期限切れ" : `あと ${daysLeft}日`}</span>
+                  <span style={{ color: daysLeft <= 0 ? "#F2555A" : "#F2555A" }}>{daysLeft <= 0 ? "期限切れ" : `あと ${daysLeft}日`}</span>
                 </div>
               );
             })}
@@ -3513,7 +3604,7 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
       )}
 
       {ghosting.length > 0 && (
-        <div style={{ background: "#141418", border: "1px solid #2a2a32" }} className="rounded-xl p-3 mb-4">
+        <div style={{ background: "#1A1B20", border: "1px solid #2a2a32" }} className="rounded-xl p-3 mb-4">
           <div className="text-xs font-bold mb-2 text-zinc-400">💤 ご無沙汰リスト（30日以上・再来店の声かけ推奨）</div>
           <div className="space-y-1">
             {ghosting.slice(0, 5).map(({ c, days }) => (
@@ -3527,10 +3618,10 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
       )}
 
       <div className="flex gap-2 mb-3">
-        <input ref={nameRef} placeholder="新規お客様名" onKeyDown={e => { if (e.key === "Enter") addNew(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
-        <button onClick={addNew} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
+        <input ref={nameRef} placeholder="新規お客様名" onKeyDown={e => { if (e.key === "Enter") addNew(); }} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+        <button onClick={addNew} style={{ background: GOLD, color: "#221A08" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
       </div>
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="検索（名前・メモ）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="検索（名前・メモ）" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded-lg px-3 py-2 outline-none mb-3" />
 
       <p className="text-xs text-zinc-500 mb-2">{filtered.length}名</p>
       <div className="space-y-2">
@@ -3539,13 +3630,13 @@ function CustomerBookView({ customerBook, setCustomerBook, casts, bottleKeeps, s
           const nearBd = days !== null && days <= 30;
           const last = c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "未来店";
           return (
-            <button key={c.id} onClick={() => setEditing(c)} style={{ background: "#141418", border: `1px solid ${nearBd ? "#e0a84a" : "#22222a"}` }} className="w-full rounded-xl p-3 text-left">
+            <button key={c.id} onClick={() => setEditing(c)} style={{ background: "#1A1B20", border: `1px solid ${nearBd ? "#F0A64B" : "#22242A"}` }} className="w-full rounded-xl p-3 text-left">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   {c.photo && <img src={c.photo} alt="" className="w-7 h-7 rounded-full object-cover" />}
                   <span className="font-bold text-sm">{c.name}</span>
-                  {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22222a", color: "#000" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
-                  {nearBd && <span style={{ color: "#e0a84a" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />{days === 0 ? "本日🎉" : `+${days}d`}</span>}
+                  {c.pref && <span style={{ background: GENRE_COLOR[c.pref] || "#22242A", color: "#221A08" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">{c.pref}</span>}
+                  {nearBd && <span style={{ color: "#F0A64B" }} className="text-[10px] flex items-center gap-0.5"><Cake size={10} />{days === 0 ? "本日🎉" : `+${days}d`}</span>}
                   {keepCountByCust[c.id] > 0 && <span style={{ color: "#e8d29a", background: "rgba(201,166,78,.15)" }} className="text-[10px] rounded-full px-1.5 py-0.5 font-bold">🍾 {keepCountByCust[c.id]}本</span>}
                 </div>
                 <span className="text-[10px] text-zinc-500 text-right">{c.visits || 0}回 / {last}<br />累計 {yen(c.totalSpent || 0)}</span>
@@ -3686,36 +3777,36 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
     setBottleKeeps(bks => bks.filter(k => k.id !== id));
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#141418", border: `1px solid ${GOLD}` }} className="rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="v-dim fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.75)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <button onClick={() => photoRef.current?.click()} className="relative">
               {c.photo ? (
                 <img src={c.photo} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: `2px solid ${GOLD}` }} />
               ) : (
-                <div style={{ background: "#1c1c22", border: "2px dashed #3a3a42" }} className="w-12 h-12 rounded-full flex items-center justify-center text-[9px] text-zinc-500">写真<br />＋</div>
+                <div style={{ background: "rgba(255,255,255,.07)", border: "2px dashed #3a3a42" }} className="w-12 h-12 rounded-full flex items-center justify-center text-[9px] text-zinc-500">写真<br />＋</div>
               )}
             </button>
             <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
-            <h3 style={{ color: GOLD, fontFamily: "Georgia,serif" }} className="text-xl font-bold">お客様情報</h3>
+            <h3 style={{ color: GOLD }} className="text-xl font-bold">お客様情報</h3>
           </div>
           <button onClick={onClose}><X size={20} color="#888" /></button>
         </div>
         <div className="space-y-3">
           <label className="block">
             <div className="text-[10px] text-zinc-500 mb-1">名前</div>
-            <input value={c.name} onChange={e => setC(x => ({ ...x, name: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
+            <input value={c.name} onChange={e => setC(x => ({ ...x, name: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
           </label>
           <label className="block">
             <div className="text-[10px] text-zinc-500 mb-1">誕生日 (YYYY-MM-DD or MM-DD)</div>
-            <input value={c.birthday || ""} onChange={e => setC(x => ({ ...x, birthday: e.target.value }))} placeholder="例: 1990-05-14 or --05-14" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
+            <input value={c.birthday || ""} onChange={e => setC(x => ({ ...x, birthday: e.target.value }))} placeholder="例: 1990-05-14 or --05-14" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-full rounded px-3 py-2 outline-none" />
           </label>
           <div>
             <div className="text-[10px] text-zinc-500 mb-1">好み</div>
             <div className="flex gap-1.5 flex-wrap">
               {GENRES.map(g => (
-                <button key={g} onClick={() => setC(x => ({ ...x, pref: g }))} style={{ background: c.pref === g ? GENRE_COLOR[g] : "#1c1c22", color: c.pref === g ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{g}</button>
+                <button key={g} onClick={() => setC(x => ({ ...x, pref: g }))} style={{ background: c.pref === g ? GENRE_COLOR[g] : "rgba(255,255,255,.07)", color: c.pref === g ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{g}</button>
               ))}
             </div>
           </div>
@@ -3723,13 +3814,13 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
             <div className="text-[10px] text-zinc-500 mb-1">年代（付け回しの相性判定に使用）</div>
             <div className="flex gap-1.5 flex-wrap">
               {AGE_BANDS.map(a => (
-                <button key={a} onClick={() => setC(x => ({ ...x, ageBand: x.ageBand === a ? "" : a }))} style={{ background: c.ageBand === a ? TEAL : "#1c1c22", color: c.ageBand === a ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{a}</button>
+                <button key={a} onClick={() => setC(x => ({ ...x, ageBand: x.ageBand === a ? "" : a }))} style={{ background: c.ageBand === a ? TEAL : "rgba(255,255,255,.07)", color: c.ageBand === a ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{a}</button>
               ))}
             </div>
           </div>
           <label className="block">
             <div className="text-[10px] text-zinc-500 mb-1">注意事項・メモ</div>
-            <textarea value={c.memo || ""} onChange={e => setC(x => ({ ...x, memo: e.target.value }))} rows={3} placeholder="例: シャンパン強め、○○さんNG、深酒注意" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="w-full rounded px-3 py-2 outline-none" />
+            <textarea value={c.memo || ""} onChange={e => setC(x => ({ ...x, memo: e.target.value }))} rows={3} placeholder="例: シャンパン強め、○○さんNG、深酒注意" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-full rounded px-3 py-2 outline-none" />
           </label>
           <div>
             <div className="text-[10px] text-zinc-500 mb-1">お気に入りキャスト（複数可）</div>
@@ -3737,7 +3828,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
               {casts.map(cast => {
                 const on = (c.favoriteCastIds || []).includes(cast.id);
                 return (
-                  <button key={cast.id} onClick={() => toggleFav(cast.id)} style={{ background: on ? "rgba(63,182,176,.2)" : "#1c1c22", border: `1px solid ${on ? TEAL : "#2a2a32"}`, color: on ? TEAL : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{cast.name}</button>
+                  <button key={cast.id} onClick={() => toggleFav(cast.id)} style={{ background: on ? "rgba(63,182,176,.2)" : "rgba(255,255,255,.07)", border: `1px solid ${on ? TEAL : "#2A2C33"}`, color: on ? TEAL : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{cast.name}</button>
                 );
               })}
             </div>
@@ -3783,23 +3874,23 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
               </div>
             )}
             <div className="flex gap-1.5 items-center">
-              <input type="date" value={newRes.date} onChange={e => setNewRes(x => ({ ...x, date: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-32" />
-              <input type="time" value={newRes.time} onChange={e => setNewRes(x => ({ ...x, time: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-24" />
-              <input value={newRes.memo} onChange={e => setNewRes(x => ({ ...x, memo: e.target.value }))} placeholder="メモ" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="rounded px-1.5 py-1.5 outline-none flex-1 min-w-0" />
-              <button onClick={addReservation} style={{ background: TEAL, color: "#000" }} className="px-2.5 py-1.5 rounded text-xs font-bold shrink-0">＋</button>
+              <input type="date" value={newRes.date} onChange={e => setNewRes(x => ({ ...x, date: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-32" />
+              <input type="time" value={newRes.time} onChange={e => setNewRes(x => ({ ...x, time: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "13px", colorScheme: "dark" }} className="rounded px-1.5 py-1.5 outline-none w-24" />
+              <input value={newRes.memo} onChange={e => setNewRes(x => ({ ...x, memo: e.target.value }))} placeholder="メモ" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "13px" }} className="rounded px-1.5 py-1.5 outline-none flex-1 min-w-0" />
+              <button onClick={addReservation} style={{ background: TEAL, color: "#221A08" }} className="px-2.5 py-1.5 rounded text-xs font-bold shrink-0">＋</button>
             </div>
           </div>
 
           <div className="pt-2 border-t border-[#22222a]">
             <div className="text-[10px] text-zinc-500 mb-1.5">✉️ DM文生成（コピーして送るだけ）</div>
             <div className="flex gap-2">
-              <button onClick={() => buildDm("birthday")} style={{ background: "rgba(224,168,74,.15)", border: "1px solid #e0a84a", color: "#e0a84a" }} className="flex-1 rounded-lg py-2 text-xs font-bold">🎂 誕生日DM</button>
+              <button onClick={() => buildDm("birthday")} style={{ background: "rgba(224,168,74,.15)", border: "1px solid #e0a84a", color: "#F0A64B" }} className="flex-1 rounded-lg py-2 text-xs font-bold">🎂 誕生日DM</button>
               <button onClick={() => buildDm("comeback")} style={{ background: "rgba(63,182,176,.12)", border: `1px solid ${TEAL}`, color: TEAL }} className="flex-1 rounded-lg py-2 text-xs font-bold">💤 ご無沙汰DM</button>
             </div>
             {dmText && (
               <div className="mt-2">
                 {dmCopied && <p className="text-[10px] mb-1" style={{ color: "#7ae0a0" }}>✅ コピーしました — LINEに貼り付けて送信</p>}
-                <textarea readOnly value={dmText} rows={5} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 outline-none" onFocus={e => e.target.select()} />
+                <textarea readOnly value={dmText} rows={5} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 outline-none" onFocus={e => e.target.select()} />
               </div>
             )}
           </div>
@@ -3816,7 +3907,7 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
                 const inactive = k.status === "empty" || k.status === "disposed";
                 const pct = k.remainingPct ?? 100;
                 return (
-                  <div key={k.id} style={{ background: "#0d0d10", border: `1px solid ${inactive ? "#2a2a32" : expired ? "#a15050" : soon ? "#e0a84a" : "#22222a"}`, opacity: inactive ? 0.5 : 1 }} className="rounded-lg p-2">
+                  <div key={k.id} style={{ background: "#1A1B20", border: `1px solid ${inactive ? "#2A2C33" : expired ? "#F2555A" : soon ? "#F0A64B" : "#22242A"}`, opacity: inactive ? 0.5 : 1 }} className="rounded-lg p-2">
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold truncate">{k.label} {inactive && <span className="text-[10px] text-zinc-500">({k.status === "empty" ? "空" : "廃棄"})</span>}</div>
@@ -3824,24 +3915,24 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
                           入 {new Date(k.openedAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
                           {daysLeft !== null && !inactive && (
                             <> ・ 期限 {new Date(k.expiresAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
-                              <span style={{ color: expired ? "#ff6a6a" : soon ? "#e0a84a" : "#666" }}> ({expired ? "切れ" : `+${daysLeft}d`})</span>
+                              <span style={{ color: expired ? "#F2555A" : soon ? "#F0A64B" : "#666" }}> ({expired ? "切れ" : `+${daysLeft}d`})</span>
                             </>
                           )}
                         </div>
                       </div>
-                      {!inactive && <button onClick={() => markEmpty(k.id)} style={{ background: "#22222a", color: "#aaa" }} className="text-[10px] rounded px-2 py-1 font-bold">空</button>}
+                      {!inactive && <button onClick={() => markEmpty(k.id)} style={{ background: "#22242A", color: "#aaa" }} className="text-[10px] rounded px-2 py-1 font-bold">空</button>}
                       {!inactive && <button onClick={() => setBottleKeeps(bks => bks.map(x => x.id === k.id ? { ...x, status: "disposed" } : x))} style={{ background: "#3a1010", color: "#ff8888" }} className="text-[10px] rounded px-2 py-1 font-bold">廃棄</button>}
                       <button onClick={() => removeBottle(k.id)}><Trash2 size={12} color="#555" /></button>
                     </div>
                     {!inactive && (
                       <div className="flex items-center gap-2 mt-1.5">
-                        <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#1c1c22" }}>
-                          <div style={{ width: pct + "%", background: pct <= 20 ? "#e08484" : pct <= 50 ? "#e0a84a" : TEAL }} className="h-full" />
+                        <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}>
+                          <div style={{ width: pct + "%", background: pct <= 20 ? "#F2555A" : pct <= 50 ? "#F0A64B" : TEAL }} className="h-full" />
                         </div>
                         <input type="range" min="0" max="100" step="10" value={pct}
                           onChange={e => setBottleKeeps(bks => bks.map(x => x.id === k.id ? { ...x, remainingPct: +e.target.value } : x))}
                           className="w-20" style={{ accentColor: GOLD }} />
-                        <span className="text-[10px] w-9 text-right font-bold" style={{ color: pct <= 20 ? "#e08484" : "#aaa" }}>{pct}%</span>
+                        <span className="text-[10px] w-9 text-right font-bold" style={{ color: pct <= 20 ? "#F2555A" : "#aaa" }}>{pct}%</span>
                       </div>
                     )}
                   </div>
@@ -3850,17 +3941,17 @@ function CustomerBookEditor({ customer, casts, bottleKeeps, setBottleKeeps, rese
               {myKeeps.length === 0 && <p className="text-[11px] text-zinc-500 py-1">キープ本はありません</p>}
             </div>
             <div className="flex gap-2 items-center">
-              <input value={newBottle.label} onChange={e => setNewBottle(x => ({ ...x, label: e.target.value }))} placeholder="ボトル名（例: ドンペリ白）" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
-              <input type="number" value={newBottle.days} onChange={e => setNewBottle(x => ({ ...x, days: e.target.value }))} min="1" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="w-14 rounded px-2 py-1.5 outline-none" />
+              <input value={newBottle.label} onChange={e => setNewBottle(x => ({ ...x, label: e.target.value }))} placeholder="ボトル名（例: ドンペリ白）" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
+              <input type="number" value={newBottle.days} onChange={e => setNewBottle(x => ({ ...x, days: e.target.value }))} min="1" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-14 rounded px-2 py-1.5 outline-none" />
               <span className="text-[10px] text-zinc-500">日</span>
-              <button onClick={addBottle} style={{ background: GOLD, color: "#000" }} className="px-2.5 rounded text-xs font-bold py-1.5">＋</button>
+              <button onClick={addBottle} style={{ background: GOLD, color: "#221A08" }} className="px-2.5 rounded text-xs font-bold py-1.5">＋</button>
             </div>
           </div>
         </div>
         <div className="flex gap-2 mt-4">
           <button onClick={onDelete} style={{ background: "#3a1010", border: "1px solid #7a2222", color: "#ff8888" }} className="px-3 py-2 rounded-lg text-xs font-bold">削除</button>
-          <button onClick={onClose} style={{ background: "#22222a", color: "#aaa" }} className="flex-1 py-2 rounded-lg text-sm">キャンセル</button>
-          <button onClick={() => onSave(c)} style={{ background: GOLD, color: "#000" }} className="flex-1 py-2 rounded-lg text-sm font-bold">保存</button>
+          <button onClick={onClose} style={{ background: "#22242A", color: "#aaa" }} className="flex-1 py-2 rounded-lg text-sm">キャンセル</button>
+          <button onClick={() => onSave(c)} style={{ background: GOLD, color: "#221A08" }} className="flex-1 py-2 rounded-lg text-sm font-bold">保存</button>
         </div>
       </div>
     </div>
@@ -3953,21 +4044,21 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">店名</span>
-            <input value={settings.storeName} onChange={e => setSettings(s => ({ ...s, storeName: e.target.value }))} placeholder="vivace" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <input value={settings.storeName} onChange={e => setSettings(s => ({ ...s, storeName: e.target.value }))} placeholder="vivace" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">売上目標</span>
-            <input type="number" value={settings.target} onChange={e => setSettings(s => ({ ...s, target: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <input type="number" value={settings.target} onChange={e => setSettings(s => ({ ...s, target: +e.target.value || 0 }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">円</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">消費税</span>
-            <input type="number" value={settings.taxRate ?? 10} onChange={e => setSettings(s => ({ ...s, taxRate: Math.max(0, +e.target.value || 0) }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <input type="number" value={settings.taxRate ?? 10} onChange={e => setSettings(s => ({ ...s, taxRate: Math.max(0, +e.target.value || 0) }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">%</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-16">カード<br />手数料</span>
-            <input type="number" value={settings.cardFeePct ?? 10} onChange={e => setSettings(s => ({ ...s, cardFeePct: Math.max(0, +e.target.value || 0) }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+            <input type="number" value={settings.cardFeePct ?? 10} onChange={e => setSettings(s => ({ ...s, cardFeePct: Math.max(0, +e.target.value || 0) }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">%</span>
           </div>
           <p className="text-[10px] text-zinc-600">カード払いを選ぶと、この%を上乗せしてご請求します。</p>
@@ -3976,7 +4067,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <div className="flex-1 flex gap-1.5 flex-wrap">
               {[1, 10, 50, 100].map(v => (
                 <button key={v} onClick={() => setSettings(s2 => ({ ...s2, roundUnit: v }))}
-                  style={{ background: (settings.roundUnit ?? 100) === v ? GOLD : "#1c1c22", color: (settings.roundUnit ?? 100) === v ? "#000" : "#888" }}
+                  style={{ background: (settings.roundUnit ?? 100) === v ? GOLD : "rgba(255,255,255,.07)", color: (settings.roundUnit ?? 100) === v ? "#0F1013" : "#888" }}
                   className="text-[11px] rounded-full px-3 py-1.5 font-bold">{v === 1 ? "なし" : v + "円"}</button>
               ))}
             </div>
@@ -3986,7 +4077,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <span className="text-[10px] text-zinc-500 w-16">ボトル<br />バック候補</span>
             <input value={(settings.bottleBackPresets || [20, 25, 35]).join(",")}
               onChange={e => setSettings(s2 => ({ ...s2, bottleBackPresets: e.target.value.split(",").map(v => Math.max(0, parseInt(v, 10) || 0)).filter(v => v > 0).slice(0, 6) }))}
-              placeholder="20,25,35" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+              placeholder="20,25,35" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">%</span>
           </div>
           <p className="text-[10px] text-zinc-600">ボトルのバック率をワンタップで選べるようにする候補（カンマ区切り）。銘柄ごとの率は 在庫タブの商品マスタで設定します。</p>
@@ -3997,34 +4088,34 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <h2 className="text-lg font-bold mb-1">卓の編集</h2>
         <p className="text-xs text-zinc-500 mb-3">卓の名前・定員（何人入るか）・並び順・追加・削除。すべて自動保存。接客中の卓は削除できません。</p>
         {tblMsg && (
-          <button onClick={() => setTblMsg(null)} className="w-full text-left mb-2 text-xs rounded-lg p-2" style={{ color: "#e0a84a", background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }}>{tblMsg}（タップで閉じる）</button>
+          <button onClick={() => setTblMsg(null)} className="w-full text-left mb-2 text-xs rounded-lg p-2" style={{ color: "#F0A64B", background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }}>{tblMsg}（タップで閉じる）</button>
         )}
         <div className="flex gap-2 mb-3">
-          <input ref={tblLabelRef} placeholder="卓名（例: 卓13, VIP2）" onKeyDown={e => { if (e.key === "Enter") addTable(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
-          <input ref={tblCapRef} type="number" defaultValue="2" min="1" placeholder="定員" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
-          <button onClick={addTable} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
+          <input ref={tblLabelRef} placeholder="卓名（例: 卓13, VIP2）" onKeyDown={e => { if (e.key === "Enter") addTable(); }} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+          <input ref={tblCapRef} type="number" defaultValue="2" min="1" placeholder="定員" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+          <button onClick={addTable} style={{ background: GOLD, color: "#221A08" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
         </div>
         <div className="space-y-2">
           {tables.map((t, idx) => (
-            <div key={t.id} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
+            <div key={t.id} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3">
               {tblEdit?.id === t.id ? (
                 <div className="flex items-center gap-2">
-                  <input value={tblEdit.label} onChange={e => setTblEdit(x => ({ ...x, label: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
-                  <input type="number" value={tblEdit.cap} onChange={e => setTblEdit(x => ({ ...x, cap: e.target.value }))} min="1" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded px-2 py-1.5 outline-none" />
-                  <button onClick={saveTblEdit} style={{ background: GOLD, color: "#000" }} className="px-3 py-1.5 rounded text-xs font-bold">保存</button>
+                  <input value={tblEdit.label} onChange={e => setTblEdit(x => ({ ...x, label: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none min-w-0" />
+                  <input type="number" value={tblEdit.cap} onChange={e => setTblEdit(x => ({ ...x, cap: e.target.value }))} min="1" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-16 rounded px-2 py-1.5 outline-none" />
+                  <button onClick={saveTblEdit} style={{ background: GOLD, color: "#221A08" }} className="px-3 py-1.5 rounded text-xs font-bold">保存</button>
                   <button onClick={() => setTblEdit(null)} className="text-xs text-zinc-500 px-1">×</button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span style={{ fontFamily: "Georgia,serif", color: GOLD }} className="text-lg font-bold whitespace-nowrap">{t.label}</span>
+                    <span style={{ color: GOLD }} className="text-lg font-bold whitespace-nowrap">{t.label}</span>
                     <span className="text-xs text-zinc-500 whitespace-nowrap">定員 {t.cap}名</span>
                     {ts?.[t.id]?.active && <span style={{ color: GOLD }} className="text-[10px] font-bold whitespace-nowrap">接客中</span>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => moveTable(t.id, -1)} disabled={idx === 0} style={{ background: "#1c1c22", color: idx === 0 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↑</button>
-                    <button onClick={() => moveTable(t.id, 1)} disabled={idx === tables.length - 1} style={{ background: "#1c1c22", color: idx === tables.length - 1 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↓</button>
-                    <button onClick={() => { setConfirmDelTbl(null); setTblEdit({ id: t.id, label: t.label, cap: t.cap }); }} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold">編集</button>
+                    <button onClick={() => moveTable(t.id, -1)} disabled={idx === 0} style={{ background: "rgba(255,255,255,.07)", color: idx === 0 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↑</button>
+                    <button onClick={() => moveTable(t.id, 1)} disabled={idx === tables.length - 1} style={{ background: "rgba(255,255,255,.07)", color: idx === tables.length - 1 ? "#333" : "#999" }} className="w-8 h-8 rounded text-sm">↓</button>
+                    <button onClick={() => { setConfirmDelTbl(null); setTblEdit({ id: t.id, label: t.label, cap: t.cap }); }} style={{ background: "#22242A", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold">編集</button>
                     {confirmDelTbl === t.id ? (
                       <button onClick={() => delTable(t.id)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">削除確定</button>
                     ) : (
@@ -4045,13 +4136,13 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
           {Object.entries(mergeGroups).map(([k, arr]) => {
             const labels = arr.map(id => tables.find(t => t.id === id)?.label || "?").join(" + ");
             return (
-              <div key={k} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 flex items-center justify-between">
+              <div key={k} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <span style={{ color: GOLD }} className="text-sm font-bold mr-2">グループ {k}</span>
                   <span className="text-xs text-zinc-400">{labels}</span>
                 </div>
                 <div className="flex gap-2 items-center">
-                  <button onClick={() => { setConfirmDelGrp(null); setMergeEdit({ key: k, tableIds: [...arr], isNew: false }); }} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">編集</button>
+                  <button onClick={() => { setConfirmDelGrp(null); setMergeEdit({ key: k, tableIds: [...arr], isNew: false }); }} style={{ background: "#22242A", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">編集</button>
                   {confirmDelGrp === k ? (
                     <button onClick={() => delMergeGroup(k)} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1 font-bold whitespace-nowrap">削除確定</button>
                   ) : (
@@ -4062,15 +4153,15 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             );
           })}
         </div>
-        <button onClick={addMergeGroup} style={{ background: "#22222a", color: GOLD }} className="w-full rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1"><Plus size={12} />結合グループを追加</button>
+        <button onClick={addMergeGroup} style={{ background: "#22242A", color: GOLD }} className="w-full rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1"><Plus size={12} />結合グループを追加</button>
       </div>
 
       {mergeEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.7)" }} onClick={() => setMergeEdit(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#15151a", border: "1px solid #2a2a32" }} className="rounded-2xl p-5 max-w-md w-full">
+        <div className="v-dim fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.7)" }} onClick={() => setMergeEdit(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: SHEET, border: `1px solid ${LINE}` }} className="v-sheet rounded-2xl p-5 max-w-md w-full">
             <div className="mb-3 flex items-center gap-2">
               <span className="text-xs text-zinc-500">グループ名</span>
-              <input value={mergeEdit.key} onChange={e => setMergeEdit(x => ({ ...x, key: e.target.value }))} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
+              <input value={mergeEdit.key} onChange={e => setMergeEdit(x => ({ ...x, key: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded px-2 py-1.5 outline-none" />
             </div>
             <p className="text-xs text-zinc-500 mb-2">結合する卓を選択（順番＝並ぶ順）</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
@@ -4081,17 +4172,17 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
                   <button key={t.id} onClick={() => setMergeEdit(x => on
                     ? { ...x, tableIds: x.tableIds.filter(y => y !== t.id) }
                     : { ...x, tableIds: [...x.tableIds, t.id] })}
-                    style={{ background: on ? "rgba(201,166,78,.2)" : "#0d0d10", border: `1px solid ${on ? GOLD : "#22222a"}`, color: on ? GOLD : "#888" }} className="text-xs rounded-lg py-2 px-1 font-bold relative">
+                    style={{ background: on ? "rgba(201,166,78,.2)" : "#1A1B20", border: `1px solid ${on ? GOLD : "#22242A"}`, color: on ? GOLD : "#888" }} className="text-xs rounded-lg py-2 px-1 font-bold relative">
                     {t.label}
-                    {on && <span style={{ background: GOLD, color: "#000" }} className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold">{idx + 1}</span>}
+                    {on && <span style={{ background: GOLD, color: "#221A08" }} className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold">{idx + 1}</span>}
                   </button>
                 );
               })}
             </div>
-            {mergeErr && <p className="text-xs mb-2" style={{ color: "#e08484" }}>{mergeErr}</p>}
+            {mergeErr && <p className="text-xs mb-2" style={{ color: "#F2555A" }}>{mergeErr}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setMergeEdit(null); setMergeErr(null); }} className="px-4 py-2 rounded-lg text-sm text-zinc-400">キャンセル</button>
-              <button onClick={saveMergeEdit} style={{ background: GOLD, color: "#000" }} className="px-4 py-2 rounded-lg text-sm font-bold">保存</button>
+              <button onClick={saveMergeEdit} style={{ background: GOLD, color: "#221A08" }} className="px-4 py-2 rounded-lg text-sm font-bold">保存</button>
             </div>
           </div>
         </div>
@@ -4102,12 +4193,12 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-20">構成費</span>
-            <input type="number" value={settings.overheadPct} onChange={e => setSettings(s => ({ ...s, overheadPct: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
+            <input type="number" value={settings.overheadPct} onChange={e => setSettings(s => ({ ...s, overheadPct: +e.target.value || 0 }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">%（全キャスト共通の控除率）</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-20">遅刻ペナルティ</span>
-            <input type="number" value={settings.latePenaltyPerMin ?? 0} onChange={e => setSettings(s => ({ ...s, latePenaltyPerMin: +e.target.value || 0 }))} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
+            <input type="number" value={settings.latePenaltyPerMin ?? 0} onChange={e => setSettings(s => ({ ...s, latePenaltyPerMin: +e.target.value || 0 }))} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="w-20 rounded-lg px-3 py-2 outline-none" />
             <span className="text-xs text-zinc-500">円/分（キャストの出勤予定時刻を設定した場合のみ）</span>
           </div>
           <label className="flex items-center gap-2 py-1">
@@ -4125,8 +4216,8 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
         <h2 className="text-lg font-bold mb-1">キャスト設定</h2>
         <p className="text-xs text-zinc-500 mb-3">※ ランク・ジャンル・給料条件をここで設定。フロアでは非表示。</p>
         <div className="flex gap-2 mb-4">
-          <input ref={nameRef} placeholder="新規キャスト名" onKeyDown={e => { if (e.key === "Enter") addCast(); }} style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
-          <button onClick={addCast} style={{ background: GOLD, color: "#000" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
+          <input ref={nameRef} placeholder="新規キャスト名" onKeyDown={e => { if (e.key === "Enter") addCast(); }} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+          <button onClick={addCast} style={{ background: GOLD, color: "#221A08" }} className="px-3 rounded-lg text-sm font-bold">追加</button>
         </div>
         <div className="space-y-2">
           {casts.map(c => (
@@ -4145,12 +4236,12 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
           <input type="checkbox" checked={!!settings.shareEnabled} onChange={e => setSettings(s => ({ ...s, shareEnabled: e.target.checked }))} style={{ accentColor: GOLD }} />
           <span className="text-sm font-bold">{settings.shareEnabled ? "🟢 共有中（卓状況のみ）" : "⚫ 共有OFF"}</span>
         </label>
-        <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 text-[11px] text-zinc-400 mb-2">
+        <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3 text-[11px] text-zinc-400 mb-2">
           <b className="text-zinc-300">外のスタッフの設定手順:</b><br />
           ① 同じアプリのURLを開く → ② 設定タブ → ③ 下の「外用ビューを開く」<br />
           （店コード: <b style={{ color: GOLD }}>{STORE_ID}</b>）
         </div>
-        <button onClick={() => enterWatch(STORE_ID)} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
+        <button onClick={() => enterWatch(STORE_ID)} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">👀 外用ビューを開く（この端末で確認）</button>
       </div>
 
       <CloudVault {...{ settings, setSettings, cloudPass, setCloudPass, cloudInfo, cloudPush, cloudCheck, cloudRestore }} />
@@ -4159,7 +4250,7 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
 
       <AuditLogView auditLog={auditLog} />
 
-      <button onClick={() => { if (confirmReset) { resetNight(); setConfirmReset(false); } else setConfirmReset(true); }} style={{ background: confirmReset ? "#7a2222" : "#15151a", border: `1px solid ${confirmReset ? "#a13b3b" : "#2a2a32"}`, color: confirmReset ? "#fff" : "#999" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{confirmReset ? "⚠ もう一度タップで全卓クリア確定" : "営業リセット（全卓クリア・名簿は保持・自動バックアップされます）"}</button>
+      <button onClick={() => { if (confirmReset) { resetNight(); setConfirmReset(false); } else setConfirmReset(true); }} style={{ background: confirmReset ? "#7a2222" : "#1C1D22", border: `1px solid ${confirmReset ? "#F2555A" : "#2A2C33"}`, color: confirmReset ? "#fff" : "#999" }} className="w-full rounded-lg py-2.5 text-sm font-bold">{confirmReset ? "⚠ もう一度タップで全卓クリア確定" : "営業リセット（全卓クリア・名簿は保持・自動バックアップされます）"}</button>
 
       <button onClick={() => {
         if (confirm("この店舗のすべてのデータ（キャスト・卓・設定）を完全削除して初期状態に戻します。よろしいですか？")) {
@@ -4223,7 +4314,7 @@ function InventoryView({ products, setProducts, salesLog, logAudit, backPresets 
 
       {lowStock.length > 0 && (
         <div style={{ background: "rgba(224,74,74,.08)", border: "1px solid #a15050" }} className="rounded-xl p-3">
-          <div className="text-xs font-bold mb-1" style={{ color: "#e08484" }}>📦 低在庫アラート</div>
+          <div className="text-xs font-bold mb-1" style={{ color: "#F2555A" }}>📦 低在庫アラート</div>
           <div className="text-[11px] text-zinc-300">{lowStock.map(p => `${p.name}(残${p.stock || 0}/基準${p.lowStockAt})`).join("・")}</div>
         </div>
       )}
@@ -4237,8 +4328,8 @@ function InventoryView({ products, setProducts, salesLog, logAudit, backPresets 
         </div>
         <div className="mt-2">
           <div className="flex justify-between text-[10px] text-zinc-500 mb-0.5"><span>原価率</span><span>{costRate.toFixed(1)}%</span></div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: "#1c1c22" }}>
-            <div style={{ width: Math.min(100, costRate) + "%", background: costRate > 30 ? "#e08484" : "#7ae0a0" }} className="h-full" />
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}>
+            <div style={{ width: Math.min(100, costRate) + "%", background: costRate > 30 ? "#F2555A" : "#7ae0a0" }} className="h-full" />
           </div>
         </div>
       </div>
@@ -4246,11 +4337,11 @@ function InventoryView({ products, setProducts, salesLog, logAudit, backPresets 
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-bold">商品マスタ（{(products || []).length}品目）</h3>
-          <button onClick={() => setStocktake(s => !s)} style={{ background: stocktake ? GOLD : "#22222a", color: stocktake ? "#000" : GOLD }} className="text-[11px] rounded-full px-3 py-1 font-bold">{stocktake ? "棚卸し終了" : "📋 棚卸しモード"}</button>
+          <button onClick={() => setStocktake(s => !s)} style={{ background: stocktake ? GOLD : "#22242A", color: stocktake ? "#0F1013" : GOLD }} className="text-[11px] rounded-full px-3 py-1 font-bold">{stocktake ? "棚卸し終了" : "📋 棚卸しモード"}</button>
         </div>
         <div className="space-y-2 mb-3">
           {(products || []).map(p => (
-            <div key={p.id} style={{ background: "#141418", border: `1px solid ${p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#a15050" : "#22222a"}` }} className="rounded-xl p-3">
+            <div key={p.id} style={{ background: "#1A1B20", border: `1px solid ${p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#F2555A" : "#22242A"}` }} className="rounded-xl p-3">
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <div className="min-w-0">
                   <span className="font-bold text-sm">{p.name}</span>
@@ -4260,28 +4351,28 @@ function InventoryView({ products, setProducts, salesLog, logAudit, backPresets 
               </div>
               <div className="flex items-center gap-2 text-[11px] flex-wrap">
                 <span className="text-zinc-500">売価</span>
-                <input type="number" value={p.price} onChange={e => updP(p.id, { price: +e.target.value || 0 })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
+                <input type="number" value={p.price} onChange={e => updP(p.id, { price: +e.target.value || 0 })} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
                 <span className="text-zinc-500">原価</span>
-                <input type="number" value={p.cost} onChange={e => updP(p.id, { cost: +e.target.value || 0 })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
+                <input type="number" value={p.cost} onChange={e => updP(p.id, { cost: +e.target.value || 0 })} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "14px" }} className="w-20 rounded px-1.5 py-1 outline-none" />
                 {stocktake ? (
                   <>
                     <span style={{ color: GOLD }} className="font-bold">実在庫</span>
-                    <input type="number" value={p.stock || 0} onChange={e => { updP(p.id, { stock: Math.max(0, +e.target.value || 0) }); }} onBlur={() => logAudit("棚卸し補正", `${p.name} → ${p.stock || 0}`)} style={{ background: "#0d0d10", border: `1px solid ${GOLD}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
+                    <input type="number" value={p.stock || 0} onChange={e => { updP(p.id, { stock: Math.max(0, +e.target.value || 0) }); }} onBlur={() => logAudit("棚卸し補正", `${p.name} → ${p.stock || 0}`)} style={{ background: "#1A1B20", border: `1px solid ${GOLD}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
                   </>
                 ) : (
-                  <span className="text-zinc-400">在庫 <b style={{ color: p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#e08484" : "#fff" }}>{p.stock || 0}</b></span>
+                  <span className="text-zinc-400">在庫 <b style={{ color: p.lowStockAt != null && (p.stock || 0) <= p.lowStockAt ? "#F2555A" : "#fff" }}>{p.stock || 0}</b></span>
                 )}
                 <span className="text-zinc-500">基準</span>
-                <input type="number" value={p.lowStockAt ?? ""} placeholder="-" onChange={e => updP(p.id, { lowStockAt: e.target.value === "" ? null : +e.target.value })} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "14px" }} className="w-14 rounded px-1.5 py-1 outline-none" />
+                <input type="number" value={p.lowStockAt ?? ""} placeholder="-" onChange={e => updP(p.id, { lowStockAt: e.target.value === "" ? null : +e.target.value })} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "14px" }} className="w-14 rounded px-1.5 py-1 outline-none" />
               </div>
               {/* ボトル・シャンパンは銘柄ごとにバック率が違うのでここで設定する */}
               {(p.category === "bottle" || p.category === "champagne") && (
               <div className="flex items-center gap-2 text-[11px] mt-1.5 flex-wrap">
                 <span style={{ color: p.backPct != null ? GOLD : "#71717a" }} className="font-bold">バック</span>
-                <input type="number" value={p.backPct ?? ""} placeholder="既定" onChange={e => updP(p.id, { backPct: e.target.value === "" ? null : Math.max(0, +e.target.value) })} style={{ background: "#0d0d10", border: `1px solid ${p.backPct != null ? GOLD : "#22222a"}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
+                <input type="number" value={p.backPct ?? ""} placeholder="既定" onChange={e => updP(p.id, { backPct: e.target.value === "" ? null : Math.max(0, +e.target.value) })} style={{ background: "#1A1B20", border: `1px solid ${p.backPct != null ? GOLD : "#22242A"}`, fontSize: "14px" }} className="w-16 rounded px-1.5 py-1 outline-none" />
                 <span className="text-zinc-500">%</span>
                 {(backPresets || []).map(v => (
-                  <button key={v} onClick={() => updP(p.id, { backPct: v })} style={{ background: p.backPct === v ? GOLD : "#1c1c22", color: p.backPct === v ? "#000" : "#888" }} className="rounded-full px-2 py-0.5 font-bold">{v}%</button>
+                  <button key={v} onClick={() => updP(p.id, { backPct: v })} style={{ background: p.backPct === v ? GOLD : "rgba(255,255,255,.07)", color: p.backPct === v ? "#0F1013" : "#888" }} className="rounded-full px-2 py-0.5 font-bold">{v}%</button>
                 ))}
                 {p.backPct != null && <button onClick={() => updP(p.id, { backPct: null })} className="text-zinc-500 underline">既定に戻す</button>}
                 <span className="text-[9px] text-zinc-600 w-full">空欄＝キャストごとの既定バック率を使用</span>
@@ -4292,31 +4383,31 @@ function InventoryView({ products, setProducts, salesLog, logAudit, backPresets 
           {(products || []).length === 0 && <p className="text-[11px] text-zinc-500 py-2">まだ商品がありません。下から追加してください。</p>}
         </div>
 
-        <div style={{ background: "#0d0d10", border: "1px dashed #2a2a32" }} className="rounded-xl p-3 space-y-2">
+        <div style={{ background: "#1A1B20", border: "1px dashed #2a2a32" }} className="rounded-xl p-3 space-y-2">
           <div className="flex gap-2">
-            <input value={newP.name} onChange={e => setNewP(x => ({ ...x, name: e.target.value }))} placeholder="商品名（例: シャンパンA）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
-            <select value={newP.category} onChange={e => setNewP(x => ({ ...x, category: e.target.value }))} style={{ background: "#141418", border: "1px solid #22222a", color: "#fff", fontSize: "14px" }} className="rounded-lg px-2 py-2 outline-none">
+            <input value={newP.name} onChange={e => setNewP(x => ({ ...x, name: e.target.value }))} placeholder="商品名（例: シャンパンA）" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none min-w-0" />
+            <select value={newP.category} onChange={e => setNewP(x => ({ ...x, category: e.target.value }))} style={{ background: "#1A1B20", border: "1px solid #22222a", color: "#fff", fontSize: "14px" }} className="rounded-lg px-2 py-2 outline-none">
               {PRODUCT_CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </div>
           <div className="flex gap-2 items-center text-[11px]">
-            <input type="number" value={newP.price} onChange={e => setNewP(x => ({ ...x, price: e.target.value }))} placeholder="売価" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
-            <input type="number" value={newP.cost} onChange={e => setNewP(x => ({ ...x, cost: e.target.value }))} placeholder="原価" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
-            <input type="number" value={newP.stock} onChange={e => setNewP(x => ({ ...x, stock: e.target.value }))} placeholder="在庫" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
-            <input type="number" value={newP.lowStockAt} onChange={e => setNewP(x => ({ ...x, lowStockAt: e.target.value }))} placeholder="基準" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.price} onChange={e => setNewP(x => ({ ...x, price: e.target.value }))} placeholder="売価" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.cost} onChange={e => setNewP(x => ({ ...x, cost: e.target.value }))} placeholder="原価" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.stock} onChange={e => setNewP(x => ({ ...x, stock: e.target.value }))} placeholder="在庫" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
+            <input type="number" value={newP.lowStockAt} onChange={e => setNewP(x => ({ ...x, lowStockAt: e.target.value }))} placeholder="基準" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="w-16 rounded-lg px-2 py-2 outline-none" />
             {(newP.category === "bottle" || newP.category === "champagne") && (
-              <input type="number" value={newP.backPct} onChange={e => setNewP(x => ({ ...x, backPct: e.target.value }))} placeholder="バック%" title="ボトルバック率（空=キャスト既定）" style={{ background: "#141418", border: `1px solid ${GOLD}`, fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
+              <input type="number" value={newP.backPct} onChange={e => setNewP(x => ({ ...x, backPct: e.target.value }))} placeholder="バック%" title="ボトルバック率（空=キャスト既定）" style={{ background: "#1A1B20", border: `1px solid ${GOLD}`, fontSize: "15px" }} className="w-20 rounded-lg px-2 py-2 outline-none" />
             )}
-            <button onClick={addProduct} style={{ background: GOLD, color: "#000" }} className="px-3 py-2 rounded-lg text-xs font-bold shrink-0">追加</button>
+            <button onClick={addProduct} style={{ background: GOLD, color: "#221A08" }} className="px-3 py-2 rounded-lg text-xs font-bold shrink-0">追加</button>
           </div>
           <p className="text-[10px] text-zinc-600">基準 = 低在庫アラートを出す残数（空欄でアラートなし）</p>
         </div>
       </div>
 
       <div>
-        <button onClick={makeOrderSheet} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">📝 発注書を自動生成（低在庫分）</button>
+        <button onClick={makeOrderSheet} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="w-full rounded-lg py-2.5 text-sm font-bold">📝 発注書を自動生成（低在庫分）</button>
         {orderSheet && (
-          <textarea readOnly value={orderSheet} rows={6} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
+          <textarea readOnly value={orderSheet} rows={6} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "13px" }} className="w-full rounded-lg p-2 mt-2 outline-none" onFocus={e => e.target.select()} />
         )}
       </div>
     </div>
@@ -4336,28 +4427,28 @@ function CloudVault({ settings, setSettings, cloudPass, setCloudPass, cloudInfo,
       <p className="text-xs text-zinc-500 mb-3">
         全データを<b>パスワードで暗号化してから</b>クラウドに自動保存します。パスワードを知らない限り、サーバー側でも誰にも読めません。
         アプリの更新や端末の故障でデータが消えても、パスワード1つで全復元できます。
-        <b style={{ color: "#e0a84a" }}>※パスワードを忘れると誰にも復元できません。</b>
+        <b style={{ color: "#F0A64B" }}>※パスワードを忘れると誰にも復元できません。</b>
       </p>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] text-zinc-500 w-20">パスワード</span>
-        <input type="text" value={cloudPass} onChange={e => setCloudPass(e.target.value)} placeholder="例: vivace2026（忘れない物に）" style={{ background: "#141418", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
+        <input type="text" value={cloudPass} onChange={e => setCloudPass(e.target.value)} placeholder="例: vivace2026（忘れない物に）" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "16px" }} className="flex-1 rounded-lg px-3 py-2 outline-none" />
       </div>
       <label className="flex items-center gap-2 mb-3">
         <input type="checkbox" checked={!!settings.cloudBackup} onChange={e => setSettings(s => ({ ...s, cloudBackup: e.target.checked }))} style={{ accentColor: GOLD }} />
         <span className="text-sm font-bold">{settings.cloudBackup ? "🟢 自動保存ON（変更の5秒後に保存）" : "⚫ 自動保存OFF"}</span>
       </label>
 
-      <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3 mb-2 text-[11px] text-zinc-400 space-y-0.5">
+      <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3 mb-2 text-[11px] text-zinc-400 space-y-0.5">
         <div>この端末からの最終保存: {cloudInfo.lastPushAt ? new Date(cloudInfo.lastPushAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "まだ"}</div>
         <div>クラウド上のバックアップ: {cloudInfo.remote ? `${new Date(cloudInfo.remote.at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 時点（キャスト${cloudInfo.remote.casts ?? "?"}名・客名帳${cloudInfo.remote.customers ?? "?"}名）` : "なし"}</div>
-        {cloudInfo.lastError && <div style={{ color: "#e08484" }}>エラー: {cloudInfo.lastError}</div>}
+        {cloudInfo.lastError && <div style={{ color: "#F2555A" }}>エラー: {cloudInfo.lastError}</div>}
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={async () => { setBusy(true); setMsg(null); const ok = await cloudPush(); await cloudCheck(); setBusy(false); setMsg(ok ? { ok: true, msg: "保存しました" } : { ok: false, msg: "保存に失敗しました（電波を確認して再試行）" }); }}
           disabled={busy || !cloudPass || !settings.cloudBackup}
-          style={{ background: (!cloudPass || !settings.cloudBackup) ? "#1c1c22" : GOLD, color: (!cloudPass || !settings.cloudBackup) ? "#555" : "#000" }}
+          style={{ background: (!cloudPass || !settings.cloudBackup) ? "rgba(255,255,255,.07)" : GOLD, color: (!cloudPass || !settings.cloudBackup) ? "#555" : "#0F1013" }}
           className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬆ 今すぐ保存</button>
         {restoreConfirm ? (
           <button
@@ -4369,7 +4460,7 @@ function CloudVault({ settings, setSettings, cloudPass, setCloudPass, cloudInfo,
           <button
             onClick={() => setRestoreConfirm(true)}
             disabled={busy || !cloudPass || !cloudInfo.remote}
-            style={{ background: "#22222a", color: (!cloudPass || !cloudInfo.remote) ? "#555" : TEAL, border: `1px solid ${(!cloudPass || !cloudInfo.remote) ? "#2a2a32" : TEAL}` }}
+            style={{ background: "#22242A", color: (!cloudPass || !cloudInfo.remote) ? "#555" : TEAL, border: `1px solid ${(!cloudPass || !cloudInfo.remote) ? "#2A2C33" : TEAL}` }}
             className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬇ クラウドから復元</button>
         )}
       </div>
@@ -4415,20 +4506,20 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
       <p className="text-xs text-zinc-500 mb-3">端末の故障・ブラウザのデータ消去に備えて、全データ（キャスト・客名帳・売上履歴・キープ）をファイルに保存できます。営業リセット時にも自動でこの端末内に5世代保存されます。</p>
 
       <div className="flex gap-2 mb-3">
-        <button onClick={exportData} style={{ background: GOLD, color: "#000" }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬇ 書き出す（ファイル保存）</button>
-        <button onClick={() => fileRef.current?.click()} style={{ background: "#22222a", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬆ 読み込む（復元）</button>
+        <button onClick={exportData} style={{ background: GOLD, color: "#221A08" }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬇ 書き出す（ファイル保存）</button>
+        <button onClick={() => fileRef.current?.click()} style={{ background: "#22242A", color: TEAL, border: `1px solid ${TEAL}` }} className="flex-1 rounded-lg py-2.5 text-sm font-bold">⬆ 読み込む（復元）</button>
         <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={onFile} />
       </div>
 
       {staged && (
         <div style={{ background: "rgba(224,168,74,.08)", border: "1px solid #7a5a1a" }} className="rounded-xl p-3 mb-3">
-          <div className="text-xs font-bold mb-1" style={{ color: "#e0a84a" }}>復元の確認 — 現在のデータは上書きされます</div>
+          <div className="text-xs font-bold mb-1" style={{ color: "#F0A64B" }}>復元の確認 — 現在のデータは上書きされます</div>
           <div className="text-[11px] text-zinc-400 mb-2">
             {staged.name}
             {staged.summary && <> ／ {staged.summary.store} ／ {staged.summary.exportedAt}<br />キャスト{staged.summary.casts}名・客名帳{staged.summary.customers}名・履歴{staged.summary.historyDays}日</>}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setStaged(null)} style={{ background: "#22222a", color: "#aaa" }} className="flex-1 rounded-lg py-2 text-xs">やめる</button>
+            <button onClick={() => setStaged(null)} style={{ background: "#22242A", color: "#aaa" }} className="flex-1 rounded-lg py-2 text-xs">やめる</button>
             <button onClick={() => { importData(staged.text, setMsg); setStaged(null); }} style={{ background: "#7a2222", color: "#fff" }} className="flex-1 rounded-lg py-2 text-xs font-bold">復元実行（上書き）</button>
           </div>
         </div>
@@ -4438,14 +4529,14 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
         <div style={{ color: msg.ok ? "#7ae0a0" : "#ff8888", background: msg.ok ? "rgba(74,222,128,.08)" : "rgba(224,85,85,.08)", border: `1px solid ${msg.ok ? "#2a5a3a" : "#7a2222"}` }} className="rounded-lg p-2 text-xs mb-3">{msg.msg}</div>
       )}
 
-      <button onClick={() => setShowRescue(s => !s)} style={{ background: "rgba(224,168,74,.06)", border: "1px dashed #7a5a1a", color: "#e0a84a" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showRescue ? "▲ 閉じる" : "🔍 消えたデータを探す（端末内レスキュー）"}</button>
+      <button onClick={() => setShowRescue(s => !s)} style={{ background: "rgba(224,168,74,.06)", border: "1px dashed #7a5a1a", color: "#F0A64B" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showRescue ? "▲ 閉じる" : "🔍 消えたデータを探す（端末内レスキュー）"}</button>
       {showRescue && (
         <div className="space-y-1.5 mb-3">
           {rescues.length === 0 && <p className="text-[11px] text-zinc-500">この端末内に他の保存データは見つかりませんでした。</p>}
           {rescues.map(r => (
-            <div key={r.key} style={{ background: "#141418", border: "1px solid #7a5a1a" }} className="rounded-lg p-2.5">
+            <div key={r.key} style={{ background: "#1A1B20", border: "1px solid #7a5a1a" }} className="rounded-lg p-2.5">
               <div className="text-[11px] mb-1">
-                <span className="font-bold" style={{ color: "#e0a84a" }}>キャスト{r.casts}名</span>
+                <span className="font-bold" style={{ color: "#F0A64B" }}>キャスト{r.casts}名</span>
                 <span className="text-zinc-500">・客名帳{r.customers}名・卓{r.tables}</span>
                 {r.exportedAt && <span className="text-zinc-600"> ・{String(r.exportedAt).slice(0, 16).replace("T", " ")}</span>}
               </div>
@@ -4455,7 +4546,7 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
                 {rescueConfirm === r.key ? (
                   <button onClick={() => { restoreRescue(r.key, setMsg); setRescueConfirm(null); setShowRescue(false); }} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold whitespace-nowrap shrink-0">このデータに戻す（確定）</button>
                 ) : (
-                  <button onClick={() => setRescueConfirm(r.key)} style={{ background: GOLD, color: "#000" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold whitespace-nowrap shrink-0">これに戻す</button>
+                  <button onClick={() => setRescueConfirm(r.key)} style={{ background: GOLD, color: "#221A08" }} className="text-[11px] rounded-full px-3 py-1.5 font-bold whitespace-nowrap shrink-0">これに戻す</button>
                 )}
               </div>
             </div>
@@ -4463,12 +4554,12 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
         </div>
       )}
 
-      <button onClick={() => setShowBaks(s => !s)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showBaks ? "▲ 自動バックアップを閉じる" : "▼ 自動バックアップ一覧（営業リセット時に保存）"}</button>
+      <button onClick={() => setShowBaks(s => !s)} style={{ background: "#1A1B20", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold mb-2">{showBaks ? "▲ 自動バックアップを閉じる" : "▼ 自動バックアップ一覧（営業リセット時に保存）"}</button>
       {showBaks && (
         <div className="space-y-1.5">
           {baks.length === 0 && <p className="text-[11px] text-zinc-500">まだ自動バックアップがありません（営業リセットすると作られます）</p>}
           {baks.map(b => (
-            <div key={b.key} style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-lg p-2.5 flex items-center gap-2">
+            <div key={b.key} style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-lg p-2.5 flex items-center gap-2">
               <div className="flex-1 min-w-0 text-[11px]">
                 <div className="font-bold">{(b.exportedAt || "?").slice(0, 16).replace("T", " ")}</div>
                 <div className="text-zinc-500">キャスト{b.casts ?? "?"}・客{b.customers ?? "?"}・履歴{b.historyDays ?? "?"}日</div>
@@ -4476,7 +4567,7 @@ function DataManagement({ exportData, importData, listAutoBackups, restoreAutoBa
               {bakConfirm === b.key ? (
                 <button onClick={() => { restoreAutoBackup(b.key, setMsg); setBakConfirm(null); }} style={{ background: "#7a2222", color: "#fff" }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">上書き確定</button>
               ) : (
-                <button onClick={() => setBakConfirm(b.key)} style={{ background: "#22222a", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">復元</button>
+                <button onClick={() => setBakConfirm(b.key)} style={{ background: "#22242A", color: GOLD }} className="text-[11px] rounded-full px-2.5 py-1.5 font-bold whitespace-nowrap">復元</button>
               )}
             </div>
           ))}
@@ -4490,13 +4581,13 @@ function AuditLogView({ auditLog }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
-      <button onClick={() => setOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold">
+      <button onClick={() => setOpen(o => !o)} style={{ background: "#1A1B20", border: "1px dashed #2a2a32", color: "#999" }} className="w-full rounded-lg py-2 text-xs font-bold">
         {open ? "▲ 変更履歴を閉じる" : `▼ 変更履歴（監査ログ・${(auditLog || []).length}件）`}
       </button>
       {open && (
         <div className="mt-2 space-y-1 max-h-80 overflow-y-auto">
           {(auditLog || []).slice(0, 100).map((e, i) => (
-            <div key={i} style={{ background: "#141418", border: "1px solid #1c1c22" }} className="rounded-lg px-2.5 py-1.5 flex items-start gap-2 text-[11px]">
+            <div key={i} style={{ background: "#1A1B20", border: "1px solid #1c1c22" }} className="rounded-lg px-2.5 py-1.5 flex items-start gap-2 text-[11px]">
               <span className="text-zinc-600 whitespace-nowrap">{new Date(e.t).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
               <span style={{ color: GOLD }} className="font-bold whitespace-nowrap">{e.action}</span>
               <span className="text-zinc-400 min-w-0 break-all">{e.detail}</span>
@@ -4515,11 +4606,11 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
   const [open, setOpen] = useState(false);
   const num = (v) => +v || 0;
   return (
-    <div style={{ background: "#141418", border: "1px solid #22222a" }} className="rounded-xl p-3">
+    <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-xl p-3">
       <div className="flex items-center justify-between mb-2">
         <input value={c.name} onChange={e => upd(c.id, x => ({ ...x, name: e.target.value }))} style={{ background: "transparent", border: "none", fontSize: "16px" }} className="font-bold outline-none flex-1 min-w-0" />
         <div className="flex items-center gap-2">
-          <button onClick={() => upd(c.id, x => ({ ...x, status: x.status === "出勤" ? "未出勤" : "出勤" }))} style={{ background: c.status === "出勤" ? "rgba(201,166,78,.15)" : "#1c1c22", border: `1px solid ${c.status === "出勤" ? GOLD : "#3a3a42"}`, color: c.status === "出勤" ? GOLD : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{c.status}</button>
+          <button onClick={() => upd(c.id, x => ({ ...x, status: x.status === "出勤" ? "未出勤" : "出勤" }))} style={{ background: c.status === "出勤" ? "rgba(201,166,78,.15)" : "rgba(255,255,255,.07)", border: `1px solid ${c.status === "出勤" ? GOLD : "rgba(255,255,255,.12)"}`, color: c.status === "出勤" ? GOLD : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{c.status}</button>
           <button onClick={() => setCasts(cs => cs.filter(x => x.id !== c.id))}><Trash2 size={14} color="#555" /></button>
         </div>
       </div>
@@ -4531,48 +4622,48 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">ジャンル</span>
         {GENRES.map(g => (
-          <button key={g} onClick={() => toggleGenre(c.id, g)} style={{ background: c.genres.includes(g) ? GENRE_COLOR[g] : "#1c1c22", color: c.genres.includes(g) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
+          <button key={g} onClick={() => toggleGenre(c.id, g)} style={{ background: c.genres.includes(g) ? GENRE_COLOR[g] : "rgba(255,255,255,.07)", color: c.genres.includes(g) ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{g}</button>
         ))}
       </div>
       {/* 付け回しの判断材料（教科書の「キャバ嬢の分類」） */}
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">レベル</span>
         {RANKS.map(r => (
-          <button key={r} onClick={() => upd(c.id, x => ({ ...x, rank: r }))} style={{ background: c.rank === r ? RANK_COLOR[r] : "#1c1c22", color: c.rank === r ? "#000" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{r}</button>
+          <button key={r} onClick={() => upd(c.id, x => ({ ...x, rank: r }))} style={{ background: c.rank === r ? RANK_COLOR[r] : "rgba(255,255,255,.07)", color: c.rank === r ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2.5 py-0.5 font-bold">{r}</button>
         ))}
       </div>
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">接客</span>
         {STYLES.map(st => (
-          <button key={st} onClick={() => upd(c.id, x => ({ ...x, style: st }))} title={STYLE_DESC[st]} style={{ background: c.style === st ? STYLE_COLOR[st] : "#1c1c22", color: c.style === st ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
+          <button key={st} onClick={() => upd(c.id, x => ({ ...x, style: st }))} title={STYLE_DESC[st]} style={{ background: c.style === st ? STYLE_COLOR[st] : "rgba(255,255,255,.07)", color: c.style === st ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
         ))}
       </div>
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">得意層</span>
         {AGE_BANDS.map(a => (
-          <button key={a} onClick={() => toggleIn("ageFit", a)} style={{ background: (c.ageFit || []).includes(a) ? TEAL : "#1c1c22", color: (c.ageFit || []).includes(a) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{a}</button>
+          <button key={a} onClick={() => toggleIn("ageFit", a)} style={{ background: (c.ageFit || []).includes(a) ? TEAL : "rgba(255,255,255,.07)", color: (c.ageFit || []).includes(a) ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{a}</button>
         ))}
         <span className="text-[9px] text-zinc-600">未選択=全年齢</span>
       </div>
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-[10px] text-zinc-500 w-12">強み</span>
         {STRENGTHS.map(st => (
-          <button key={st} onClick={() => toggleIn("strengths", st)} style={{ background: (c.strengths || []).includes(st) ? GOLD : "#1c1c22", color: (c.strengths || []).includes(st) ? "#000" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
+          <button key={st} onClick={() => toggleIn("strengths", st)} style={{ background: (c.strengths || []).includes(st) ? GOLD : "rgba(255,255,255,.07)", color: (c.strengths || []).includes(st) ? "#0F1013" : "#888" }} className="text-[11px] rounded-full px-2 py-0.5 font-bold">{st}</button>
         ))}
       </div>
 
-      <button onClick={() => setNgOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #7a2222", color: "#e08484" }} className="w-full rounded-lg py-1.5 text-[11px] font-bold mb-2">
+      <button onClick={() => setNgOpen(o => !o)} style={{ background: "#1A1B20", border: "1px dashed #7a2222", color: "#F2555A" }} className="w-full rounded-lg py-1.5 text-[11px] font-bold mb-2">
         {ngOpen ? "▲ 閉じる" : `🚫 付けたくないお客様${(c.ngCustomerIds || []).length ? `（${(c.ngCustomerIds || []).length}名）` : ""}`}
       </button>
       {ngOpen && (
-        <div style={{ background: "#0d0d10", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
+        <div style={{ background: "#1A1B20", border: "1px solid #22222a" }} className="rounded-lg p-2 mb-2">
           <p className="text-[10px] text-zinc-500 mb-1.5">本人から「このお客様は付きたくない」と相談があった相手を登録します。付け回しから完全に外れ、手動でも配置できなくなります。</p>
           {(customerBook || []).length === 0 ? <p className="text-[10px] text-zinc-600">客名帳が空です</p> : (
             <div className="flex flex-wrap gap-1">
               {(customerBook || []).map(cu => {
                 const on = (c.ngCustomerIds || []).includes(cu.id);
                 return (
-                  <button key={cu.id} onClick={() => toggleIn("ngCustomerIds", cu.id)} style={{ background: on ? "#7a2222" : "#1c1c22", color: on ? "#fff" : "#888", border: `1px solid ${on ? "#a13b3b" : "#2a2a32"}` }} className="text-[10px] rounded-full px-2 py-0.5 font-bold">{on ? "🚫 " : ""}{cu.name}</button>
+                  <button key={cu.id} onClick={() => toggleIn("ngCustomerIds", cu.id)} style={{ background: on ? "#7a2222" : "rgba(255,255,255,.07)", color: on ? "#fff" : "#888", border: `1px solid ${on ? "#F2555A" : "#2A2C33"}` }} className="text-[10px] rounded-full px-2 py-0.5 font-bold">{on ? "🚫 " : ""}{cu.name}</button>
                 );
               })}
             </div>
@@ -4580,7 +4671,7 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
         </div>
       )}
 
-      <button onClick={() => setOpen(o => !o)} style={{ background: "#0d0d10", border: "1px dashed #2a2a32", color: GOLD }} className="w-full rounded-lg py-1.5 text-[11px] font-bold">{open ? "▲ 給料条件を閉じる" : "▼ 給料条件を編集"}</button>
+      <button onClick={() => setOpen(o => !o)} style={{ background: "#1A1B20", border: "1px dashed #2a2a32", color: GOLD }} className="w-full rounded-lg py-1.5 text-[11px] font-bold">{open ? "▲ 給料条件を閉じる" : "▼ 給料条件を編集"}</button>
       {open && (
         <div className="mt-3 pt-3 border-t border-[#22222a] space-y-2">
           <PayRow label="時給" value={c.hourlyWage} onChange={v => upd(c.id, x => ({ ...x, hourlyWage: num(v) }))} suffix="円" />
@@ -4593,7 +4684,7 @@ function CastAdminCard({ c, upd, setCasts, toggleGenre, customerBook }) {
           <PayRow label="本指名" value={c.mainNominationBack} onChange={v => upd(c.id, x => ({ ...x, mainNominationBack: num(v) }))} suffix="円/回" />
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 w-24">出勤予定時刻</span>
-            <input value={c.shiftStart || ""} onChange={e => upd(c.id, x => ({ ...x, shiftStart: e.target.value }))} placeholder="例: 20:00（空欄=遅刻判定なし）" style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1 outline-none" />
+            <input value={c.shiftStart || ""} onChange={e => upd(c.id, x => ({ ...x, shiftStart: e.target.value }))} placeholder="例: 20:00（空欄=遅刻判定なし）" style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1 outline-none" />
           </div>
 
           <div className="pt-2 border-t border-[#22222a]">
@@ -4626,7 +4717,7 @@ function PayRow({ label, value, onChange, suffix }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10px] text-zinc-500 w-24">{label}</span>
-      <input type="number" value={value ?? 0} onChange={e => onChange(e.target.value)} style={{ background: "#0d0d10", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1 outline-none" />
+      <input type="number" value={value ?? 0} onChange={e => onChange(e.target.value)} style={{ background: "#1A1B20", border: "1px solid #22222a", fontSize: "15px" }} className="flex-1 rounded px-2 py-1 outline-none" />
       <span className="text-[10px] text-zinc-500 w-12">{suffix}</span>
     </div>
   );

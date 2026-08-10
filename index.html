@@ -7,7 +7,29 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="viverce" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#0F1013" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      /* v2 デザイン: 見た目のみ。数値は Viverce フロア v2.dc.html に合わせる */
+      body { margin: 0; background: #0F1013; color: #F2F3F5;
+             font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; }
+      * { -webkit-tap-highlight-color: transparent; }
+      ::-webkit-scrollbar { width: 0; height: 0; }
+      @keyframes vcard  { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+      @keyframes vsheet { from { transform: translateY(48px); opacity: 0 } to { transform: none; opacity: 1 } }
+      @keyframes vdim   { from { opacity: 0 } to { opacity: 1 } }
+      @keyframes vpulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+      @keyframes vtoast { from { opacity: 0; transform: translate(-50%, 8px) } to { opacity: 1; transform: translate(-50%, 0) } }
+      .v-card  { animation: vcard .35s ease both; }
+      .v-sheet { animation: vsheet .28s cubic-bezier(.22,1,.36,1) both; }
+      .v-dim   { animation: vdim .2s ease both; }
+      .v-pulse { animation: vpulse 1.2s ease-in-out infinite; }
+      .v-num   { font-family: 'Space Grotesk', system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+      /* 押せるものは押した時に沈む（hover 装飾はタッチ前提で持たない） */
+      button:active, [role="button"]:active { transform: scale(.97); }
+    </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
