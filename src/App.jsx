@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.8.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.8.1"; // 画面右上に表示。リリースごとに上げる
 
 // ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
 const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
@@ -1612,10 +1612,14 @@ function DetailClock({ t }) {
   return <span style={{ color: red ? "#F2555A" : "#9a9aa2" }} className="text-sm font-bold flex items-center gap-1"><Clock size={14} />{r <= 0 ? "+" : ""}{fmt(r)}{red && " ラスト"}</span>;
 }
 
-function Chip({ k, name, boss }) {
+function Chip({ k, name, boss, dot }) {
   const isC = k === "cust";
+  const c = dot || (isC ? "#F2F3F5" : GOLD);
   return (
-    <span style={{ background: isC ? "rgba(201,166,78,.18)" : "rgba(63,182,176,.18)", border: `1px solid ${isC ? GOLD : TEAL}`, color: isC ? "#e8d29a" : "#a8e6e2" }} className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap">
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, padding: "4px 8px", borderRadius: 7,
+                   background: isC ? "rgba(255,255,255,.07)" : hexA(c, .14), border: `1px solid ${isC ? LINE : hexA(c, .35)}`,
+                   color: isC ? TXT : c, fontWeight: 700, whiteSpace: "nowrap" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: c }} />
       {boss && <Crown size={10} color={GOLD} />}{name}
     </span>
   );
@@ -1676,11 +1680,23 @@ function FloorCard({ tt, disp, t, castById, onClick, idx = 0 }) {
         </>
       ) : !started ? (
         <>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0 4px" }}>
-            <div className="v-num" style={{ fontSize: 30, fontWeight: 700, color: PURPLE }}>{t.customers.length}<span style={{ fontSize: 13, color: SUB, fontWeight: 500 }}>名</span></div>
-            <div style={{ fontSize: 11.5, color: SUB }}>▶ 押してセット開始</div>
+          <div style={{ marginTop: 10 }}>
+            <div className="v-num" style={{ fontSize: 30, fontWeight: 700, color: PURPLE, lineHeight: 1.15 }}>
+              {t.customers.length}<span style={{ fontSize: 13, color: SUB, fontWeight: 500 }}>名</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: PURPLE, fontWeight: 700 }}>▶ 押してセット開始</div>
           </div>
-          <div style={{ fontSize: 10.5, color: "rgba(242,243,245,.35)", textAlign: "center" }}>嬢 {t.casts.length}名 ・ 定員 {disp.cap}名</div>
+          <div className="flex flex-wrap" style={{ gap: 5, marginTop: 8 }}>
+            {t.seats.map((sp, i) => {
+              if (sp.k === "cust") {
+                const cu = t.customers.find(c => c.id === sp.id);
+                return cu ? <Chip key={i} k="cust" name={cu.name} boss={cu.isBoss} /> : null;
+              }
+              const c = castById[sp.id];
+              return c ? <Chip key={i} k="cast" name={c.name} /> : null;
+            })}
+          </div>
+          <div style={{ fontSize: 10.5, color: "rgba(242,243,245,.35)", marginTop: "auto", paddingTop: 8 }}>嬢 {t.casts.length}名 ・ 定員 {disp.cap}名</div>
         </>
       ) : (
         <>
@@ -1697,21 +1713,31 @@ function FloorCard({ tt, disp, t, castById, onClick, idx = 0 }) {
             <span>〜{hhmmOf(endAt)} ・ {t.customers.length}名</span>
             <span className="v-num">経過 {fmt(elapsed)}</span>
           </div>
+          {/* 席の並び: 誰がどこに座って誰が付いているか（付け回しの状況）を卓の上で見る */}
           <div className="flex flex-wrap" style={{ gap: 5, marginTop: 8 }}>
-            {t.casts.map((a, i) => {
-              const c = castById[a.castId];
+            {t.seats.map((sp, i) => {
+              if (sp.k === "cust") {
+                const cu = t.customers.find(c => c.id === sp.id);
+                if (!cu) return null;
+                return <Chip key={i} k="cust" name={cu.name} boss={cu.isBoss} />;
+              }
+              const c = castById[sp.id];
               if (!c) return null;
-              const nc = a.nomType === NOM_MAIN ? GOLD : a.nomType === NOM_FIELD ? BLUE : "rgba(242,243,245,.5)";
-              return (
-                <span key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, padding: "4px 8px", borderRadius: 7, background: "rgba(255,255,255,.05)", border: `1px solid ${LINE}`, whiteSpace: "nowrap" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: nc }} />{c.name}
-                  <span style={{ color: nc, fontSize: 9 }}>{NOM_LABEL[a.nomType] || ""}</span>
-                </span>
-              );
+              const a = t.casts.find(x => x.castId === sp.id);
+              const nc = a?.nomType === NOM_MAIN ? GOLD : a?.nomType === NOM_FIELD ? BLUE : "rgba(242,243,245,.55)";
+              return <Chip key={i} k="cast" name={c.name} dot={nc} />;
             })}
             {t.casts.length < t.customers.length && (
-              <span style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 7, color: "#F0A64B", background: hexA("#F0A64B", .13), whiteSpace: "nowrap" }}>手薄</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 8px", borderRadius: 7, color: "#F0A64B", background: hexA("#F0A64B", .14), whiteSpace: "nowrap" }}>
+                手薄 客{t.customers.length}/嬢{t.casts.length}
+              </span>
             )}
+          </div>
+          <div className="flex items-center justify-between" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${LINE}` }}>
+            <span style={{ fontSize: 10.5, color: SUB }}>客{t.customers.length} ・ 嬢{t.casts.length}</span>
+            <span className="v-num" style={{ color: GOLD, fontWeight: 700, fontSize: 14 }}>
+              {yen(t.setType * t.customers.length + t.orders.reduce((a, o) => a + o.price * o.qty, 0))}
+            </span>
           </div>
         </>
       )}
