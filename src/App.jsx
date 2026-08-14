@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
+import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package, Star } from "lucide-react";
 
-const APP_VERSION = "3.8.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.9.0"; // 画面右上に表示。リリースごとに上げる
 
 // ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
 const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
@@ -211,6 +211,12 @@ const NOM_COLOR = { main: "#c9a64e", field: "#3fb6b0", help: "#5a5a62" };
 const NOM_ORDER = [NOM_HELP, NOM_FIELD, NOM_MAIN];
 // セット時間 + 延長ぶん
 const setMinOf = (t) => (t.setDuration || 0) + (t.extendMin || 0);
+// 同伴: 終了時刻を「今日の22:00」に固定（既に22時を過ぎていれば暫定で1時間）
+const dohanEndMs = (f) => { const d = new Date(f); d.setHours(22, 0, 0, 0); const e = d.getTime(); return e > f ? e : f + 3600000; };
+// 同伴卓で提供できるサービス（周知表示のみ・料金加算なし）
+const DOHAN_SERVICES = ["VIPルーム", "フルーツ盛り", "飲み放題"];
+// 人数パッド用の丸数字（客①〜客⑧）
+const CIRCLED_NUM = "①②③④⑤⑥⑦⑧";
 const remainOf = (t, now) => t.setStart + setMinOf(t) * 60000 - now;
 const tstateOf = (t, now) => { const r = remainOf(t, now); if (r <= 0) return "over"; if (r <= 600000) return "soon"; return "ok"; };
 // 状態色に不透明度を足す（淡背景・枠線用）。#RRGGBB のみ扱う
@@ -1297,12 +1303,14 @@ export default function App() {
     }
     setCustomerBook(cb => cb.map(c => c.id === cbId ? { ...c, visits: (c.visits || 0) + 1, lastVisitAt: Date.now() } : c));
     const id = "cu" + Math.random().toString(36).slice(2, 7);
-    upd(tableId, t => ({ ...t, customers: [...t.customers, { id, customerBookId: cbId, name, isBoss: t.customers.length === 0, pref }], seats: [...t.seats, { k: "cust", id }] }));
+    upd(tableId, t => ({ ...t, customers: [...t.customers, { id, customerBookId: cbId, name, isBoss: t.customers.length === 0, pref, nominated: false }], seats: [...t.seats, { k: "cust", id }] }));
   }
   function removeCustomer(tableId, custId) {
     upd(tableId, t => ({ ...t, customers: t.customers.filter(c => c.id !== custId), casts: t.casts.filter(a => a.customerId !== custId), seats: t.seats.filter(s => s.id !== custId && !(s.k === "cast" && t.casts.find(a => a.castId === s.id)?.customerId === custId)) }));
   }
   const setBoss = (tableId, id) => upd(tableId, t => ({ ...t, customers: t.customers.map(c => ({ ...c, isBoss: c.id === id })) }));
+  // 指名客マーク（⭐）のON/OFF
+  const toggleNominated = (tableId, id) => upd(tableId, t => ({ ...t, customers: t.customers.map(c => c.id === id ? { ...c, nominated: !c.nominated } : c) }));
   const setPref = (tableId, id, pref) => upd(tableId, t => ({ ...t, customers: t.customers.map(c => c.id === id ? { ...c, pref } : c) }));
   const setSetType = (tableId, v) => upd(tableId, t => ({ ...t, setType: v }));
   const setDur = (tableId, v) => upd(tableId, t => ({ ...t, setDuration: v }));
@@ -1388,15 +1396,23 @@ export default function App() {
     }
     upd(tableId, t => ({ ...t, orders: t.orders.filter(o2 => o2.id !== oid) }));
   };
-  function openTable(tableId) {
+  function openTable(tableId, dohan = false) {
     // setStart: null = 準備中。「▶ セット開始」ボタンでタイマー開始
-    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", extendMin: 0, customers: [], casts: [], seats: [], orders: [] } }));
-    logAudit("卓オープン", tables.find(x => x.id === tableId)?.label || tableId);
+    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", extendMin: 0, dohan, customers: [], casts: [], seats: [], orders: [] } }));
+    logAudit("卓オープン" + (dohan ? "（同伴）" : ""), tables.find(x => x.id === tableId)?.label || tableId);
+  }
+  // 来店人数を指定して一発で開く（人数分の客①〜を自動作成・①番はボス・名前は後で編集可）
+  function openTableGuests(tableId, n, dohan = false) {
+    const customers = Array.from({ length: n }, (_, i) => ({ id: "cu" + Math.random().toString(36).slice(2, 7) + i, customerBookId: null, name: "客" + (CIRCLED_NUM[i] || (i + 1)), isBoss: i === 0, pref: "綺麗", nominated: false }));
+    const seats = customers.map(c => ({ k: "cust", id: c.id }));
+    setTs(s => ({ ...s, [tableId]: { active: true, sessionId: "s" + Math.random().toString(36).slice(2, 9), setType: 4000, setDuration: 60, setStart: null, payMethod: "cash", extendMin: 0, dohan, customers, casts: [], seats, orders: [] } }));
+    logAudit("卓オープン" + (dohan ? "（同伴）" : ""), `${tables.find(x => x.id === tableId)?.label || tableId} ${n}名`);
   }
   function startTable(tableId) {
     const now = Date.now();
     // セット開始と同時に、既に付いているキャストの回転タイマーも開始
-    upd(tableId, t => ({ ...t, setStart: now, casts: t.casts.map(a => ({ ...a, at: now })) }));
+    // 同伴卓は持ち時間を「今日の22:00まで」に合わせる（22時までがワンタイム）
+    upd(tableId, t => ({ ...t, setStart: now, setDuration: t.dohan ? Math.max(1, Math.round((dohanEndMs(now) - now) / 60000)) : t.setDuration, casts: t.casts.map(a => ({ ...a, at: now })) }));
     logAudit("セット開始", tables.find(x => x.id === tableId)?.label || tableId);
   }
   // ---- 伝票記録 ----
@@ -1545,7 +1561,7 @@ export default function App() {
       {sel && tables.find(x => x.id === sel) && (
         <Detail key={sel} {...{
           tableId: sel, t: ts[sel], disp: dispTable(tables.find(x => x.id === sel) || { id: sel, label: sel, cap: 0 }), close: () => setSel(null),
-          castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur,
+          castById, served, tableTotal, tableTax, tableGrand, taxRate: settings.taxRate ?? 10, openTable, openTableGuests, startTable, closeTable, addCustomer, removeCustomer, setBoss, toggleNominated, setPref, setSetType, setDur,
           autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign,
           reactions, setReaction, plusAssign, availCount: available.length,
           tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, tableRawTotal, tableRoundAdj, roundUnit,
@@ -1657,6 +1673,9 @@ function FloorCard({ tt, disp, t, castById, onClick, idx = 0 }) {
       <div className="flex items-center justify-between" style={{ gap: 6 }}>
         <div className="flex items-center" style={{ gap: 6 }}>
           <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1, color: active ? TXT : "rgba(242,243,245,.75)" }}>{disp.label}</span>
+          {active && t?.dohan && (
+            <span style={{ fontSize: 9, fontWeight: 700, color: GOLD, background: hexA(GOLD, .18), padding: "2.5px 6px", borderRadius: 999, whiteSpace: "nowrap" }}>同伴</span>
+          )}
           {(rotOver || rotSoon) && started && (
             <span style={{ fontSize: 9, fontWeight: 700, color: rotOver ? "#F2555A" : "#F0A64B", border: `1px solid ${hexA(rotOver ? "#F2555A" : "#F0A64B", .45)}`, padding: "2.5px 6px", borderRadius: 5, whiteSpace: "nowrap" }}>
               ♻{rotOver ? "交代" : "まもなく"}
@@ -1954,7 +1973,8 @@ function Floor({ visibleTables, dispTable, tables, ts, castById, setSel, merges,
 }
 
 function Detail(p) {
-  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, startTable, closeTable, addCustomer, removeCustomer, setBoss, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets, tableRawTotal, tableRoundAdj, roundUnit, setNomType, extendTable } = p;
+  const { tableId, t, disp, close, castById, served, tableTotal, tableTax, tableGrand, taxRate, openTable, openTableGuests, startTable, closeTable, addCustomer, removeCustomer, setBoss, toggleNominated, setPref, setSetType, setDur, autoTable, autoCustomer, removeCast, moveSeat, setPick, addOrder, ordQty, delOrder, tryAssign, castsInTable, customerBook, bottleKeeps, products, nextPlan, reactions, setReaction, plusAssign, availCount, recallCandidates, recallTo, minusInfo, storeName, tableCardFee, tablePayable, setPayMethod, cardFeePct, saveReceipt, backPresets, tableRawTotal, tableRoundAdj, roundUnit, setNomType, extendTable } = p;
+  const [dohanMode, setDohanMode] = useState(false);
   const [chBack, setChBack] = useState(null); // 手入力ボトルのバック率（null=既定）
   const [recallOpen, setRecallOpen] = useState(false); // 他卓からの応援リコール
   const [receiptOpen, setReceiptOpen] = useState(false); // 伝票印刷
@@ -1997,22 +2017,44 @@ function Detail(p) {
         <div className="flex items-center gap-3">
           <button onClick={close}><X size={22} color="#888" /></button>
           <span style={{ color: GOLD }} className="text-xl font-bold">{disp.label}</span>
+          {active && t?.dohan && <span style={{ background: "rgba(227,180,85,.2)", border: `1px solid ${GOLD}`, color: GOLD }} className="text-[10px] px-2 py-0.5 rounded-full font-bold">同伴</span>}
           {active && (t.setStart ? <DetailClock t={t} /> : <span style={{ color: "#F0A64B" }} className="text-xs font-bold">準備中</span>)}
         </div>
         {active && <button onClick={() => closeTable(tableId)} style={{ background: "rgba(255,255,255,.07)", color: GOLD }} className="text-xs px-3 py-1.5 rounded-lg font-bold">会計</button>}
       </div>
 
       {!active ? (
-        <div className="p-10 text-center">
-          <p className="text-zinc-500 mb-4 text-sm">この卓は空席です（定員 {disp.cap}名）</p>
-          <button onClick={() => openTable(tableId)} style={{ background: GOLD, color: "#221A08" }} className="px-6 py-3 rounded-xl font-bold">卓を開ける</button>
+        <div className="p-8 text-center">
+          <p className="text-zinc-500 mb-1 text-sm">この卓は空席です（定員 {disp.cap}名）</p>
+          <p className="text-zinc-500 mb-4 text-xs">来店人数をタップ → その人数分の席を一発作成（名前は後で・①番はボス）</p>
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <button onClick={() => setDohanMode(false)} style={{ background: !dohanMode ? GOLD : "rgba(255,255,255,.07)", color: !dohanMode ? "#221A08" : "#888" }} className="px-4 py-1.5 rounded-full text-xs font-bold">通常</button>
+            <button onClick={() => setDohanMode(true)} style={{ background: dohanMode ? GOLD : "rgba(255,255,255,.07)", color: dohanMode ? "#221A08" : "#888" }} className="px-4 py-1.5 rounded-full text-xs font-bold">🤝 同伴（22時まで）</button>
+          </div>
+          <div className="grid grid-cols-4 gap-2 max-w-xs mx-auto">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+              <button key={n} onClick={() => openTableGuests(tableId, n, dohanMode)} style={{ background: "#1A1B20", border: `1.5px solid ${GOLD}`, color: GOLD }} className="py-4 rounded-xl font-bold text-lg">{n}名</button>
+            ))}
+          </div>
+          <button onClick={() => openTable(tableId, dohanMode)} className="mt-4 text-xs text-zinc-500 underline">人数未定で開ける（後で追加）</button>
         </div>
       ) : (
         <div className="p-4 space-y-5 pb-16">
           {!t.setStart && (
             <button onClick={() => startTable(tableId)} style={{ background: GOLD, color: "#221A08" }} className="w-full rounded-2xl py-4 text-base font-bold shadow-lg">
-              ▶ セット開始（タイマースタート）
+              ▶ セット開始（タイマースタート）{t.dohan ? "・同伴は22時まで" : ""}
             </button>
+          )}
+          {t.dohan && (
+            <div style={{ background: "rgba(227,180,85,.08)", border: `1px solid ${GOLD}` }} className="rounded-2xl p-3">
+              <div className="text-[11px] font-bold flex items-center gap-1" style={{ color: GOLD }}>🤝 同伴サービス（本日提供OK・周知）</div>
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {DOHAN_SERVICES.map(s => (
+                  <span key={s} style={{ background: "#1C1D22", border: `1px solid ${GOLD}`, color: "#e8d29a" }} className="text-[11px] rounded-full px-2.5 py-1 font-bold">{s}</span>
+                ))}
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-1.5">※周知のみ（料金加算なし・終了は22時）</div>
+            </div>
           )}
           <Section title="座席（誰の隣に誰）">
             <div className="flex items-stretch gap-1 overflow-x-auto pb-2">
@@ -2078,7 +2120,13 @@ function Detail(p) {
                         <span className="font-bold text-sm">{cust.name}</span>
                         {cust.isBoss && <span style={{ color: GOLD }} className="text-[10px]">ボス</span>}
                       </button>
-                      <button onClick={() => removeCustomer(tableId, cust.id)}><Trash2 size={14} color="#555" /></button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => toggleNominated(tableId, cust.id)} className="flex items-center gap-1" style={{ color: cust.nominated ? GOLD : "#555" }}>
+                          <Star size={14} color={cust.nominated ? GOLD : "rgba(255,255,255,.12)"} fill={cust.nominated ? GOLD : "none"} />
+                          <span className="text-[10px] font-bold">指名</span>
+                        </button>
+                        <button onClick={() => removeCustomer(tableId, cust.id)}><Trash2 size={14} color="#555" /></button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                       <span className="text-[10px] text-zinc-500">好み</span>
@@ -2134,7 +2182,7 @@ function Detail(p) {
           <Section title="セット">
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
               <span className="text-[10px] text-zinc-500">料金</span>
-              {[4000, 4500, 5000, 5500].map(v => (
+              {[3500, 4000, 4500, 5000, 5500].map(v => (
                 <button key={v} onClick={() => setSetType(tableId, v)} style={{ background: t.setType === v ? GOLD : "rgba(255,255,255,.07)", color: t.setType === v ? "#0F1013" : "#888" }} className="text-[11px] rounded-lg px-2 py-1 font-bold">{yen(v)}</button>
               ))}
             </div>
