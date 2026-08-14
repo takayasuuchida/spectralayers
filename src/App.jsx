@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package, Star } from "lucide-react";
 
-const APP_VERSION = "3.9.0"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.9.1"; // 画面右上に表示。リリースごとに上げる
 
 // ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
 const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
@@ -188,7 +188,46 @@ const ANELA_SEED_CASTS = [
   status: "出勤",
 }));
 
-const SEED_CASTS = STORE_ID === "ANELA" ? ANELA_SEED_CASTS : DEFAULT_SEED_CASTS;
+// viverce（VIVACE）の登録済み実名簿。Supabaseクラウド金庫（floor テーブル key="casts"、2026-08-12時点）から回収した本物のデータ。
+// 端末の保存データが無い/ダミーのままの端末でも、この名簿で立ち上がる。
+const VIVERCE_SEED_CASTS = [
+  { id: "c1", name: "まゆ", score: 8, genres: ["可愛い"], status: "未出勤" },
+  { id: "c2", name: "えな", score: 10, genres: ["綺麗", "可愛い"], status: "出勤" },
+  { id: "c3", name: "はのん", score: 1, genres: ["可愛い"], status: "出勤" },
+  { id: "c4", name: "ひより", score: 5, genres: ["可愛い"], status: "未出勤" },
+  { id: "c5", name: "かれん", score: 6, genres: ["可愛い"], status: "未出勤" },
+  { id: "c6", name: "なつき", score: 7, genres: ["可愛い", "おもしろい"], status: "未出勤" },
+  { id: "c7", name: "まい", score: 7, genres: ["可愛い"], status: "未出勤" },
+  { id: "c8", name: "うた", score: 1.5, genres: ["可愛い", "おもしろい"], status: "出勤" },
+  { id: "c9", name: "かんな", score: 9.5, genres: ["綺麗", "おもしろい"], status: "出勤" },
+  { id: "c10", name: "ゆあ", score: 6.5, genres: ["綺麗"], status: "出勤" },
+  { id: "c11", name: "わかな", score: 9.5, genres: ["可愛い"], status: "未出勤" },
+  { id: "c12", name: "さはな", score: 10, genres: ["綺麗", "可愛い", "おもしろい"], status: "出勤" },
+  { id: "c13", name: "のぞみ", score: 6.5, genres: ["可愛い"], status: "未出勤" },
+  { id: "c14", name: "ゆま", score: 5, genres: ["可愛い"], status: "未出勤" },
+  { id: "c15", name: "あいり", score: 6, genres: ["綺麗"], status: "未出勤" },
+  { id: "c16", name: "あや", score: 7.5, genres: ["綺麗"], status: "未出勤" },
+  { id: "c17", name: "あやな", score: 6, genres: ["綺麗", "おもしろい"], status: "未出勤" },
+  { id: "c18", name: "さら", score: 9, genres: ["可愛い"], status: "未出勤" },
+  { id: "c19", name: "みき", score: 6.5, genres: ["綺麗"], status: "未出勤" },
+  { id: "c20", name: "もえ", score: 9, genres: ["綺麗"], status: "未出勤" },
+  { id: "c21", name: "もか", score: 9, genres: ["可愛い", "おもしろい"], status: "未出勤" },
+  { id: "c22", name: "ゆい", score: 9, genres: ["綺麗"], status: "未出勤" },
+  { id: "c25", name: "かな", score: 8.5, genres: ["綺麗", "おもしろい"], status: "出勤" },
+  { id: "c26", name: "ねね", score: 8, genres: ["可愛い"], status: "未出勤" },
+  { id: "cdnwr", name: "体験", score: 5, genres: ["可愛い"], status: "出勤" },
+  { id: "c4ks8", name: "体験", score: 1.5, genres: ["可愛い"], status: "出勤" },
+];
+
+const SEED_CASTS = STORE_ID === "ANELA" ? ANELA_SEED_CASTS : STORE_ID === "viverce" ? VIVERCE_SEED_CASTS : DEFAULT_SEED_CASTS;
+
+// 保存済み名簿が「未編集のダミー名簿（リカ・マオ…のサンプル名）」のままの端末は、実名簿に自動復元する。
+// ユーザーが1人でも実名を登録・変更していれば（ダミー名以外が混ざっていれば）何もしない。
+const restoreRealRoster = (cs) => {
+  if (STORE_ID !== "viverce" || !Array.isArray(cs) || cs.length === 0) return cs;
+  const dummyNames = new Set(DEFAULT_SEED_CASTS.map(c => c.name));
+  return cs.every(c => dummyNames.has(c.name)) ? VIVERCE_SEED_CASTS : cs;
+};
 
 const yen = (n) => "¥" + (n || 0).toLocaleString("ja-JP");
 
@@ -296,7 +335,7 @@ export default function App() {
           setSettings({ ...DEFAULT_SETTINGS, ...(d.settings || {}), storeName: normalizeStoreName(d.settings?.storeName) });
           setTables(d.tables || DEFAULT_TABLES);
           setMergeGroups(d.mergeGroups || DEFAULT_MERGE_GROUPS);
-          setCasts((d.casts || SEED_CASTS).map(mergeCastDefaults));
+          setCasts(restoreRealRoster(d.casts || SEED_CASTS).map(mergeCastDefaults));
           setTs(d.ts || {});
           setServed(d.served || {});
           setReactions(d.reactions || {});
@@ -350,7 +389,7 @@ export default function App() {
     setSettings({ ...DEFAULT_SETTINGS, ...(p.settings || {}), storeName: normalizeStoreName(p.settings?.storeName) });
     setTables(p.tables || DEFAULT_TABLES);
     setMergeGroups(p.mergeGroups || DEFAULT_MERGE_GROUPS);
-    setCasts((p.casts || SEED_CASTS).map(mergeCastDefaults));
+    setCasts(restoreRealRoster(p.casts || SEED_CASTS).map(mergeCastDefaults));
     setTs(p.ts || {});
     setServed(p.served || {});
     setReactions(p.reactions || {});
