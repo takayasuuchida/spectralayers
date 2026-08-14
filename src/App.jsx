@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package, Star } from "lucide-react";
 
-const APP_VERSION = "3.9.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.9.2"; // 画面右上に表示。リリースごとに上げる
 
 // ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
 const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
@@ -188,45 +188,32 @@ const ANELA_SEED_CASTS = [
   status: "出勤",
 }));
 
-// viverce（VIVACE）の登録済み実名簿。Supabaseクラウド金庫（floor テーブル key="casts"、2026-08-12時点）から回収した本物のデータ。
-// 端末の保存データが無い/ダミーのままの端末でも、この名簿で立ち上がる。
+// viverce（VIVACE）の登録済み実名簿。Supabase の casts テーブル（2026-07-10 にユーザーが登録した13名）から回収した本物のデータ。
 const VIVERCE_SEED_CASTS = [
-  { id: "c1", name: "まゆ", score: 8, genres: ["可愛い"], status: "未出勤" },
-  { id: "c2", name: "えな", score: 10, genres: ["綺麗", "可愛い"], status: "出勤" },
-  { id: "c3", name: "はのん", score: 1, genres: ["可愛い"], status: "出勤" },
-  { id: "c4", name: "ひより", score: 5, genres: ["可愛い"], status: "未出勤" },
-  { id: "c5", name: "かれん", score: 6, genres: ["可愛い"], status: "未出勤" },
-  { id: "c6", name: "なつき", score: 7, genres: ["可愛い", "おもしろい"], status: "未出勤" },
-  { id: "c7", name: "まい", score: 7, genres: ["可愛い"], status: "未出勤" },
-  { id: "c8", name: "うた", score: 1.5, genres: ["可愛い", "おもしろい"], status: "出勤" },
-  { id: "c9", name: "かんな", score: 9.5, genres: ["綺麗", "おもしろい"], status: "出勤" },
-  { id: "c10", name: "ゆあ", score: 6.5, genres: ["綺麗"], status: "出勤" },
-  { id: "c11", name: "わかな", score: 9.5, genres: ["可愛い"], status: "未出勤" },
-  { id: "c12", name: "さはな", score: 10, genres: ["綺麗", "可愛い", "おもしろい"], status: "出勤" },
-  { id: "c13", name: "のぞみ", score: 6.5, genres: ["可愛い"], status: "未出勤" },
-  { id: "c14", name: "ゆま", score: 5, genres: ["可愛い"], status: "未出勤" },
-  { id: "c15", name: "あいり", score: 6, genres: ["綺麗"], status: "未出勤" },
-  { id: "c16", name: "あや", score: 7.5, genres: ["綺麗"], status: "未出勤" },
-  { id: "c17", name: "あやな", score: 6, genres: ["綺麗", "おもしろい"], status: "未出勤" },
-  { id: "c18", name: "さら", score: 9, genres: ["可愛い"], status: "未出勤" },
-  { id: "c19", name: "みき", score: 6.5, genres: ["綺麗"], status: "未出勤" },
-  { id: "c20", name: "もえ", score: 9, genres: ["綺麗"], status: "未出勤" },
-  { id: "c21", name: "もか", score: 9, genres: ["可愛い", "おもしろい"], status: "未出勤" },
-  { id: "c22", name: "ゆい", score: 9, genres: ["綺麗"], status: "未出勤" },
-  { id: "c25", name: "かな", score: 8.5, genres: ["綺麗", "おもしろい"], status: "出勤" },
-  { id: "c26", name: "ねね", score: 8, genres: ["可愛い"], status: "未出勤" },
-  { id: "cdnwr", name: "体験", score: 5, genres: ["可愛い"], status: "出勤" },
-  { id: "c4ks8", name: "体験", score: 1.5, genres: ["可愛い"], status: "出勤" },
-];
+  "ゆみ", "ななみ", "ゆうは", "ねおん", "れな", "ゆあ", "まどか",
+  "まい", "さや", "あや", "ありさ", "かれん", "さら",
+].map((name, i) => ({
+  id: "v" + (i + 1),
+  name,
+  score: 5,
+  genres: ["可愛い"],
+  status: "出勤",
+}));
 
 const SEED_CASTS = STORE_ID === "ANELA" ? ANELA_SEED_CASTS : STORE_ID === "viverce" ? VIVERCE_SEED_CASTS : DEFAULT_SEED_CASTS;
 
-// 保存済み名簿が「未編集のダミー名簿（リカ・マオ…のサンプル名）」のままの端末は、実名簿に自動復元する。
-// ユーザーが1人でも実名を登録・変更していれば（ダミー名以外が混ざっていれば）何もしない。
+// v3.9.1 で誤って viverce に混入してしまった ANELA の名簿（自動復元の判定用・名前のみ）
+const MISTAKEN_ANELA_NAMES = ["まゆ", "えな", "はのん", "ひより", "かれん", "なつき", "まい", "うた", "かんな", "ゆあ", "わかな", "さはな", "のぞみ", "ゆま", "あいり", "あや", "あやな", "さら", "みき", "もえ", "もか", "ゆい", "かな", "ねね", "体験"];
+
+// 保存済み名簿が「サンプル名簿（リカ・マオ…）」または「誤混入した ANELA 名簿」のままの端末は、
+// VIVACE の実名簿（13名）に自動復元する。実名簿以外の名前を1人でも登録済みなら何もしない。
 const restoreRealRoster = (cs) => {
   if (STORE_ID !== "viverce" || !Array.isArray(cs) || cs.length === 0) return cs;
-  const dummyNames = new Set(DEFAULT_SEED_CASTS.map(c => c.name));
-  return cs.every(c => dummyNames.has(c.name)) ? VIVERCE_SEED_CASTS : cs;
+  const wrongNames = new Set([...DEFAULT_SEED_CASTS.map(c => c.name), ...MISTAKEN_ANELA_NAMES]);
+  const realNames = new Set(VIVERCE_SEED_CASTS.map(c => c.name));
+  const isAlreadyReal = cs.length === VIVERCE_SEED_CASTS.length && cs.every(c => realNames.has(c.name));
+  if (isAlreadyReal) return cs;
+  return cs.every(c => wrongNames.has(c.name)) ? VIVERCE_SEED_CASTS : cs;
 };
 
 const yen = (n) => "¥" + (n || 0).toLocaleString("ja-JP");
