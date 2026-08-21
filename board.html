@@ -11,64 +11,22 @@
   header { border-bottom:1px solid #1c1c22; padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .brand { font-family:Georgia,serif; letter-spacing:.15em; color:#c9a64e; font-size:15px; font-weight:bold; }
   .sub { color:#6a6a72; font-size:10px; }
-  .me { font-size:10px; color:#a8e6e2; border:1px solid #2a6a66; border-radius:999px; padding:3px 10px; background:rgba(63,182,176,.08); white-space:nowrap; }
+  .hbtns { display:flex; gap:6px; align-items:center; }
+  .me { font-size:10px; color:#a8e6e2; border:1px solid #2a6a66; border-radius:999px; padding:6px 10px; background:rgba(63,182,176,.08); white-space:nowrap; }
+  .snd { font-size:14px; border:1px solid #2a2a32; background:#15151a; color:#e8e8ec; border-radius:999px; padding:5px 10px; }
+  .snd.off { color:#5a5a62; }
 
-  .sec { background:#141418; border:1px solid #22222a; border-radius:16px; padding:10px; margin-top:8px; }
+  .sec { background:#141418; border:1px solid #22222a; border-radius:16px; padding:12px; margin-top:10px; }
   .sec.mine { border-color:#c9a64e; }
-  .shead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+  .shead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
   .sname { font-family:Georgia,serif; font-size:17px; font-weight:bold; letter-spacing:.08em; }
   .mine .sname { color:#c9a64e; }
   .stale { color:#e08484; font-size:10px; font-weight:bold; }
   .fresh { color:#5a5a62; font-size:10px; }
 
-  /* 卓グリッド（自店・手入力用） */
-  .tgrid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
-  @media (min-width:520px){ .tgrid { grid-template-columns:repeat(3,1fr); } }
-  .tcard { background:#0d0d10; border:1.5px dashed #2f2f38; border-radius:14px; padding:10px; text-align:left; width:100%; }
-  .tcard.busy { border-style:solid; border-color:#c9a64e; background:#15130d; }
-  .tcard.prep { border-style:dashed; border-color:#3fb6b0; background:rgba(63,182,176,.07); }
-  .tcard.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
-  .tcard.over { border-color:#a15050; background:rgba(224,85,85,.1); }
-  .tcard .tl { font-family:Georgia,serif; font-size:15px; font-weight:bold; color:#e8e8ec; }
-  .tcard.busy .tl { color:#c9a64e; }
-  .tcard.prep .tl { color:#3fb6b0; }
-  .tcard .wait { font-size:12px; font-weight:bold; color:#3fb6b0; }
-  .tcard .empty { font-size:11px; color:#4a4a52; margin-top:4px; }
-  .tcard .big { font-size:20px; font-weight:bold; color:#fff; margin-top:2px; }
-  .tcard .small { font-size:10px; color:#8a8a92; margin-top:2px; }
-  .tcard .out { font-size:11px; font-weight:bold; color:#e8c07a; }
-
-  .expand { background:#0d0d10; border:1px solid #c9a64e; border-radius:14px; padding:10px; margin-top:8px; }
-  .expand .lbl2 { font-size:11px; color:#c9a64e; font-weight:bold; margin-bottom:8px; }
-  .nums { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-  .nums button { background:#1c1c22; border:1px solid #2f2f38; color:#e8e8ec; border-radius:12px; padding:16px 0; font-size:20px; font-weight:bold; }
-  .erow { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-  .erow label { font-size:11px; color:#8a8a92; }
-  .erow select, .erow input[type=time] { background:#1c1c22; border:1px solid #3a3a42; color:#fff; border-radius:10px; padding:10px 8px; font-size:16px; font-weight:bold; }
-  .erow select { min-width:96px; }
-  .erow .now { background:#22222a; border:1px solid #3fb6b0; color:#3fb6b0; border-radius:10px; padding:10px 12px; font-size:12px; font-weight:bold; }
-  .acts { display:flex; gap:8px; flex-wrap:wrap; }
-  .acts button { flex:1; min-width:88px; border:none; border-radius:12px; padding:14px 6px; font-size:14px; font-weight:bold; }
-  .a-ext { background:#22222a; color:#c9a64e; border:1px solid #c9a64e !important; line-height:1.35; }
-  .a-ext .sub { display:block; font-size:10px; font-weight:normal; opacity:.8; }
-  .a-out { background:#7a2222; color:#fff; }
-  .a-cancel { background:#1c1c22; color:#888; }
-  .a-start { width:100%; background:#3fb6b0; color:#04211f; border:none; border-radius:12px; padding:17px; font-size:17px; font-weight:bold; margin-top:4px; }
-
-  .lv-title { font-size:10px; color:#6a6a72; margin:8px 0 4px; }
-  .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:6px 10px; margin-bottom:4px; }
-  .lv.soon { border-color:#7a5a1a; background:rgba(224,168,74,.07); }
-  .lv.now  { border-color:#3f8f6a; background:rgba(95,214,160,.08); }
-  .lv .tbl { font-size:15px; font-weight:bold; color:#e8e8ec; }
-  .lv .t { font-size:17px; font-weight:bold; font-variant-numeric:tabular-nums; margin-left:auto; white-space:nowrap; }
-  .lv .g { font-size:15px; color:#c9a64e; font-weight:bold; }
-  .lv .in { font-size:10px; color:#8a8a92; margin-left:auto; white-space:nowrap; }
-  .lv .auto { font-size:9px; color:#5fd6a0; border:1px solid #2f6a4f; border-radius:4px; padding:0 4px; }
-  .lv .del { background:none; border:none; color:#55555c; font-size:15px; padding:0 2px; }
-  .empty { font-size:11px; color:#4a4a52; padding:6px 0; }
-
+  /* ---- 受入状況の1行 ---- */
   .stat { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap;
-          border-radius:10px; padding:7px 10px; margin:6px 0; background:#0d0d10; border:1px solid #22222a; color:#8a8a92; }
+          border-radius:10px; padding:8px 10px; margin:4px 0 8px; background:#0d0d10; border:1px solid #22222a; color:#8a8a92; }
   .stat b { font-size:15px; color:#e8e8ec; }
   .stat span { font-size:10px; }
   .stat.s-ok   { background:rgba(95,214,160,.1); border-color:#3f8f6a; }
@@ -78,75 +36,104 @@
   .stat.s-full { background:rgba(224,85,85,.1); border-color:#a15050; }
   .stat.s-full b { color:#f0a0a0; }
 
-  .accept { border-radius:12px; padding:10px; text-align:center; margin:8px 0; font-weight:bold; }
-  .a-ok   { background:rgba(95,214,160,.12); border:1px solid #3f8f6a; color:#7ee6ac; }
-  .a-soon { background:rgba(224,168,74,.12); border:1px solid #7a5a1a; color:#e8c07a; }
-  .a-full { background:rgba(224,85,85,.12); border:1px solid #a15050; color:#f0a0a0; }
-  .a-none { background:#0d0d10; border:1px dashed #33333c; color:#5a5a62; font-weight:normal; }
-  .accept .big { font-size:20px; display:block; }
-  .accept .small { font-size:10px; opacity:.85; font-weight:normal; }
-  .accept .line { display:block; font-size:12px; font-weight:bold; opacity:.95; margin-top:2px; }
-
-  /* 1画面で打ち切る卓の行 */
-  .rows { display:flex; flex-direction:column; gap:6px; }
-  .row { display:flex; align-items:center; gap:6px; background:#0d0d10; border:1.5px solid #22222a; border-radius:12px; padding:4px 8px; }
-  .row.busy { border-color:#c9a64e; background:#15130d; }
-  .row.prep { border-color:#3fb6b0; border-style:dashed; background:rgba(63,182,176,.06); }
-  .row.soon { border-color:#e0a84a; background:rgba(224,168,74,.1); }
-  .row.over { border-color:#a15050; background:rgba(224,85,85,.1); }
-  .row .nm { background:none; border:none; color:#e8e8ec; font-family:Georgia,serif; font-size:15px; font-weight:bold; min-width:52px; text-align:left; padding:6px 0; }
-  .row.busy .nm { color:#c9a64e; }
-  .row.prep .nm { color:#3fb6b0; }
-  .cnt { display:flex; align-items:center; gap:3px; }
-  .cnt button { width:36px; height:36px; border-radius:10px; background:#1c1c22; border:1px solid #3a3a42; color:#fff; font-size:19px; font-weight:bold; line-height:1; }
-  .cnt button:disabled { color:#3a3a42; border-color:#22222a; }
-  .cnt .n { font-size:16px; font-weight:bold; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
-  .row .rt { margin-left:auto; }
-  .row .chk { background:#22222a; border:1px solid #3a3a42; color:#e8c07a; border-radius:10px; padding:9px 8px; font-size:13px; font-weight:bold; white-space:nowrap; }
-  .row .go { background:#3fb6b0; color:#04211f; border:none; border-radius:10px; padding:10px 12px; font-size:14px; font-weight:bold; white-space:nowrap; }
-  .row .cap2 { font-size:11px; color:#4a4a52; padding-right:4px; }
-  .castbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:4px 10px; margin:6px 0; }
+  /* ---- キャスト ---- */
+  .castbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:6px 10px; margin-bottom:10px; }
   .castbar .cg { display:flex; align-items:center; gap:6px; }
   .castbar .cl { font-size:11px; color:#8a8a92; font-weight:bold; white-space:nowrap; }
+  .cnt { display:flex; align-items:center; gap:4px; }
+  .cnt button { width:38px; height:38px; border-radius:10px; background:#1c1c22; border:1px solid #3a3a42; color:#fff; font-size:19px; font-weight:bold; line-height:1; }
+  .cnt .n { font-size:16px; font-weight:bold; min-width:34px; text-align:center; font-variant-numeric:tabular-nums; }
 
-  /* 卓の名前と席数の編集 */
-  .trow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
-  .trow input[type=text] { flex:1 1 auto; width:auto; min-width:0; padding:9px 10px; font-size:15px; }
-  .trow select { flex:0 0 84px; width:84px; background:#0d0d10; border:1px solid #22222a; color:#fff;
-                 border-radius:10px; padding:9px 4px; font-size:15px; font-weight:bold; }
-  .foldbtn { width:100%; background:#1c1c22; border:1px solid #3a3a42; color:#c9a64e; border-radius:10px;
-             padding:11px; font-size:13px; font-weight:bold; text-align:left; }
-  .panel h3 { position:sticky; top:-16px; background:#15151a; z-index:2; padding:4px 0 8px; margin-top:-4px; }
-  .donebtn { width:100%; background:#c9a64e; color:#000; border:none; border-radius:12px;
-             padding:15px; font-weight:bold; font-size:15px; margin-top:16px; }
-  .capnote { font-size:10px; color:#5a5a62; }
-  .nums button.overcap { color:#7a6a3a; border-color:#3a3320; }
+  /* ---- 卓の一覧（押すと卓の画面へ） ---- */
+  .rows { display:flex; flex-direction:column; gap:8px; }
+  .row { display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+         background:#0d0d10; border:1.5px solid #22222a; border-radius:14px; padding:14px 12px; color:#e8e8ec; }
+  .row.busy { border-color:#c9a64e; background:#15130d; }
+  .row.prep { border-color:#3fb6b0; border-style:dashed; background:rgba(63,182,176,.06); }
+  .row.soon { border-color:#e0a84a; background:rgba(224,168,74,.12); }
+  .row.over { border-color:#a15050; background:rgba(224,85,85,.12); }
+  .row .nm { font-family:Georgia,serif; font-size:17px; font-weight:bold; min-width:64px; }
+  .row.busy .nm { color:#c9a64e; }
+  .row.prep .nm { color:#3fb6b0; }
+  .row .mid { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .row .m1 { font-size:15px; font-weight:bold; font-variant-numeric:tabular-nums; }
+  .row .m2 { font-size:11px; color:#8a8a92; }
+  .row.soon .m1 { color:#e8c07a; }
+  .row.over .m1 { color:#f0a0a0; }
+  .row .free { font-size:14px; color:#5a5a62; }
+  .row .arw { margin-left:auto; color:#55555c; font-size:18px; }
+  .addbtn { width:100%; margin-top:10px; background:#15151a; border:1.5px dashed #3a3a42; color:#c9a64e;
+            border-radius:14px; padding:14px; font-size:14px; font-weight:bold; }
 
-  .bar { position:fixed; left:0; right:0; bottom:0; background:#0a0a0c; border-top:1px solid #1c1c22; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px); display:flex; gap:8px; z-index:20; }
-  .bar button { flex:1; border:none; border-radius:12px; padding:13px 4px; font-weight:bold; font-size:13px; }
-  .b-gold { background:#c9a64e; color:#000; }
-  .b-teal { background:#22222a; color:#3fb6b0; border:1px solid #3fb6b0 !important; }
+  /* ---- 卓の画面（切り替え） ---- */
+  .backbtn { width:100%; background:#1c1c22; border:1px solid #3a3a42; color:#e8e8ec; border-radius:12px;
+             padding:13px; font-size:14px; font-weight:bold; text-align:left; margin-top:10px; }
+  .dtl { background:#141418; border:1px solid #c9a64e; border-radius:16px; padding:14px; margin-top:10px; }
+  .drow { display:flex; gap:8px; align-items:center; }
+  .dname { flex:1 1 auto; min-width:0; background:#0d0d10; border:1px solid #22222a; color:#c9a64e;
+           font-family:Georgia,serif; font-size:20px; font-weight:bold; border-radius:10px; padding:10px 12px; }
+  .dcap { flex:0 0 92px; background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:11px 4px; font-size:15px; font-weight:bold; }
+  .dlbl { font-size:11px; color:#8a8a92; font-weight:bold; margin:16px 0 8px; }
+  .pads { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .pads button { background:#1c1c22; border:1px solid #3a3a42; color:#e8e8ec; border-radius:12px; padding:16px 0; font-size:19px; font-weight:bold; }
+  .pads button.on { background:#c9a64e; border-color:#c9a64e; color:#000; }
+  .pads button.overcap { color:#7a6a3a; border-color:#2f2b20; }
+  .pads button.zero { font-size:14px; color:#8a8a92; }
+  .mchips { display:flex; gap:8px; }
+  .mchips button { flex:1; background:#1c1c22; border:1px solid #3a3a42; color:#e8e8ec; border-radius:12px; padding:16px 0; font-size:18px; font-weight:bold; }
+  .mchips button.on { background:#3fb6b0; border-color:#3fb6b0; color:#04211f; }
+  .tfields { display:flex; gap:8px; }
+  .tfield { flex:1; display:flex; flex-direction:column; gap:5px; }
+  .tfield span { font-size:11px; color:#8a8a92; font-weight:bold; }
+  .tfield input[type=time] { width:100%; background:#0d0d10; border:1px solid #3a3a42; color:#fff; border-radius:10px;
+                             padding:13px 8px; font-size:19px; font-weight:bold; font-variant-numeric:tabular-nums; }
+  .nowb { margin-top:4px; background:#22222a; border:1px solid #3fb6b0; color:#3fb6b0; border-radius:8px; padding:7px; font-size:11px; font-weight:bold; }
+  .startbtn { width:100%; margin-top:18px; background:#3fb6b0; color:#04211f; border:none; border-radius:14px; padding:20px; font-size:19px; font-weight:bold; }
+  .startbtn:disabled { background:#22222a; color:#5a5a62; }
+  .dnote { font-size:12px; color:#8a8a92; text-align:center; margin-top:10px; }
+  .dstat { margin-top:18px; background:#0d0d10; border:1px solid #22222a; border-radius:12px; padding:12px;
+           text-align:center; font-size:20px; font-weight:bold; color:#e8e8ec; }
+  .dstat span { display:block; font-size:12px; font-weight:normal; color:#8a8a92; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .dstat.soon { border-color:#7a5a1a; background:rgba(224,168,74,.12); color:#e8c07a; }
+  .dstat.over { border-color:#a15050; background:rgba(224,85,85,.12); color:#f0a0a0; }
+  .acts { display:flex; gap:8px; margin-top:10px; }
+  .acts button { flex:1; background:#22222a; color:#c9a64e; border:1px solid #c9a64e; border-radius:12px;
+                 padding:13px 6px; font-size:14px; font-weight:bold; line-height:1.35; }
+  .acts button .sub { display:block; font-size:10px; font-weight:normal; opacity:.8; color:#c9a64e; }
+  .outbtn { width:100%; margin-top:12px; background:#7a2222; color:#fff; border:none; border-radius:12px; padding:17px; font-size:16px; font-weight:bold; }
+  .delbtn { width:100%; margin-top:22px; background:none; border:none; color:#55555c; font-size:12px; text-decoration:underline; padding:8px; }
 
+  /* ---- 相手店の一覧 ---- */
+  .lv-title { font-size:10px; color:#6a6a72; margin:10px 0 5px; }
+  .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
+  .lv.soon { border-color:#7a5a1a; background:rgba(224,168,74,.07); }
+  .lv.now  { border-color:#3f8f6a; background:rgba(95,214,160,.08); }
+  .lv .tbl { font-size:15px; font-weight:bold; color:#e8e8ec; }
+  .lv .g { font-size:15px; color:#c9a64e; font-weight:bold; }
+  .lv .t { font-size:17px; font-weight:bold; font-variant-numeric:tabular-nums; margin-left:auto; white-space:nowrap; }
+  .lv .del { background:none; border:none; color:#55555c; font-size:15px; padding:0 2px; }
+  .empty { font-size:11px; color:#4a4a52; padding:6px 0; }
+
+  /* ---- シート ---- */
   .sheet { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:50; display:flex; align-items:flex-end; }
   .sheet.hidden { display:none; }
   .panel { background:#15151a; border-top:1px solid #c9a64e; border-radius:20px 20px 0 0; width:100%; max-height:88vh; overflow-y:auto; padding:16px 14px calc(env(safe-area-inset-bottom,0px) + 16px); }
   .panel h3 { font-size:14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
   .panel h3 button { background:none; border:none; color:#888; font-size:20px; }
-  .lbl { font-size:10px; color:#6a6a72; margin:12px 0 6px; }
+  .lbl { font-size:10px; color:#6a6a72; margin:14px 0 6px; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { background:#1c1c22; color:#9a9aa2; border:1px solid #2a2a32; border-radius:999px; padding:9px 14px; font-size:14px; font-weight:bold; }
+  .chip { background:#1c1c22; color:#9a9aa2; border:1px solid #2a2a32; border-radius:999px; padding:11px 16px; font-size:14px; font-weight:bold; }
   .chip.on { background:#c9a64e; color:#000; border-color:#c9a64e; }
   .chip.wide { flex:1; min-width:70px; text-align:center; }
-  input[type=time], input[type=text], input[type=number] { background:#0d0d10; border:1px solid #22222a; color:#fff; border-radius:10px; padding:10px; font-size:16px; width:100%; }
-  .go { width:100%; background:#c9a64e; color:#000; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:15px; margin-top:16px; }
-  .go:disabled { background:#2a2a32; color:#5a5a62; }
-  .link { background:none; border:none; color:#6a6a72; font-size:11px; text-decoration:underline; padding:6px 0; }
+  .donebtn { width:100%; background:#c9a64e; color:#000; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:15px; margin-top:20px; }
 
-  .alert { background:rgba(201,166,78,.14); border:1px solid #c9a64e; border-radius:14px; padding:12px; margin-top:12px; }
-  .alert .h { color:#c9a64e; font-weight:bold; font-size:14px; }
-  .alert .b { font-size:12px; color:#d8d8dd; margin-top:3px; }
-  .alert button { margin-top:8px; background:#c9a64e; color:#000; border:none; border-radius:8px; padding:7px 16px; font-weight:bold; font-size:12px; }
-  .note { font-size:10px; color:#4a4a52; text-align:center; margin-top:10px; line-height:1.6; }
+  /* ---- アラート ---- */
+  .alertbox { background:rgba(224,168,74,.16); border:2px solid #e0a84a; border-radius:14px; padding:14px; margin-top:10px; animation:blink 1.1s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{ border-color:#e0a84a; } 50%{ border-color:#7a5a1a; } }
+  .alertbox .h { color:#f0c878; font-weight:bold; font-size:18px; }
+  .alertbox .b { font-size:13px; color:#d8d8dd; margin-top:4px; }
+  .alertbox button { margin-top:10px; width:100%; background:#e0a84a; color:#1a1200; border:none; border-radius:10px; padding:13px; font-weight:bold; font-size:14px; }
+  .note { font-size:10px; color:#4a4a52; text-align:center; margin-top:14px; line-height:1.7; }
   .err { background:rgba(224,85,85,.1); border:1px solid #a15050; color:#f0b0b0; border-radius:10px; padding:8px 10px; font-size:11px; margin-top:10px; }
 </style>
 </head>
@@ -156,16 +143,19 @@
     <div class="brand">🔁 振りっこボード</div>
     <div class="sub" id="clock">–</div>
   </div>
-  <button class="me" id="meBtn">店舗を選ぶ</button>
+  <div class="hbtns">
+    <button class="snd" id="sndBtn">🔔</button>
+    <button class="me" id="meBtn">店舗を選ぶ</button>
+  </div>
 </header>
 
 <div class="wrap">
   <div id="alerts"></div>
-  <div id="mine"></div>
-  <div id="theirs"></div>
+  <div id="app"></div>
   <div id="err"></div>
-  <p class="note">
-    10秒ごとに自動更新 ・ <a href="board-manual.html" style="color:#a8e6e2;">📖 使い方ガイド</a>
+  <p class="note" id="note">
+    10秒ごとに自動更新 ・ <a href="board-manual.html" style="color:#a8e6e2;">📖 使い方ガイド</a><br>
+    退店の10分前に音とバイブでお知らせします（この画面を開いたままにしてください）
   </p>
 </div>
 
@@ -175,19 +165,12 @@
     <h3>この端末はどちらのお店？<button data-close>×</button></h3>
     <div class="chips" id="meChips"></div>
     <p class="lbl">選んだお店として書き込みます。両方のお店の状況はどちらを選んでも見られます。</p>
-    <div class="lbl">卓の数（自分のお店を手入力する場合）</div>
-    <div class="chips" id="tcountChips"></div>
-    <div class="lbl">セット時間（チェック時刻の自動計算に使います）</div>
+    <div class="lbl">いつものセット時間（新しい卓の初期値）</div>
     <div class="chips" id="setminChips"></div>
-    <div class="lbl">卓の名前と席数</div>
-    <button class="foldbtn" id="foldTables">▸ 卓の名前と席数を変える（ふだんは触らなくてOK）</button>
-    <div id="tableRows"></div>
+    <p class="lbl">卓の追加・名前・席数・削除は、卓の一覧の画面からできます。</p>
     <button class="donebtn" data-close>✓ 完了</button>
   </div>
 </div>
-
-
-
 
 <script>
 (function () {
@@ -204,22 +187,26 @@
     { id: "vivace", name: "vivace", shareKeys: ["share:viverce", "share:vivace"] },
     { id: "anela",  name: "ANELA",  shareKeys: ["share:ANELA", "share:anela"] }
   ];
-  var LS_ME = "board-me";
+  var LS_ME = "board-me", LS_SND = "board-sound";
+  var SET_MINS = [50, 60];             // セット時間は50分と60分だけ
+  var EXT_HALF = 25, EXT_ONE = 50;     // 延長はハーフ(25分) / ワンタイム(50分)
+  var ALERT_MIN = 10;                  // 退店の何分前に鳴らすか
 
   var me = null;
   var data = {};              // { storeId: boardDoc }
   var autoLeaving = {};       // つけ回しツールから取り込んだ分
   var lastErr = "";
-  var openTid = null;         // 展開中の卓
-  var openMin = null;         // 入店パネルで選択中のセット時間
-  var openInAt = null;        // 入店パネルで選択中の入店時刻(ms)
+  var view = "home";          // "home" = 卓の一覧 / "table" = 卓の画面
+  var openTid = null;         // 卓の画面で開いている卓
+  var soundOn = true;
+  var fired = {};             // 鳴らし済み { "卓id|退店時刻": true }
+  var alerts = [];            // 画面に出ているアラート
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function hhmm(ms) { var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function other(id) { return id === "vivace" ? "anela" : "vivace"; }
   function storeOf(id) { for (var i = 0; i < STORES.length; i++) if (STORES[i].id === id) return STORES[i]; return STORES[0]; }
-  function uid() { return Math.random().toString(36).slice(2, 9); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
 
   // "HH:MM" を今日の時刻(ms)に。深夜営業なので、6時間以上先の指定は前日として扱う。
@@ -229,41 +216,26 @@
     if (d.getTime() - Date.now() > 6 * 3600e3) d.setDate(d.getDate() - 1);
     return d.getTime();
   }
+  // 退店時刻は「入店より後」で読む（0時をまたいでも正しく計算するため）
+  function minsBetween(hm, base) {
+    var p = String(hm).split(":"), d = new Date(base);
+    d.setHours(+p[0], +p[1], 0, 0);
+    var ms = d.getTime();
+    while (ms <= base) ms += 86400000;
+    var m = Math.round((ms - base) / 60000);
+    return Math.max(5, Math.min(720, m));
+  }
   // 時刻はすべて5分単位に丸める（ボードは5分刻みで見るため）
   function round5(ms) { return Math.round(ms / 300000) * 300000; }
-  // セット時間は 50分 と 60分 だけ。延長などで別の値になっている卓は、その値も残して選べるようにする。
-  var SET_MINS = [50, 60];
-  var EXT_HALF = 25, EXT_ONE = 50;   // 延長はハーフ(25分) / ワンタイム(50分)
-  function minOptions(cur) {
-    var list = SET_MINS.indexOf(cur) < 0 && cur ? [cur].concat(SET_MINS) : SET_MINS;
-    return list.map(function (m) {
-      return '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '分</option>';
-    }).join("");
-  }
-  function makeTables(n) {
-    var a = [];
-    for (var i = 1; i <= n; i++) a.push({ id: "t" + i, label: "卓" + i, cap: 4, guests: 0, startAt: 0, planAt: 0, min: 60 });
-    return a;
-  }
+
+  function makeTable(i, min) { return { id: "t" + i, label: "卓" + i, cap: 4, guests: 0, startAt: 0, planAt: 0, min: min || 60 }; }
+  function makeTables(n) { var a = []; for (var i = 1; i <= n; i++) a.push(makeTable(i)); return a; }
   function capOf(t) { return t && t.cap > 0 ? t.cap : 4; }
-  // 空き状況: 卓数だけでなく「何名まで入るか」まで出す（相手店が本当に知りたいのはこっち）
-  function freeInfo(tables) {
-    var free = (tables || []).filter(function (t) { return !(t.guests > 0); });
-    return {
-      count: free.length,
-      max: free.reduce(function (m, t) { return Math.max(m, capOf(t)); }, 0),
-      total: free.reduce(function (s, t) { return s + capOf(t); }, 0)
-    };
-  }
-  // 人数パッド。席数より多い数字は色を落とすだけで、押せなくはしない（詰めて座る事はあるため）
-  function numPad(t) {
-    var cap = capOf(t), max = Math.max(8, cap), h = '<div class="nums">';
-    for (var n = 1; n <= max; n++) h += '<button class="' + (n > cap ? "overcap" : "") + '" data-in="' + t.id + '|' + n + '">' + n + '</button>';
-    return h + '</div>';
-  }
-  function freeText(f) {
-    if (!f.count) return "";
-    return "最大 " + f.max + "名の卓" + (f.count > 1 ? " ・ 合計 " + f.total + "席" : "");
+  function endOf(t) { return (t.startAt || t.planAt || 0) + (t.min || 60) * 60000; }
+  function nextTid(tables) {
+    var max = 0;
+    (tables || []).forEach(function (t) { var n = +String(t.id).replace(/[^0-9]/g, ""); if (n > max) max = n; });
+    return max + 1;
   }
 
   // 卓が空いていてもキャストがいなければ振れない。両方から「何卓・何名まで」を出す。
@@ -279,11 +251,9 @@
       freeTables: free.length, maxSeat: maxSeat,
       castNow: castNow, castTotal: castTotal, freeCast: freeCast,
       coming: Math.max(0, castTotal - castNow),
-      // キャスト未入力の店は席数だけで判断する（今までどおり）
       take: castNow ? Math.min(freeCast, maxSeat) : maxSeat
     };
   }
-  // 大きな箱をやめて1行に。読むのは「空き何卓・何名まで」だけ。
   function availLine(a) {
     var cls = !a.freeTables ? "s-full" : (a.castNow && a.take <= 0) ? "s-soon" : "s-ok";
     var main = !a.freeTables ? "✕ 満席"
@@ -294,7 +264,6 @@
       : "";
     return '<div class="stat ' + cls + '"><b>' + main + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
   }
-  // 出勤キャストの打ち込み（＋−だけ）
   function castBar(doc) {
     var c = doc.casts || {};
     return '<div class="castbar">'
@@ -327,14 +296,19 @@
   function tableLeaving(doc) {
     return (doc.tables || []).filter(function (t) { return t.guests > 0 && t.startAt; })
       .map(function (t) {
-        return { id: "tbl-" + t.id, t: t.startAt + (t.min || 60) * 60000, guests: t.guests, memo: t.label, cap: capOf(t), auto: true, fromTable: t.id, at: Date.now() };
+        return { id: "tbl-" + t.id, t: endOf(t), guests: t.guests, memo: t.label, cap: capOf(t), auto: true, fromTable: t.id, at: Date.now() };
       });
   }
   function syncLeaving(doc) {
     var manual = (doc.leaving || []).filter(function (e) { return !e.fromTable; });
     doc.leaving = manual.concat(tableLeaving(doc));
   }
-
+  // 予定から30分過ぎた手入力分は自動で消す。卓由来は退店を押すまで残す。
+  function prune(list) {
+    var now = Date.now();
+    return (list || []).filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
+      .sort(function (a, b) { return a.t - b.t; }).slice(0, 60);
+  }
   // 自店の書き込みは「読んでから足す」ことで、2人が同時に触っても消し合わない
   function updateMine(fn) {
     if (!me) return Promise.resolve(false);
@@ -344,7 +318,7 @@
       doc.name = storeOf(me).name;
       doc.leaving = doc.leaving || [];
       if (!doc.tables) doc.tables = makeTables(6);
-      doc.tables = doc.tables.map(function (t) { return { ...t, cap: capOf(t) }; });  // 古いデータに席数を補う
+      doc.tables = doc.tables.map(function (t) { return Object.assign({}, t, { cap: capOf(t) }); });
       doc.casts = Object.assign({ now: 0, total: 0 }, doc.casts || {});
       if (!doc.setMin) doc.setMin = 60;
       fn(doc);
@@ -356,27 +330,24 @@
       return putRow(key, doc);
     });
   }
-  // 予定から30分過ぎた手入力分は自動で消す。卓由来は退店を押すまで残す。
-  function prune(list) {
-    var now = Date.now();
-    return (list || []).filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
-      .sort(function (a, b) { return a.t - b.t; }).slice(0, 60);
+  function patchTable(tid, fn) {
+    updateMine(function (d) {
+      d.tables = (d.tables || []).map(function (x) { return x.id === tid ? fn(Object.assign({}, x), d) : x; });
+    });
   }
 
   function fromShare(share) {
     if (!share || !share.tables) return null;
-    var now = Date.now(), out = [], free = 0, freeSeats = 0;
-    var maxSeat = 0;
+    var now = Date.now(), out = [], free = 0, freeSeats = 0, maxSeat = 0;
     share.tables.forEach(function (t) {
       if (!t.busy) { free++; freeSeats += (t.cap || 0); maxSeat = Math.max(maxSeat, t.cap || 0); return; }
       if (t.preparing || t.remainMin == null) return;
       out.push({ id: "auto-" + (t.label || ""), t: now + t.remainMin * 60e3, guests: t.guests || 0, auto: true, memo: t.label || "", cap: t.cap || 0 });
     });
-    var sc = share.casts || null;
     return {
       leaving: out.sort(function (a, b) { return a.t - b.t; }),
       free: free, freeSeats: freeSeats, maxSeat: maxSeat,
-      casts: sc, at: share.at || 0
+      casts: share.casts || null, at: share.at || 0
     };
   }
 
@@ -387,19 +358,81 @@
       jobs.push(getRow(s.shareKeys[0]).then(function (d) { return d || getRow(s.shareKeys[1]); })
         .then(function (d) { autoLeaving[s.id] = fromShare(d); }));
     });
-    return Promise.all(jobs).then(function () { lastErr = ""; render(); })
-      .catch(function (e) { lastErr = String(e && e.message || e); render(); });
+    return Promise.all(jobs).then(function () { lastErr = ""; render(true); })
+      .catch(function (e) { lastErr = String(e && e.message || e); render(true); });
+  }
+
+  // ---------- 退店10分前のアラート ----------
+  var actx = null;
+  function audio() {
+    try {
+      if (!actx) { var C = window.AudioContext || window.webkitAudioContext; if (!C) return null; actx = new C(); }
+      if (actx.state === "suspended") actx.resume();
+      return actx;
+    } catch (e) { return null; }
+  }
+  function beep() {
+    if (!soundOn) return;
+    try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch (e) {}
+    var ctx = audio(); if (!ctx) return;
+    var t0 = ctx.currentTime;
+    for (var i = 0; i < 4; i++) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + i * 0.5;
+      o.type = "sine"; o.frequency.setValueAtTime(i % 2 ? 660 : 990, s);
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.4, s + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.38);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(s); o.stop(s + 0.42);
+    }
+  }
+  function checkAlerts() {
+    if (!me) return;
+    var doc = data[me]; if (!doc || !doc.tables) return;
+    var now = Date.now(), changed = false, live = {};
+    doc.tables.forEach(function (t) {
+      if (!(t.guests > 0 && t.startAt)) return;
+      var end = endOf(t), k = t.id + "|" + end, left = end - now;
+      live[k] = true;
+      if (left <= ALERT_MIN * 60000 && left > 0 && !fired[k]) {
+        fired[k] = true;
+        alerts.push({ k: k, label: t.label, guests: t.guests, end: end });
+        beep(); changed = true;
+      }
+    });
+    // 卓が空いた・時刻を直したときは、鳴らし済みの記録とアラートを片づける
+    Object.keys(fired).forEach(function (k) { if (!live[k]) delete fired[k]; });
+    var before = alerts.length;
+    alerts = alerts.filter(function (a) { return live[a.k] && a.end - now > -15 * 60000; });
+    if (changed || alerts.length !== before) render(true);
+  }
+  function alertHtml() {
+    if (!alerts.length) return "";
+    return alerts.map(function (a) {
+      var left = Math.max(0, Math.ceil((a.end - Date.now()) / 60000));
+      return '<div class="alertbox"><div class="h">🔔 ' + esc(a.label) + ' あと' + left + '分でチェック</div>'
+        + '<div class="b">' + (a.guests || 0) + '名 ・ ' + hhmm(a.end) + ' 退店予定です。ラストのご案内を。</div>'
+        + '<button data-ack="' + esc(a.k) + '">確認した</button></div>';
+    }).join("");
   }
 
   // ---------- 描画 ----------
-  function render() {
+  function render(fromTimer) {
+    // 入力中は作り直さない（時刻を打っている途中で消えないように）
+    if (fromTimer) {
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT")) {
+        $("clock").textContent = hhmm(Date.now()) + " 現在";
+        $("alerts").innerHTML = alertHtml();      // アラートだけは入力中でも出す
+        return;
+      }
+    }
     $("clock").textContent = hhmm(Date.now()) + " 現在";
     $("meBtn").textContent = me ? ("この端末: " + storeOf(me).name) : "▶ 店舗を選ぶ";
-    $("mine").innerHTML = me ? myPanel() : "";
-    $("theirs").innerHTML = theirPanel(me ? other(me) : "vivace") + (me ? "" : theirPanel("anela"));
-    // 設定シートを開いている間は卓の一覧も追従させる（入力中は触らない）
-    if (!$("sheetMe").classList.contains("hidden")
-      && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#tableRows"))) drawTableRows();
+    $("sndBtn").textContent = soundOn ? "🔔" : "🔕";
+    $("sndBtn").className = "snd" + (soundOn ? "" : " off");
+    $("alerts").innerHTML = alertHtml();
+    $("app").innerHTML = (view === "table" && me) ? tableScreen() : homeScreen();
     $("err").innerHTML = lastErr ? '<div class="err">通信エラー: ' + esc(lastErr) + '<br>電波を確認してください。表示は最後に取れた内容です。</div>' : "";
   }
 
@@ -410,110 +443,43 @@
       : '<span class="fresh">' + (m <= 0 ? "たった今" : m + "分前") + '</span>';
   }
 
-  // 自店パネル: 卓をタップ → 人数タップ、で入店。退店予定は自動計算。
+  // 卓の一覧（ホーム）
+  function homeScreen() {
+    return (me ? myPanel() : "") + (me ? theirPanel(other(me)) : theirPanel("vivace") + theirPanel("anela"));
+  }
+
   function myPanel() {
     var doc = data[me] || emptyDoc(me), st = storeOf(me);
-    var auto = autoLeaving[me];
-    // つけ回しツールを使っている店は、卓の手入力は不要
-    if (auto) return theirPanel(me, true);
+    if (autoLeaving[me]) return theirPanel(me, true);   // つけ回しツール連携の店は手入力なし
 
-    var tables = doc.tables || makeTables(6);
+    var tables = doc.tables || [];
     var now = Date.now();
     var h = '<div class="sec mine"><div class="shead"><span class="sname">' + esc(st.name) + '</span>'
       + '<span>' + freshHtml(doc.at) + '</span></div>';
-
-    // いま相手店にどう見えているか（自分でも確認できるように同じものを出す）
     h += availLine(availOf(doc));
     h += castBar(doc);
-
-    // 1画面で打ち切れるように、卓は縦1行ずつ。＋−で人数、▶でスタート。
-    h += '<div class="lv-title">＋で人数 → ▶スタート（時刻を直すなら卓名をタップ）</div><div class="rows">';
+    h += '<div class="lv-title">卓を押すと入力画面がひらきます</div><div class="rows">';
     tables.forEach(function (t) {
-      var busy = t.guests > 0 && t.startAt;
-      var prep = t.guests > 0 && !t.startAt;
-      var cls = "", right;
+      var busy = t.guests > 0 && t.startAt, prep = t.guests > 0 && !t.startAt, cls = "", mid;
       if (busy) {
-        var end = t.startAt + (t.min || 60) * 60000;
-        var rem = Math.ceil((end - now) / 60000);
-        cls = "busy" + (rem <= 0 ? " over" : rem <= 15 ? " soon" : "");
-        right = '<button class="chk" data-tap="' + t.id + '">' + hhmm(end) + ' チェック ▾</button>';
+        var end = endOf(t), rem = Math.ceil((end - now) / 60000);
+        cls = "busy" + (rem <= 0 ? " over" : rem <= ALERT_MIN ? " soon" : "");
+        mid = '<div class="mid"><span class="m1">' + hhmm(end) + ' チェック'
+            + (rem > 0 ? '（残り' + rem + '分）' : '（時間です）') + '</span>'
+            + '<span class="m2">' + t.guests + '名 ・ ' + hhmm(t.startAt) + ' 入店 ・ ' + (t.min || 60) + '分</span></div>';
       } else if (prep) {
         cls = "prep";
-        right = '<button class="go" data-start="' + t.id + '">▶ スタート</button>';
+        mid = '<div class="mid"><span class="m1">▶ スタート待ち</span>'
+            + '<span class="m2">' + t.guests + '名 ・ 押してスタート</span></div>';
       } else {
-        right = '<span class="cap2">' + capOf(t) + '席</span>';
+        mid = '<span class="free">空席 ・ ' + capOf(t) + '席</span>';
       }
-      h += '<div class="row ' + cls + '">'
-        + '<button class="nm" data-tap="' + t.id + '">' + esc(t.label) + '</button>'
-        + '<div class="cnt">'
-        +   '<button data-guest="' + t.id + '|-1"' + (t.guests > 0 ? '' : ' disabled') + '>−</button>'
-        +   '<span class="n">' + (t.guests > 0 ? t.guests + '名' : '空') + '</span>'
-        +   '<button data-guest="' + t.id + '|1">＋</button>'
-        + '</div>'
-        + '<div class="rt">' + right + '</div>'
-        + '</div>';
+      h += '<button class="row ' + cls + '" data-open="' + t.id + '">'
+        + '<span class="nm">' + esc(t.label) + '</span>' + mid + '<span class="arw">›</span></button>';
     });
-    h += '</div>';
+    h += '</div><button class="addbtn" id="addT">＋ 卓を追加する</button>';
 
-    // タップした卓の操作パネル（シートを開かずその場で）
-    if (openTid) {
-      var t2 = tables.filter(function (x) { return x.id === openTid; })[0];
-      if (t2) {
-        var busy2 = t2.guests > 0 && t2.startAt;
-        var prep2 = t2.guests > 0 && !t2.startAt;
-        h += '<div class="expand">';
-        if (prep2) {
-          // 人数だけ入れた状態。▶スタートを押すまでタイマーは動かず、相手店にも流さない。
-          var pAt = t2.planAt || round5(Date.now());
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名）・ ▶スタートで計り始めます</div>'
-            + '<div class="erow">'
-            + '<label>セット</label><select id="prepSetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
-            + '<label>入店</label><input type="time" id="prepInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(pAt) + '">'
-            + '<button class="now" data-prep-now="' + t2.id + '">今にする</button>'
-            + '</div>'
-            + '<button class="a-start" data-start="' + t2.id + '">▶ スタート（' + hhmm(pAt) + ' → ' + hhmm(pAt + (t2.min || 60) * 60000) + '）</button>'
-            + '<div class="lv-title">人数を直す（この卓は' + capOf(t2) + '席）</div>'
-            + numPad(t2);
-          h += ''
-            + '<div class="acts" style="margin-top:8px">'
-            + '<button class="a-out" data-out="' + t2.id + '">取り消す</button>'
-            + '<button class="a-cancel" data-close-exp>閉じる</button>'
-            + '</div>';
-        } else if (!busy2) {
-          var curMin = openMin == null ? (doc.setMin || 60) : openMin;
-          var curAt = openInAt == null ? round5(Date.now()) : openInAt;
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + capOf(t2) + '席）に何名入りましたか？</div>'
-            + '<div class="erow">'
-            + '<label>セット</label><select id="expSetMin">' + minOptions(curMin) + '</select>'
-            + '<label>入店</label><input type="time" id="expInAt" step="300" value="' + hhmm(curAt) + '">'
-            + '<button class="now" id="expNow">今にする</button>'
-            + '</div>'
-            + numPad(t2)
-            + '<div style="margin-top:8px"><button class="link" data-close-exp>閉じる</button></div>';
-        } else {
-          var endT = t2.startAt + (t2.min || 60) * 60000;
-          h += '<div class="lbl2">' + esc(t2.label) + '（' + t2.guests + '名 ・ ' + hhmm(t2.startAt) + ' IN → ' + hhmm(endT) + ' チェック）</div>'
-            + '<div class="erow">'
-            + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
-            + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(t2.startAt) + '">'
-            + '</div>'
-            // 延長はハーフ(25分)かワンタイム(50分)。押すとチェック時刻がその分うしろへ動く。
-            + '<div class="acts">'
-            + '<button class="a-ext" data-ext="' + t2.id + '|' + EXT_HALF + '">ハーフ ＋' + EXT_HALF + '分'
-            +   '<span class="sub">→ ' + hhmm(endT + EXT_HALF * 60000) + ' チェック</span></button>'
-            + '<button class="a-ext" data-ext="' + t2.id + '|' + EXT_ONE + '">ワンタイム ＋' + EXT_ONE + '分'
-            +   '<span class="sub">→ ' + hhmm(endT + EXT_ONE * 60000) + ' チェック</span></button>'
-            + '</div>'
-            + '<div class="acts" style="margin-top:8px">'
-            + '<button class="a-out" data-out="' + t2.id + '">退店した</button>'
-            + '<button class="a-cancel" data-close-exp>閉じる</button>'
-            + '</div>';
-        }
-        h += '</div>';
-      }
-    }
-
-    // 手入力の退店予定（イレギュラー用）だけ別枠で出す
+    // 手入力の退店予定（イレギュラー用）だけ別枠で残す
     var manual = (doc.leaving || []).filter(function (e) { return !e.fromTable; });
     if (manual.length) {
       h += '<div class="lv-title">手入力のチェック予定</div>';
@@ -526,8 +492,68 @@
           + '<button class="del" data-del="' + e.id + '">×</button></div>';
       });
     }
+    return h + '</div>';
+  }
+
+  // 卓の画面（一覧から切り替わる）
+  function tableScreen() {
+    var doc = data[me] || emptyDoc(me);
+    var t = (doc.tables || []).filter(function (x) { return x.id === openTid; })[0];
+    if (!t) { view = "home"; openTid = null; return homeScreen(); }
+
+    var started = t.guests > 0 && t.startAt;
+    var inAt = started ? t.startAt : (t.planAt || round5(Date.now()));
+    var min = t.min || doc.setMin || 60;
+    var end = inAt + min * 60000;
+    var cap = capOf(t), max = Math.max(9, cap);
+
+    var h = '<button class="backbtn" id="backB">← 卓の一覧にもどる</button><div class="dtl">';
+    h += '<div class="drow"><input class="dname" type="text" data-tname="' + t.id + '" value="' + esc(t.label) + '" maxlength="10">'
+      + '<select class="dcap" data-tcap="' + t.id + '">'
+      + [1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(function (c) {
+          return '<option value="' + c + '"' + (c === cap ? ' selected' : '') + '>' + c + '席</option>';
+        }).join("") + '</select></div>';
+
+    // 人数
+    h += '<div class="dlbl">人数</div><div class="pads">'
+      + '<button class="zero' + (t.guests > 0 ? '' : ' on') + '" data-num="' + t.id + '|0">空</button>';
+    for (var n = 1; n <= max; n++) {
+      h += '<button class="' + (n === t.guests ? "on" : n > cap ? "overcap" : "") + '" data-num="' + t.id + '|' + n + '">' + n + '</button>';
+    }
     h += '</div>';
-    return h;
+
+    // セット時間（50分 / 60分）
+    var mins = SET_MINS.indexOf(min) < 0 ? [min].concat(SET_MINS) : SET_MINS;
+    h += '<div class="dlbl">セット時間</div><div class="mchips">'
+      + mins.map(function (m) {
+          return '<button class="' + (m === min ? "on" : "") + '" data-min="' + t.id + '|' + m + '">' + m + '分</button>';
+        }).join("") + '</div>';
+
+    // 入店・退店（どちらも後から直せる）
+    h += '<div class="dlbl">入店・退店の時刻（あとから直せます）</div><div class="tfields">'
+      + '<div class="tfield"><span>入店</span><input type="time" step="300" id="dIn" data-tid="' + t.id + '" value="' + hhmm(inAt) + '">'
+      +   '<button class="nowb" data-now="' + t.id + '">今の時刻にする</button></div>'
+      + '<div class="tfield"><span>退店（チェック）</span><input type="time" step="300" id="dOut" data-tid="' + t.id + '" value="' + hhmm(end) + '"></div>'
+      + '</div>';
+
+    if (!started) {
+      h += '<button class="startbtn" data-start="' + t.id + '"' + (t.guests > 0 ? '' : ' disabled') + '>▶ スタート</button>'
+        + '<p class="dnote">' + (t.guests > 0
+            ? hhmm(inAt) + ' 入店 → ' + hhmm(end) + ' チェック（' + min + '分）'
+            : 'まず人数を押してください') + '</p>';
+    } else {
+      var rem = Math.ceil((end - Date.now()) / 60000);
+      h += '<div class="dstat' + (rem <= 0 ? " over" : rem <= ALERT_MIN ? " soon" : "") + '">'
+        + (rem > 0 ? "残り " + rem + "分" : "チェック時刻を過ぎています")
+        + '<span>' + hhmm(t.startAt) + ' 入店 → ' + hhmm(end) + ' チェック</span></div>'
+        + '<div class="acts">'
+        + '<button data-ext="' + t.id + '|' + EXT_HALF + '">ハーフ ＋' + EXT_HALF + '分<span class="sub">→ ' + hhmm(end + EXT_HALF * 60000) + '</span></button>'
+        + '<button data-ext="' + t.id + '|' + EXT_ONE + '">ワンタイム ＋' + EXT_ONE + '分<span class="sub">→ ' + hhmm(end + EXT_ONE * 60000) + '</span></button>'
+        + '</div>'
+        + '<button class="outbtn" data-out="' + t.id + '">退店（この卓を空ける）</button>';
+    }
+    h += '<button class="delbtn" data-delt="' + t.id + '">この卓を削除する</button>';
+    return h + '</div>';
   }
 
   // 相手店パネル（読むだけ）。自店がツール連携済みの場合もこれを使う。
@@ -536,19 +562,16 @@
     var updAt = Math.max(doc.at || 0, auto ? auto.at || 0 : 0);
     var accHtml;
     if (auto) {
-      // つけ回しツール連携の店。キャスト人数も送ってくるので手入力の店と同じ見え方にする。
       var sc = auto.casts || null;
-      var aa = {
+      accHtml = availLine({
         freeTables: auto.free, maxSeat: auto.maxSeat,
         castNow: sc ? (sc.now || 0) : 0,
         castTotal: sc ? Math.max(sc.total || 0, sc.now || 0) : 0,
         freeCast: sc ? (sc.free || 0) : 0,
         coming: sc ? Math.max(0, (sc.total || 0) - (sc.now || 0)) : 0,
         take: sc && sc.now ? Math.min(sc.free || 0, auto.maxSeat) : auto.maxSeat
-      };
-      accHtml = availLine(aa);
+      });
     } else {
-      // 卓とキャストの入力から「何卓・何名まで振れるか」を自動で出す
       var tb = doc.tables || [];
       accHtml = tb.length ? availLine(availOf(doc)) : '<div class="stat">受入状況 未入力</div>';
     }
@@ -559,7 +582,6 @@
     var lvHtml = list.length ? "" : '<div class="empty">今は誰も出る予定なし</div>';
     list.forEach(function (e) {
       var diff = Math.round((e.t - now) / 60000);
-      // 1行に「卓名 何名 何時にチェック」だけ
       lvHtml += '<div class="lv ' + (diff <= 0 ? "now" : diff <= 15 ? "soon" : "") + '">'
         + (e.memo ? '<span class="tbl">' + esc(e.memo) + '</span>' : '')
         + '<span class="g">' + (e.guests || 0) + '名</span>'
@@ -570,11 +592,9 @@
       + '<span>' + freshHtml(updAt) + '</span></div>' + accHtml + lvHtml + '</div>';
   }
 
-
-  // ---------- 操作 ----------
+  // ---------- 設定シート ----------
   function openSheet(id) { $(id).classList.remove("hidden"); }
   function closeSheets() { $("sheetMe").classList.add("hidden"); }
-
   function chipRow(host, items, cur, onPick, wide) {
     host.innerHTML = "";
     items.forEach(function (it) {
@@ -587,85 +607,105 @@
   }
   function drawMe() {
     chipRow($("meChips"), STORES.map(function (s) { return { l: s.name, v: s.id }; }), me, function (v) {
-      me = v; try { localStorage.setItem(LS_ME, v); } catch (e) {}
+      me = v; view = "home"; openTid = null;
+      try { localStorage.setItem(LS_ME, v); } catch (e) {}
       drawMe(); render(); poll();
     }, true);
     var doc = (me && data[me]) || null;
-    var n = doc && doc.tables ? doc.tables.length : 6;
-    chipRow($("tcountChips"), [4, 5, 6, 7, 8, 10, 12].map(function (v) { return { l: v + "卓", v: v }; }), n, function (v) {
-      updateMine(function (d) {
-        var old = d.tables || [];
-        var next = makeTables(v);
-        next.forEach(function (t, i) {
-          if (!old[i]) return;
-          t.label = old[i].label; t.cap = capOf(old[i]);   // 名前と席数は卓数を変えても残す
-          t.guests = old[i].guests; t.startAt = old[i].startAt; t.planAt = old[i].planAt || 0; t.min = old[i].min;
-        });
-        d.tables = next;
-      }).then(drawMe);
-    });
-    drawTableRows();
     var sm = doc && doc.setMin ? doc.setMin : 60;
     chipRow($("setminChips"), SET_MINS.map(function (v) { return { l: v + "分", v: v }; }), sm, function (v) {
       updateMine(function (d) { d.setMin = v; }).then(drawMe);
-    });
+    }, true);
   }
-  // 卓の名前と席数の編集。ふだんは触らないので畳んでおく（開くと設定シートが埋まってしまうため）
-  var tableFold = false;
-  function drawTableRows() {
-    var host = $("tableRows"), btn = $("foldTables"); if (!host) return;
-    var doc = (me && data[me]) || null;
-    if (!doc || !doc.tables || autoLeaving[me]) {
-      if (btn) btn.style.display = "none";
-      host.innerHTML = autoLeaving[me]
-        ? '<p class="lbl" style="margin:0">つけ回しツールから自動で取り込んでいるので、ここでの卓設定は使いません。</p>' : "";
-      return;
-    }
-    if (btn) {
-      btn.style.display = "";
-      btn.textContent = (tableFold ? "▾" : "▸") + " 卓の名前と席数を変える（ふだんは触らなくてOK）";
-    }
-    if (!tableFold) { host.innerHTML = ""; return; }
-    host.innerHTML = '<p class="lbl" style="margin:8px 0 6px">席数を入れておくと、相手店に「最大◯名まで入る」と伝わります。</p>'
-      + doc.tables.map(function (t, i) {
-      return '<div class="trow">'
-        + '<input type="text" data-tname="' + t.id + '" value="' + esc(t.label) + '" placeholder="卓' + (i + 1) + '" maxlength="10">'
-        + '<select data-tcap="' + t.id + '">'
-        + [1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(function (c) {
-            return '<option value="' + c + '"' + (c === capOf(t) ? ' selected' : '') + '>' + c + '席</option>';
-          }).join("")
-        + '</select></div>';
-      }).join("");
-  }
-  function needMe() { if (me) return true; drawMe(); openSheet("sheetMe"); return false; }
 
   try { me = localStorage.getItem(LS_ME); } catch (e) {}
   if (!STORES.some(function (s) { return s.id === me; })) me = null;
+  try { soundOn = localStorage.getItem(LS_SND) !== "off"; } catch (e) {}
 
   $("meBtn").onclick = function () { drawMe(); openSheet("sheetMe"); };
+  $("sndBtn").onclick = function () {
+    soundOn = !soundOn;
+    try { localStorage.setItem(LS_SND, soundOn ? "on" : "off"); } catch (e) {}
+    if (soundOn) beep();
+    render();
+  };
 
+  // ---------- 操作 ----------
   document.addEventListener("click", function (ev) {
-    var t = ev.target.closest ? (ev.target.closest("[data-tap],[data-in],[data-guest],[data-cast],[data-start],[data-prep-now],[data-ext],[data-out],[data-del],[data-close],[data-close-exp]") || ev.target) : ev.target;
-    if (t.id === "foldTables") { tableFold = !tableFold; drawTableRows(); return; }
-    if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
-    if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
-    if (t.hasAttribute && t.hasAttribute("data-close-exp")) { openTid = null; render(); return; }
+    audio();   // iPhoneは画面を触って初めて音が出せるようになるため、毎回起こしておく
+    var t = ev.target.closest
+      ? (ev.target.closest("[data-open],[data-num],[data-min],[data-now],[data-start],[data-ext],[data-out],[data-delt],[data-del],[data-cast],[data-ack],[data-close]") || ev.target)
+      : ev.target;
 
-    if (t.id === "expNow") { openInAt = round5(Date.now()); render(); return; }
-    var pnow = t.getAttribute && t.getAttribute("data-prep-now");
-    if (pnow) {
+    if (t.id === "backB") { view = "home"; openTid = null; render(); return; }
+    if (t.id === "addT") {
       updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) { return x.id === pnow ? { ...x, planAt: round5(Date.now()) } : x; });
+        var tb = d.tables || [];
+        if (tb.length >= 20) return;
+        tb.push(makeTable(nextTid(tb), d.setMin || 60));
+        d.tables = tb;
       });
       return;
     }
-    var tap = t.getAttribute && t.getAttribute("data-tap");
-    if (tap) {
-      openTid = (openTid === tap ? null : tap);
-      openMin = null; openInAt = null; // 開くたびに「今」と既定のセット時間から始める
-      render(); return;
-    }
+    if (t.hasAttribute && t.hasAttribute("data-close")) { closeSheets(); return; }
+    if (t.classList && t.classList.contains("sheet")) { closeSheets(); return; }
 
+    var ack = t.getAttribute && t.getAttribute("data-ack");
+    if (ack) { alerts = alerts.filter(function (a) { return a.k !== ack; }); render(); return; }
+
+    // 卓を押す → 卓の画面へ切り替え
+    var op = t.getAttribute && t.getAttribute("data-open");
+    if (op) { openTid = op; view = "table"; window.scrollTo(0, 0); render(); return; }
+
+    // 人数（0は空席にもどす）
+    var num = t.getAttribute && t.getAttribute("data-num");
+    if (num) {
+      var np = num.split("|"), ntid = np[0], ng = +np[1];
+      patchTable(ntid, function (x, d) {
+        if (ng === 0) { x.guests = 0; x.startAt = 0; x.planAt = 0; x.min = d.setMin || 60; return x; }
+        if (!x.guests) { x.planAt = x.planAt || round5(Date.now()); x.min = x.min || d.setMin || 60; }
+        x.guests = ng;
+        return x;
+      });
+      return;
+    }
+    // セット時間（50分 / 60分）
+    var mn = t.getAttribute && t.getAttribute("data-min");
+    if (mn) { var mp = mn.split("|"); patchTable(mp[0], function (x) { x.min = +mp[1]; return x; }); return; }
+    // 入店時刻を今にする
+    var nw = t.getAttribute && t.getAttribute("data-now");
+    if (nw) {
+      patchTable(nw, function (x) {
+        if (x.startAt) x.startAt = round5(Date.now()); else x.planAt = round5(Date.now());
+        return x;
+      });
+      return;
+    }
+    // ▶スタート: ここから計り始め、相手店の「これから出るお客様」に載る
+    var stt = t.getAttribute && t.getAttribute("data-start");
+    if (stt) {
+      patchTable(stt, function (x) { x.startAt = x.planAt || round5(Date.now()); x.planAt = 0; return x; });
+      view = "home"; openTid = null; window.scrollTo(0, 0);
+      return;
+    }
+    // 延長（ハーフ / ワンタイム）
+    var ext = t.getAttribute && t.getAttribute("data-ext");
+    if (ext) { var ep = ext.split("|"); patchTable(ep[0], function (x) { x.min = (x.min || 60) + (+ep[1]); return x; }); return; }
+    // 退店
+    var out = t.getAttribute && t.getAttribute("data-out");
+    if (out) {
+      patchTable(out, function (x, d) { x.guests = 0; x.startAt = 0; x.planAt = 0; x.min = d.setMin || 60; return x; });
+      view = "home"; openTid = null; window.scrollTo(0, 0);
+      return;
+    }
+    // 卓を削除
+    var dlt = t.getAttribute && t.getAttribute("data-delt");
+    if (dlt) {
+      if (!window.confirm("この卓を削除します。よろしいですか？")) return;
+      updateMine(function (d) { d.tables = (d.tables || []).filter(function (x) { return x.id !== dlt; }); });
+      view = "home"; openTid = null; window.scrollTo(0, 0);
+      return;
+    }
     // 出勤キャストの増減
     var cst = t.getAttribute && t.getAttribute("data-cast");
     if (cst) {
@@ -673,123 +713,53 @@
       updateMine(function (d) {
         var c = Object.assign({ now: 0, total: 0 }, d.casts || {});
         c[fld] = Math.max(0, Math.min(60, (c[fld] || 0) + dl));
-        if (fld === "now" && c.now > c.total) c.total = c.now;      // 今いる数が本日の予定を超えたら合わせる
+        if (fld === "now" && c.now > c.total) c.total = c.now;
         if (fld === "total" && c.total < c.now) c.now = c.total;
         d.casts = c;
       });
-      return;
-    }
-    // 卓の人数を ＋− で直す。0→1 で準備中になり、0 に戻すと空席。
-    var gst = t.getAttribute && t.getAttribute("data-guest");
-    if (gst) {
-      var gp = gst.split("|"), gtid = gp[0], gd = +gp[1];
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) {
-          if (x.id !== gtid) return x;
-          var n = Math.max(0, Math.min(20, (x.guests || 0) + gd));
-          if (n === 0) return { ...x, guests: 0, startAt: 0, planAt: 0, min: d.setMin || 60 };
-          if (!x.guests) return { ...x, guests: n, startAt: 0, planAt: round5(Date.now()), min: d.setMin || 60 };
-          return { ...x, guests: n };
-        });
-      });
-      return;
-    }
-    // 人数を入れた時点では「準備中」。タイマーは▶スタートを押すまで動かさない。
-    var inn = t.getAttribute && t.getAttribute("data-in");
-    if (inn) {
-      var p = inn.split("|"), tid = p[0], g = +p[1];
-      var selEl = $("expSetMin") || $("prepSetMin"), atEl = $("expInAt") || $("prepInAt");
-      var useMin = selEl ? +selEl.value : (openMin || 60);
-      var useAt = atEl && atEl.value ? timeToMs(atEl.value) : (openInAt || round5(Date.now()));
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) {
-          return x.id === tid ? { ...x, guests: g, startAt: 0, planAt: useAt, min: useMin } : x;
-        });
-      });
-      openMin = null; openInAt = null;   // openTid は開いたまま → そのまま▶スタートを押せる
-      return;
-    }
-    // ▶スタート: この時点から計り始め、相手店の「これから出るお客様」に載る
-    var stt = t.getAttribute && t.getAttribute("data-start");
-    if (stt) {
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) {
-          return x.id === stt ? { ...x, startAt: x.planAt || round5(Date.now()), planAt: 0 } : x;
-        });
-      });
-      openTid = null;
-      return;
-    }
-    var ext = t.getAttribute && t.getAttribute("data-ext");
-    if (ext) {
-      var q = ext.split("|"), tid2 = q[0], add = +q[1];
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, min: (x.min || 60) + add } : x; });
-      });
-      return;
-    }
-    var out = t.getAttribute && t.getAttribute("data-out");
-    if (out) {
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x) { return x.id === out ? { ...x, guests: 0, startAt: 0, planAt: 0, min: d.setMin || 60 } : x; });
-      });
-      openTid = null;
       return;
     }
     var del = t.getAttribute && t.getAttribute("data-del");
     if (del) { updateMine(function (d) { d.leaving = (d.leaving || []).filter(function (e) { return e.id !== del; }); }); return; }
   });
 
-  // プルダウン・時刻の変更
+  // 時刻・名前・席数の変更
   document.addEventListener("change", function (ev) {
-    var el = ev.target;
-    if (!el) return;
-    // 卓の名前・席数（設定シート）
-    var tn = el.getAttribute && el.getAttribute("data-tname");
+    var el = ev.target; if (!el || !el.getAttribute) return;
+
+    var tn = el.getAttribute("data-tname");
     if (tn) {
       var nm = String(el.value || "").trim();
-      updateMine(function (d) {
-        d.tables = (d.tables || []).map(function (x, i) { return x.id === tn ? { ...x, label: nm || ("卓" + (i + 1)) } : x; });
-      }).then(drawTableRows);
+      patchTable(tn, function (x) { x.label = nm || x.id.toUpperCase(); return x; });
       return;
     }
-    var tc = el.getAttribute && el.getAttribute("data-tcap");
-    if (tc) {
-      var cv = +el.value;
-      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tc ? { ...x, cap: cv } : x; }); });
+    var tc = el.getAttribute("data-tcap");
+    if (tc) { var cv = +el.value; patchTable(tc, function (x) { x.cap = cv; return x; }); return; }
+
+    if (el.id === "dIn" && el.value) {          // 入店時刻（開始前・接客中どちらも直せる）
+      var itid = el.getAttribute("data-tid"), at = round5(timeToMs(el.value));
+      patchTable(itid, function (x) {
+        if (x.startAt) x.startAt = at; else x.planAt = at;
+        return x;
+      });
       return;
     }
-    if (!el.id) return;
-    if (el.id === "expSetMin") { openMin = +el.value; return; }      // 入店前の下書き
-    if (el.id === "expInAt") { if (el.value) openInAt = round5(timeToMs(el.value)); return; }
-    if (el.id === "prepSetMin") {                                     // 準備中のセット時間
-      var ptid = el.getAttribute("data-tid"), pv = +el.value;
-      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === ptid ? { ...x, min: pv } : x; }); });
-      return;
-    }
-    if (el.id === "prepInAt") {                                       // 準備中の入店時刻
-      var ptid2 = el.getAttribute("data-tid"), pat = round5(timeToMs(el.value));
-      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === ptid2 ? { ...x, planAt: pat } : x; }); });
-      return;
-    }
-    if (el.id === "busySetMin") {                                     // 接客中のセット時間を変更
-      var tid = el.getAttribute("data-tid"), v = +el.value;
-      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid ? { ...x, min: v } : x; }); });
-      return;
-    }
-    if (el.id === "busyInAt") {                                       // 入店時刻の打ち間違いを直す
-      var tid2 = el.getAttribute("data-tid"), at = round5(timeToMs(el.value));
-      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, startAt: at } : x; }); });
+    if (el.id === "dOut" && el.value) {          // 退店時刻（入店からの分数として持つ）
+      var otid = el.getAttribute("data-tid");
+      patchTable(otid, function (x, d) {
+        var base = x.startAt || x.planAt || round5(Date.now());
+        x.min = minsBetween(el.value, base);
+        return x;
+      });
       return;
     }
   });
-
 
   render();
   if (!me) { drawMe(); openSheet("sheetMe"); }
   poll();
   setInterval(poll, 10000);
-  setInterval(render, 30000);
+  setInterval(function () { checkAlerts(); render(true); }, 5000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
 })();
 </script>
