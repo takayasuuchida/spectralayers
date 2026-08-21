@@ -155,7 +155,7 @@
   <div id="err"></div>
   <p class="note" id="note">
     10秒ごとに自動更新 ・ <a href="board-manual.html" style="color:#a8e6e2;">📖 使い方ガイド</a><br>
-    退店の10分前に音とバイブでお知らせします（この画面を開いたままにしてください）
+    退店の5分前に音とバイブでお知らせします（この画面を開いたままにしてください）
   </p>
 </div>
 
@@ -190,7 +190,8 @@
   var LS_ME = "board-me", LS_SND = "board-sound";
   var SET_MINS = [50, 60];             // セット時間は50分と60分だけ
   var EXT_HALF = 25, EXT_ONE = 50;     // 延長はハーフ(25分) / ワンタイム(50分)
-  var ALERT_MIN = 10;                  // 退店の何分前に鳴らすか
+  var ALERT_MIN = 5;                   // 退店の何分前に鳴らすか
+  var SOON_MIN = 10;                   // 卓をオレンジ（そろそろ）にし始める何分前か
 
   var me = null;
   var data = {};              // { storeId: boardDoc }
@@ -198,11 +199,31 @@
   var lastErr = "";
   var view = "home";          // "home" = 卓の一覧 / "table" = 卓の画面
   var openTid = null;         // 卓の画面で開いている卓
+  var homeScroll = 0;         // 一覧に戻ったとき、見ていた位置に戻すため
   var soundOn = true;
   var fired = {};             // 鳴らし済み { "卓id|退店時刻": true }
   var alerts = [];            // 画面に出ているアラート
 
   function $(id) { return document.getElementById(id); }
+
+  // 卓の画面を開く／一覧へ戻る。戻ったときは見ていた位置に戻す。
+  function openTable(tid) {
+    if (view !== "table") homeScroll = window.pageYOffset || 0;
+    view = "table"; openTid = tid;
+    render();
+    window.scrollTo(0, 0);
+    try { history.pushState({ boardTable: tid }, ""); } catch (e) {}
+  }
+  function backHome(fromPop) {
+    if (view !== "table") return;
+    view = "home"; openTid = null;
+    render();
+    var y = homeScroll;
+    setTimeout(function () { window.scrollTo(0, y); }, 0);
+    // 端末の「戻る」で来たときは、履歴はもう戻っている
+    if (!fromPop) { try { history.back(); } catch (e) {} }
+  }
+  window.addEventListener("popstate", function () { backHome(true); });
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function hhmm(ms) { var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function other(id) { return id === "vivace" ? "anela" : "vivace"; }
@@ -362,7 +383,7 @@
       .catch(function (e) { lastErr = String(e && e.message || e); render(true); });
   }
 
-  // ---------- 退店10分前のアラート ----------
+  // ---------- 退店5分前のアラート ----------
   var actx = null;
   function audio() {
     try {
@@ -463,7 +484,7 @@
       var busy = t.guests > 0 && t.startAt, prep = t.guests > 0 && !t.startAt, cls = "", mid;
       if (busy) {
         var end = endOf(t), rem = Math.ceil((end - now) / 60000);
-        cls = "busy" + (rem <= 0 ? " over" : rem <= ALERT_MIN ? " soon" : "");
+        cls = "busy" + (rem <= 0 ? " over" : rem <= SOON_MIN ? " soon" : "");
         mid = '<div class="mid"><span class="m1">' + hhmm(end) + ' チェック'
             + (rem > 0 ? '（残り' + rem + '分）' : '（時間です）') + '</span>'
             + '<span class="m2">' + t.guests + '名 ・ ' + hhmm(t.startAt) + ' 入店 ・ ' + (t.min || 60) + '分</span></div>';
@@ -543,7 +564,7 @@
             : 'まず人数を押してください') + '</p>';
     } else {
       var rem = Math.ceil((end - Date.now()) / 60000);
-      h += '<div class="dstat' + (rem <= 0 ? " over" : rem <= ALERT_MIN ? " soon" : "") + '">'
+      h += '<div class="dstat' + (rem <= 0 ? " over" : rem <= SOON_MIN ? " soon" : "") + '">'
         + (rem > 0 ? "残り " + rem + "分" : "チェック時刻を過ぎています")
         + '<span>' + hhmm(t.startAt) + ' 入店 → ' + hhmm(end) + ' チェック</span></div>'
         + '<div class="acts">'
@@ -637,7 +658,7 @@
       ? (ev.target.closest("[data-open],[data-num],[data-min],[data-now],[data-start],[data-ext],[data-out],[data-delt],[data-del],[data-cast],[data-ack],[data-close]") || ev.target)
       : ev.target;
 
-    if (t.id === "backB") { view = "home"; openTid = null; render(); return; }
+    if (t.id === "backB") { backHome(); return; }
     if (t.id === "addT") {
       updateMine(function (d) {
         var tb = d.tables || [];
@@ -655,7 +676,7 @@
 
     // 卓を押す → 卓の画面へ切り替え
     var op = t.getAttribute && t.getAttribute("data-open");
-    if (op) { openTid = op; view = "table"; window.scrollTo(0, 0); render(); return; }
+    if (op) { openTable(op); return; }
 
     // 人数（0は空席にもどす）
     var num = t.getAttribute && t.getAttribute("data-num");
@@ -685,7 +706,7 @@
     var stt = t.getAttribute && t.getAttribute("data-start");
     if (stt) {
       patchTable(stt, function (x) { x.startAt = x.planAt || round5(Date.now()); x.planAt = 0; return x; });
-      view = "home"; openTid = null; window.scrollTo(0, 0);
+      backHome();
       return;
     }
     // 延長（ハーフ / ワンタイム）
@@ -695,7 +716,7 @@
     var out = t.getAttribute && t.getAttribute("data-out");
     if (out) {
       patchTable(out, function (x, d) { x.guests = 0; x.startAt = 0; x.planAt = 0; x.min = d.setMin || 60; return x; });
-      view = "home"; openTid = null; window.scrollTo(0, 0);
+      backHome();
       return;
     }
     // 卓を削除
@@ -703,7 +724,7 @@
     if (dlt) {
       if (!window.confirm("この卓を削除します。よろしいですか？")) return;
       updateMine(function (d) { d.tables = (d.tables || []).filter(function (x) { return x.id !== dlt; }); });
-      view = "home"; openTid = null; window.scrollTo(0, 0);
+      backHome();
       return;
     }
     // 出勤キャストの増減
