@@ -174,8 +174,14 @@
   「◯ 2卓 ・ 4名までOK」。これが相手店にそのまま出ています。</p>
   <p style="margin-top:10px;"><span class="gold">■ その下 ＝ 出勤キャストの人数</span><br>
   今いる人数と、本日の出勤予定人数。＋−で打つだけです。</p>
-  <p style="margin-top:10px;"><span class="gold">■ その下 ＝ 卓が縦に1行ずつ</span><br>
+  <p style="margin-top:10px;"><span class="gold">■ その下 ＝ 卓が縦に1行ずつ（チェックが近い順）</span><br>
   1行に「卓の名前」と「何名・何時にチェック・残り何分」だけ。<b>その行を押すと、その卓だけの画面に切り替わります。</b></p>
+  <p style="margin-top:6px;font-size:13px;"><b>並び順は「チェックが近い順」です。</b>上から
+  <span style="color:#f0a0a0;">時間を過ぎた卓</span> →
+  <span style="color:#e8c07a;">もうすぐ出る卓</span> → まだ先の卓 →
+  <span class="teal">スタート待ち</span> → 空席、の順に並びます。
+  <b>一番上がいま一番急ぐ卓</b>なので、上から見ればそれで足ります。</p>
+  <p style="margin-top:6px;font-size:13px;">延長を入れたり時刻を直したりすると、<b>並びもその場で入れ替わります</b>（卓の位置は固定ではありません）。</p>
   <p style="margin-top:10px;"><span class="gold">■ 一覧の一番下 ＝ ＋ 卓を追加する</span><br>
   卓が足りない時はここで増やします。</p>
   <p style="margin-top:10px;"><span class="teal">■ 下 ＝ 相手のお店</span><br>
@@ -185,7 +191,8 @@
 </div>
 <div class="card">
   <p style="font-size:12px;color:#8a8a92;margin-bottom:6px;">▼ 卓の一覧はこう見えます（押すと卓の画面へ）</p>
-  <div class="drow"><span class="nm">卓1</span><span><span class="m1">02:55 チェック（残り32分）</span><span class="m2">3名 ・ 02:00 入店 ・ 60分</span></span><span class="arw">›</span></div>
+  <div class="drow soon"><span class="nm">カウンター</span><span><span class="m1">02:20 チェック（残り8分）</span><span class="m2">2名 ・ 01:30 入店 ・ 50分</span></span><span class="arw">›</span></div>
+  <div class="drow busy"><span class="nm">卓1</span><span><span class="m1">02:55 チェック（残り32分）</span><span class="m2">3名 ・ 02:00 入店 ・ 60分</span></span><span class="arw">›</span></div>
   <div class="drow"><span class="nm">VIP</span><span class="m1" style="color:#8a8a92;font-weight:normal;">空席 ・ 6席</span><span class="arw">›</span></div>
 </div>
 <p><b>10秒ごとに自動で更新</b>されます。自分で更新ボタンを押す必要はありません。画面を閉じて開き直した時も、すぐ最新になります。</p>
@@ -291,11 +298,12 @@
 </div>
 
 <h2 id="s6">6. 卓の色でわかること</h2>
-<div class="drow"><span class="nm">ボックス2</span><span class="m1" style="color:#8a8a92;font-weight:normal;">空席 ・ 6席</span><span class="arw">›</span></div>
-<div class="drow prep"><span class="nm">VIP</span><span><span class="m1">▶ スタート待ち</span><span class="m2">3名 ・ 押してスタート</span></span><span class="arw">›</span></div>
-<div class="drow busy"><span class="nm">ボックス1</span><span><span class="m1">02:30 チェック（残り38分）</span><span class="m2">4名 ・ 01:30 入店 ・ 60分</span></span><span class="arw">›</span></div>
-<div class="drow soon"><span class="nm">カウンター</span><span><span class="m1">02:20 チェック（残り8分）</span><span class="m2">2名 ・ 01:30 入店 ・ 50分</span></span><span class="arw">›</span></div>
+<p style="font-size:12px;color:#8a8a92;margin-bottom:6px;">▼ 実際の並び順（チェックが近い順）</p>
 <div class="drow over"><span class="nm">卓4</span><span><span class="m1">02:05 チェック（時間です）</span><span class="m2">2名 ・ 01:05 入店 ・ 60分</span></span><span class="arw">›</span></div>
+<div class="drow soon"><span class="nm">カウンター</span><span><span class="m1">02:20 チェック（残り8分）</span><span class="m2">2名 ・ 01:30 入店 ・ 50分</span></span><span class="arw">›</span></div>
+<div class="drow busy"><span class="nm">ボックス1</span><span><span class="m1">02:30 チェック（残り38分）</span><span class="m2">4名 ・ 01:30 入店 ・ 60分</span></span><span class="arw">›</span></div>
+<div class="drow prep"><span class="nm">VIP</span><span><span class="m1">▶ スタート待ち</span><span class="m2">3名 ・ 押してスタート</span></span><span class="arw">›</span></div>
+<div class="drow"><span class="nm">ボックス2</span><span class="m1" style="color:#8a8a92;font-weight:normal;">空席 ・ 6席</span><span class="arw">›</span></div>
 <table>
   <tr><th>見た目</th><th>意味</th></tr>
   <tr><td>灰色</td><td><b>空席</b>（例: 空席 ・ 4席）。押して入店を入れられます</td></tr>
@@ -388,6 +396,9 @@
 
 <p class="faq-q">Q. お店を選び間違えました</p>
 <p class="faq-a">A. 右上の「この端末: ○○」をタップして選び直してください。</p>
+
+<p class="faq-q">Q. 卓の並びが毎回変わるんだけど</p>
+<p class="faq-a">A. <b>チェックが近い順に並べています</b>（上が一番急ぐ卓）。延長を入れたり時刻を直したりすると、その場で並びが入れ替わります。卓の位置は固定ではないので、<b>名前で見つけてください</b>。空席とスタート待ちは、時間のある卓より下にまとめて並びます。</p>
 
 <p class="faq-q">Q. 卓の数を増やしたい／減らしたい</p>
 <p class="faq-a">A. 増やす時は、卓の一覧の一番下 <span class="btnlike2">＋ 卓を追加する</span> を押すだけです（最大20卓）。減らす時は、その卓を押して一番下の <b>この卓を削除する</b> を押します。他の卓のお客様も、付けた名前と席数も消えません。</p>
