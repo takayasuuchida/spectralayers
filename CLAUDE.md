@@ -69,11 +69,23 @@ board.html を更新して main にマージしたあと、公開ページが反
 |---|---|
 | `index.html` | つけ回しツール本体（vivace が使う。ビルド済み1ファイル・約600KB） |
 | `manual.html` | つけ回しツールの説明書 |
-| `board.html` | 2店舗の振りっこボード（vivace ⇄ ANELA） |
-| `board-manual.html` | 振りっこボードの使い方ガイド |
+| `board.html` | 2店舗の振りっこボード（vivace ⇄ ANELA・本人の本番） |
+| `furikko.html` | 他店に配る共有版。`?room=◯◯` の組ごとに別ボード |
+| `board-manual.html` | 振りっこボードの使い方ガイド（board / furikko 共通） |
 
-`board.html` と `board-manual.html` は**必ずセットで直す**。
+`board.html` `furikko.html` `board-manual.html` は**必ずセットで直す**。
 片方だけ変えると、ガイドが実物に無いボタンを説明する状態になる。
+
+### board.html と furikko.html を混ぜない
+
+保存キーが違う。**ここを間違えると本人の本番データを他店が上書きする。**
+
+- `board.html` … `board:vivace` / `board:anela` ＋ `share:*` の読み取り（つけ回し連携あり）
+- `furikko.html` … `room:<合言葉>:a` / `room:<合言葉>:b` のみ。**`share:*` は読まない**
+
+`furikko.html` は中身が `board.html` のコピーから育っている。片方を直したら
+**もう片方にも同じ直しを入れる**（並び順・アラート・時刻まわりは共通の作り）。
+その際、キーの決め方（`rowKey`）と店名の扱い（`nameOf`）だけは別物なので触らない。
 
 ## 振りっこボードのデータの持ち方
 
