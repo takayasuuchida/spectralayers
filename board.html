@@ -232,6 +232,19 @@
   function makeTables(n) { var a = []; for (var i = 1; i <= n; i++) a.push(makeTable(i)); return a; }
   function capOf(t) { return t && t.cap > 0 ? t.cap : 4; }
   function endOf(t) { return (t.startAt || t.planAt || 0) + (t.min || 60) * 60000; }
+  // 一覧の並び順：チェックが近い順 → スタート待ち → 空席。
+  // 同じ区分の中は、接客中なら終わりが早い順、それ以外は卓を作った順のまま。
+  function rowOrder(t) { return (t.guests > 0 && t.startAt) ? 0 : (t.guests > 0 ? 1 : 2); }
+  function sortForList(tables) {
+    return (tables || []).map(function (t, i) { return { t: t, i: i }; })
+      .sort(function (a, b) {
+        var ra = rowOrder(a.t), rb = rowOrder(b.t);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0) return endOf(a.t) - endOf(b.t);
+        return a.i - b.i;
+      })
+      .map(function (x) { return x.t; });
+  }
   function nextTid(tables) {
     var max = 0;
     (tables || []).forEach(function (t) { var n = +String(t.id).replace(/[^0-9]/g, ""); if (n > max) max = n; });
@@ -458,8 +471,8 @@
       + '<span>' + freshHtml(doc.at) + '</span></div>';
     h += availLine(availOf(doc));
     h += castBar(doc);
-    h += '<div class="lv-title">卓を押すと入力画面がひらきます</div><div class="rows">';
-    tables.forEach(function (t) {
+    h += '<div class="lv-title">チェックが近い順に上から並びます ・ 卓を押すと入力画面がひらきます</div><div class="rows">';
+    sortForList(tables).forEach(function (t) {
       var busy = t.guests > 0 && t.startAt, prep = t.guests > 0 && !t.startAt, cls = "", mid;
       if (busy) {
         var end = endOf(t), rem = Math.ceil((end - now) / 60000);
