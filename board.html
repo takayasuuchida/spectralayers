@@ -229,6 +229,16 @@
     if (d.getTime() - Date.now() > 6 * 3600e3) d.setDate(d.getDate() - 1);
     return d.getTime();
   }
+  // "HH:MM" をチェック(退店)時刻(ms)に。退店予定は未来のことが多いので未来寄りに解釈する
+  // （例: 23:50 に「00:40」と入れたら翌日0:40のこと）。
+  function timeToMsOut(hm) {
+    var p = String(hm).split(":"), d = new Date();
+    d.setHours(+p[0], +p[1], 0, 0);
+    var t = d.getTime();
+    if (Date.now() - t > 6 * 3600e3) t += 24 * 3600e3;
+    if (t - Date.now() > 18 * 3600e3) t -= 24 * 3600e3;
+    return t;
+  }
   // 時刻はすべて5分単位に丸める（ボードは5分刻みで見るため）
   function round5(ms) { return Math.round(ms / 300000) * 300000; }
   // セット時間は 50分 と 60分 だけ。延長などで別の値になっている卓は、その値も残して選べるようにする。
@@ -470,6 +480,7 @@
             + '<label>セット</label><select id="prepSetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
             + '<label>入店</label><input type="time" id="prepInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(pAt) + '">'
             + '<button class="now" data-prep-now="' + t2.id + '">今にする</button>'
+            + '<label>退店</label><input type="time" id="prepOutAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(pAt + (t2.min || 60) * 60000) + '">'
             + '</div>'
             + '<button class="a-start" data-start="' + t2.id + '">▶ スタート（' + hhmm(pAt) + ' → ' + hhmm(pAt + (t2.min || 60) * 60000) + '）</button>'
             + '<div class="lv-title">人数を直す（この卓は' + capOf(t2) + '席）</div>'
@@ -496,6 +507,7 @@
             + '<div class="erow">'
             + '<label>セット</label><select id="busySetMin" data-tid="' + t2.id + '">' + minOptions(t2.min || 60) + '</select>'
             + '<label>入店</label><input type="time" id="busyInAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(t2.startAt) + '">'
+            + '<label>退店</label><input type="time" id="busyOutAt" data-tid="' + t2.id + '" step="300" value="' + hhmm(endT) + '">'
             + '</div>'
             // 延長はハーフ(25分)かワンタイム(50分)。押すとチェック時刻がその分うしろへ動く。
             + '<div class="acts">'
@@ -780,6 +792,19 @@
     if (el.id === "busyInAt") {                                       // 入店時刻の打ち間違いを直す
       var tid2 = el.getAttribute("data-tid"), at = round5(timeToMs(el.value));
       updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid2 ? { ...x, startAt: at } : x; }); });
+      return;
+    }
+    // 退店時刻を直したら、入店時刻を「退店 − セット時間」に逆算して合わせる
+    if (el.id === "prepOutAt") {
+      if (!el.value) return;
+      var ptid3 = el.getAttribute("data-tid"), pout = round5(timeToMsOut(el.value));
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === ptid3 ? { ...x, planAt: pout - (x.min || 60) * 60000 } : x; }); });
+      return;
+    }
+    if (el.id === "busyOutAt") {
+      if (!el.value) return;
+      var tid3 = el.getAttribute("data-tid"), bout = round5(timeToMsOut(el.value));
+      updateMine(function (d) { d.tables = (d.tables || []).map(function (x) { return x.id === tid3 ? { ...x, startAt: bout - (x.min || 60) * 60000 } : x; }); });
       return;
     }
   });
