@@ -12,6 +12,7 @@
    - リポジトリは Public。main に置くのは配信物のみ = `index.html`（アプリ本体）+ `manual.html`（使い方ガイド）+ `board.html`（振りっこボード）+ `board-manual.html`（ボードの使い方ガイド）+ `.nojekyll` + `.github/workflows/pages.yml`。ソースは claude/* ブランチ
    - **使い方ガイド: https://takayasuuchida.github.io/spectralayers/manual.html** — 初心者向け全機能説明書（単体HTML）。アプリの設定タブ先頭「📖 使い方ガイド」からも開ける。機能を足したらこのページも更新すること
    - **振りっこボード: https://takayasuuchida.github.io/spectralayers/board.html** — 2店舗(vivace ⇄ ANELA)で卓状況と退店予定を共有する単体HTML。ANELA は本体アプリを使わずこれだけ使う。説明書は `board-manual.html`（ボードの下部リンクと manual.html 末尾から辿れる）。ボードを直したらこの説明書も更新すること
+   - **【事故記録 2026-08-26】board.html は複数の claude/* ブランチで系譜が分岐しており、古いブランチの board.html で main を上書きして最新機能（卓ごとの画面・退店10分前アラート等）を消しかけた。** board.html / board-manual.html / furikko.html を直す時は、**必ず `git show origin/main:board.html` を取り込んで main の配信版を出発点にする**こと（`git log origin/main -- board.html` で自分の手元より新しいコミットが無いか確認）。index.html はビルド産物なのでこの問題は起きないが、main へ push する前に main 側の履歴を fetch して新しいリリースが無いか見るのは同様に必須
 2. **旧: Artifact 配布（廃止済み・2026-07-25に移転案内ページへ差し替え）。今後アプリ本体を Artifact に公開しない。** ZIP・PowerShell 手順・ダブルクリック等の PC 前提の案内をデフォルトにしない。
    - 手順: `npm run build:standalone` → `dist-standalone/index.html` から `<style>` と `<script type="module">` を抽出して fragment 化（doctype/html/head/body を除去、`<title>` + `html,body{margin:0;padding:0;background:#000}` を付与）→ Artifact ツールで公開
    - **既存 Artifact URL**: https://claude.ai/code/artifact/365e61fe-c617-4ab0-83d1-ab0c1bce2e18
