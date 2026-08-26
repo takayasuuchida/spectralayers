@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { LayoutGrid, Sparkles, Settings, Crown, Plus, X, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Wand2, UserPlus, Link2, CalendarDays, Users, Cake, Package } from "lucide-react";
 
-const APP_VERSION = "3.8.1"; // 画面右上に表示。リリースごとに上げる
+const APP_VERSION = "3.9.0"; // 画面右上に表示。リリースごとに上げる
 
 // ---- デザイントークン（v2 ノワール・フラット×ゴールド） ----
 const GOLD = "#E3B455";        // アクセント（押下 #D3A548 / 文字色 #221A08）
@@ -80,7 +80,7 @@ function rotWindowEndMin(setDuration, n) {
 // 反応: 1=◎相性良い / -1=✗合わない / 未記録=0
 const REACT_GOOD = 1, REACT_BAD = -1;
 
-const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, roundUnit: 100, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false };
+const DEFAULT_SETTINGS = { storeName: DEFAULT_STORE_NAME, target: 1000000, layoutLocked: true, overheadPct: 15, taxRate: 10, cardFeePct: 10, roundUnit: 100, bottleBackPresets: [20, 25, 35], latePenaltyPerMin: 0, withholdTax: false, gpsClockIn: false, shareEnabled: false, cloudBackup: false, soundAlert: true };
 
 // ---- リアルタイム卓状況共有（B案: 卓の空き状況だけクラウド、名前・売上・給料は端末内のみ） ----
 // share-endpoint-override は E2E テスト用フック（通常運用では未設定）
@@ -235,6 +235,73 @@ function useNow(active) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!active) return; const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, [active]);
   return now;
+}
+
+// ── 退店10分前チャイム ──────────────────────────────────
+// モバイルブラウザは一度画面をタップしないと音を出せないため、
+// タップのたびに AudioContext を起こしておく（普段の操作で自然に解除される）
+let _audioCtx = null;
+function wakeAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!_audioCtx) _audioCtx = new AC();
+    if (_audioCtx.state === "suspended") _audioCtx.resume().catch(() => {});
+    return _audioCtx;
+  } catch { return null; }
+}
+// 「ピンポン♪」×3。外部ファイル不要（1ファイル配布のため Web Audio で生成）
+function playCheckoutChime() {
+  try { window.__tsukeChime = (window.__tsukeChime || 0) + 1; } catch { /* noop */ }
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch { /* noop */ }
+  const ctx = wakeAudio();
+  if (!ctx || ctx.state !== "running") return;
+  const t0 = ctx.currentTime + 0.05;
+  const note = (freq, at, dur) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.28, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(at); o.stop(at + dur + 0.05);
+  };
+  for (let i = 0; i < 3; i++) {
+    const base = t0 + i * 0.75;
+    note(880, base, 0.5);          // A5「ピン」
+    note(659.25, base + 0.22, 0.5); // E5「ポン」
+  }
+}
+// 全卓を1秒ごとに見張り、残り10分を切った瞬間に1回だけ鳴らす。
+// state を持たないのでアプリ全体は再描画されない（過去事故: トップレベルタイマー全再描画 の対策踏襲）
+function CheckoutChimeWatcher({ ts, enabled }) {
+  const alerted = useRef(new Set());
+  useEffect(() => {
+    if (!enabled) return;
+    const check = () => {
+      const now = Date.now();
+      for (const [id, t] of Object.entries(ts)) {
+        if (!t?.active || !t.setStart) continue;
+        const r = remainOf(t, now);
+        // 延長すると setMinOf が変わりキーも変わる → 延長後の10分前にもう一度鳴る
+        const key = `${id}:${t.setStart}:${setMinOf(t)}`;
+        if (r > 0 && r <= 600000 && !alerted.current.has(key)) {
+          alerted.current.add(key);
+          playCheckoutChime();
+        }
+      }
+    };
+    check();
+    const id = setInterval(check, 1000);
+    return () => clearInterval(id);
+  }, [ts, enabled]);
+  useEffect(() => {
+    const wake = () => { wakeAudio(); };
+    window.addEventListener("pointerdown", wake, { passive: true });
+    return () => window.removeEventListener("pointerdown", wake);
+  }, []);
+  return null;
 }
 
 export default function App() {
@@ -1513,6 +1580,7 @@ export default function App() {
 
   return (
     <div style={{ background: BG, minHeight: "100vh", color: TXT, fontFamily: FONT }} className="pb-24">
+      <CheckoutChimeWatcher ts={ts} enabled={settings.soundAlert !== false} />
       <div style={{ borderBottom: `1px solid ${LINE}`, background: BAR }} className="px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div>
           <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1 }}>{VIEW_TITLE[view] || "フロア"}</div>
@@ -4107,6 +4175,14 @@ function Admin({ casts, setCasts, resetNight, settings, setSettings, tables, set
             <span className="text-xs text-zinc-500">%</span>
           </div>
           <p className="text-[10px] text-zinc-600">ボトルのバック率をワンタップで選べるようにする候補（カンマ区切り）。銘柄ごとの率は 在庫タブの商品マスタで設定します。</p>
+          <label className="flex items-center gap-2 pt-2">
+            <input type="checkbox" checked={settings.soundAlert !== false} onChange={e => setSettings(s => ({ ...s, soundAlert: e.target.checked }))} style={{ accentColor: GOLD }} />
+            <span className="text-sm font-bold">🔔 退店10分前に音で知らせる</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <button onClick={() => playCheckoutChime()} style={{ background: "#22242A", color: GOLD, border: `1px solid ${GOLD}` }} className="rounded-lg px-3 py-2 text-xs font-bold">♪ 音を聞いてみる</button>
+            <span className="text-[10px] text-zinc-600 flex-1">残り10分を切ると「ピンポン♪」×3 + バイブ。延長したら延長後の10分前にもまた鳴ります。マナーモード中は音が出ない端末もあります。</span>
+          </div>
         </div>
       </div>
 
