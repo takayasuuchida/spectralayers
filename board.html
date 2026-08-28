@@ -103,6 +103,33 @@
   .outbtn { width:100%; margin-top:12px; background:#7a2222; color:#fff; border:none; border-radius:12px; padding:17px; font-size:16px; font-weight:bold; }
   .delbtn { width:100%; margin-top:22px; background:none; border:none; color:#55555c; font-size:12px; text-decoration:underline; padding:8px; }
 
+  /* ---- 待ちのお客様・差し引き予測 ---- */
+  .wl { display:flex; align-items:center; gap:8px; background:rgba(224,168,74,.07); border:1px solid #7a5a1a; border-radius:10px; padding:9px 10px; margin-bottom:5px; }
+  .wl .g { font-size:15px; color:#e8c07a; font-weight:bold; }
+  .wl .t { font-size:15px; font-weight:bold; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .wl .seat { background:#22222a; border:1px solid #3f8f6a; color:#7ee6ac; border-radius:8px; padding:8px 10px; font-size:12px; font-weight:bold; }
+  .waitadd { width:100%; margin-top:4px; background:#15151a; border:1.5px dashed #7a5a1a; color:#e8c07a; border-radius:12px; padding:13px; font-size:13px; font-weight:bold; }
+  .wpads { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:6px; }
+  .wpads button { background:#1c1c22; border:1px solid #7a5a1a; color:#e8c07a; border-radius:12px; padding:14px 0; font-size:18px; font-weight:bold; }
+  .forecast { border-radius:10px; padding:9px 10px; margin:6px 0 4px; font-size:12.5px; line-height:1.7; background:#0d0d10; border:1px solid #22222a; color:#c9c9d0; }
+  .forecast b { font-size:14.5px; }
+  .forecast.f-ok { border-color:#3f8f6a; background:rgba(95,214,160,.08); } .forecast.f-ok b { color:#7ee6ac; }
+  .forecast.f-ng { border-color:#a15050; background:rgba(224,85,85,.08); } .forecast.f-ng b { color:#f0a0a0; }
+  .forecast.f-even { border-color:#7a5a1a; background:rgba(224,168,74,.08); } .forecast.f-even b { color:#e8c07a; }
+
+  /* ---- 本日の出勤キャスト（名簿） ---- */
+  .cnwrap { display:flex; flex-direction:column; gap:5px; }
+  .cnrow { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:9px 10px; }
+  .cnrow .nm2 { font-size:14.5px; font-weight:bold; color:#e8e8ec; }
+  .cnrow .del { margin-left:auto; background:none; border:none; color:#55555c; font-size:16px; padding:0 4px; }
+  .cin { display:flex; gap:8px; margin-top:6px; }
+  .cin input { flex:1; min-width:0; background:#0d0d10; border:1px solid #3a3a42; color:#fff; border-radius:10px; padding:12px 10px; font-size:16px; }
+  .cin button { flex:0 0 auto; background:#c9a64e; color:#000; border:none; border-radius:10px; padding:12px 14px; font-size:13px; font-weight:bold; }
+
+  /* ---- 営業終了 ---- */
+  .closebtn { width:100%; margin-top:16px; background:#1c1c22; border:1px solid #a15050; color:#f0a0a0; border-radius:14px; padding:15px; font-size:14px; font-weight:bold; }
+  .closebtn.arm { background:#7a2222; color:#fff; border-color:#f25555; }
+
   /* ---- 相手店の一覧 ---- */
   .lv-title { font-size:10px; color:#6a6a72; margin:10px 0 5px; }
   .lv { display:flex; align-items:center; gap:8px; background:#0d0d10; border:1px solid #22222a; border-radius:10px; padding:8px 10px; margin-bottom:5px; }
@@ -193,6 +220,8 @@
   var ALERT_MIN = 10;                  // 退店の何分前に鳴らすか
 
   var me = null;
+  var waitOpen = false;       // 待ち追加の人数パッドを開いているか
+  var closeArm = false;       // 営業終了の2度押し確認
   var data = {};              // { storeId: boardDoc }
   var autoLeaving = {};       // つけ回しツールから取り込んだ分
   var lastErr = "";
@@ -258,7 +287,8 @@
     var used = tb.reduce(function (s, t) { return s + (t.guests > 0 ? t.guests : 0); }, 0);
     var free = tb.filter(function (t) { return !(t.guests > 0); });
     var c = doc.casts || {};
-    var castNow = c.now || 0, castTotal = Math.max(c.total || 0, castNow);
+    var names = doc.castNames || [];
+    var castNow = c.now || 0, castTotal = Math.max(names.length || c.total || 0, castNow);
     var maxSeat = free.reduce(function (m, t) { return Math.max(m, capOf(t)); }, 0);
     var freeCast = castNow ? Math.max(0, castNow - used) : 0;
     return {
@@ -280,15 +310,92 @@
   }
   function castBar(doc) {
     var c = doc.casts || {};
+    var names = doc.castNames || [];
+    // 名簿を入れている店は「本日出勤」を名簿の人数に自動連動（±ボタンは隠す）
+    var totalHtml = names.length
+      ? '<div class="cnt"><span class="n">' + names.length + '</span><span class="cl">名簿と連動</span></div>'
+      : '<div class="cnt"><button data-cast="total|-1">−</button><span class="n">' + Math.max(c.total || 0, c.now || 0) + '</span><button data-cast="total|1">＋</button></div>';
     return '<div class="castbar">'
       + '<div class="cg"><span class="cl">👥 今いる</span>'
       +   '<div class="cnt"><button data-cast="now|-1">−</button><span class="n">' + (c.now || 0) + '</span><button data-cast="now|1">＋</button></div></div>'
-      + '<div class="cg"><span class="cl">本日 出勤</span>'
-      +   '<div class="cnt"><button data-cast="total|-1">−</button><span class="n">' + Math.max(c.total || 0, c.now || 0) + '</span><button data-cast="total|1">＋</button></div></div>'
+      + '<div class="cg"><span class="cl">本日 出勤</span>' + totalHtml + '</div>'
       + '</div>';
   }
+
+  // ---------- 待ちのお客様 ----------
+  function waitingHtml(doc, now) {
+    var ws = (doc.waiting || []).slice().sort(function (a, b) { return a.at - b.at; });
+    var h = '<div class="lv-title">⏳ 待ちのお客様' + (ws.length ? '（' + ws.length + '組）' : '') + '</div>';
+    ws.forEach(function (w, i) {
+      var m = Math.max(0, Math.floor((now - w.at) / 60000));
+      h += '<div class="wl"><span class="g">' + (i + 1) + '組目 ・ ' + (w.guests || 0) + '名</span>'
+        + '<span class="t">' + m + '分待ち</span>'
+        + '<button class="seat" data-wdel="' + esc(w.id) + '">案内した ✓</button></div>';
+    });
+    h += forecastHtml(doc, now);
+    h += waitOpen
+      ? '<div class="wpads">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button data-wadd="' + n + '">' + n + '名</button>'; }).join("") + '</div>'
+        + '<button class="waitadd" id="waitTgl">閉じる</button>'
+      : '<button class="waitadd" id="waitTgl">＋ 待ちのお客様を入れる（人数）</button>';
+    return h;
+  }
+
+  // 一番早いチェックで卓が空き、一番長く待っている組をご案内した時点の「客数 vs キャスト数」の差し引き
+  function forecastHtml(doc, now) {
+    var ws = (doc.waiting || []).slice().sort(function (a, b) { return a.at - b.at; });
+    if (!ws.length) return "";
+    var first = ws[0];
+    var tb = doc.tables || [];
+    var busy = tb.filter(function (t) { return t.guests > 0 && t.startAt; });
+    var seated = tb.reduce(function (s, t) { return s + (t.guests > 0 ? t.guests : 0); }, 0);
+    var castNow = (doc.casts || {}).now || 0;
+    var line1, leaveG = 0;
+    if (busy.length) {
+      var firstOut = busy.slice().sort(function (a, b) { return endOf(a) - endOf(b); })[0];
+      leaveG = firstOut.guests || 0;
+      line1 = '⏳ ' + hhmm(endOf(firstOut)) + ' に ' + esc(firstOut.label) + '（' + leaveG + '名）が出て、待ち1組目（' + (first.guests || 0) + '名）をご案内すると…';
+    } else {
+      line1 = '⏳ いま待ち1組目（' + (first.guests || 0) + '名）をご案内すると…';
+    }
+    var guestsAfter = seated - leaveG + (first.guests || 0);
+    if (!castNow) {
+      return '<div class="forecast f-even">' + line1 + '<br>店内のお客様 <b>' + guestsAfter + '名</b>。キャストの「👥 今いる」が未入力のため差し引きは出せません。上で人数を入れてください。</div>';
+    }
+    var diff = castNow - guestsAfter;
+    var cls = diff > 0 ? "f-ok" : diff === 0 ? "f-even" : "f-ng";
+    var verdict = diff > 0 ? "キャスト " + diff + "名 余裕" : diff === 0 ? "ぴったり（余裕ゼロ）" : "キャスト " + (-diff) + "名 足りない";
+    var more = ws.length > 1 ? '<br><span style="color:#8a8a92">（2組目以降はその次のチェックの分です）</span>' : "";
+    return '<div class="forecast ' + cls + '">' + line1 + '<br>お客様 ' + guestsAfter + '名 ／ キャスト ' + castNow + '名 → <b>' + verdict + '</b>' + more + '</div>';
+  }
+
+  // ---------- 本日の出勤キャスト（名簿・まとめてテキスト入力） ----------
+  function castNamesHtml(doc) {
+    var names = doc.castNames || [];
+    var h = '<div class="lv-title">👩 本日の出勤キャスト' + (names.length ? '（' + names.length + '名）' : '') + ' ・ まとめて貼り付けOK（スペース・改行・「、」で区切り）</div>';
+    if (names.length) {
+      h += '<div class="cnwrap">' + names.map(function (n, i) {
+        return '<div class="cnrow"><span class="nm2">' + esc(n) + '</span><button class="del" data-cndel="' + i + '">×</button></div>';
+      }).join("") + '</div>';
+    }
+    h += '<div class="cin"><input id="castNamesIn" placeholder="例: あや ねおん さら" autocomplete="off" enterkeyhint="done">'
+      + '<button id="castNamesAdd">追加</button></div>';
+    return h;
+  }
+  function addCastNames() {
+    var inEl = $("castNamesIn"), raw = inEl ? String(inEl.value || "") : "";
+    // 区切りはこちらで判断: スペース・改行・読点・カンマ・中黒・スラッシュなど全部OK
+    var parts = raw.split(/[\s　,、，.．。・･\/｜|]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!parts.length) return;
+    updateMine(function (d) {
+      var names = d.castNames = d.castNames || [];
+      parts.forEach(function (n) { if (names.indexOf(n) < 0 && names.length < 60) names.push(n); });
+      d.casts = Object.assign({ now: 0, total: 0 }, d.casts || {});
+      d.casts.total = names.length;
+      if (d.casts.now > names.length) d.casts.now = names.length;
+    });
+  }
   function emptyDoc(id) {
-    return { at: 0, name: storeOf(id).name, leaving: [], tables: makeTables(6), setMin: 60, casts: { now: 0, total: 0 } };
+    return { at: 0, name: storeOf(id).name, leaving: [], tables: makeTables(6), setMin: 60, casts: { now: 0, total: 0 }, waiting: [], castNames: [] };
   }
 
   // ---------- 通信 ----------
@@ -334,6 +441,8 @@
       if (!doc.tables) doc.tables = makeTables(6);
       doc.tables = doc.tables.map(function (t) { return Object.assign({}, t, { cap: capOf(t) }); });
       doc.casts = Object.assign({ now: 0, total: 0 }, doc.casts || {});
+      doc.waiting = doc.waiting || [];
+      doc.castNames = doc.castNames || [];
       if (!doc.setMin) doc.setMin = 60;
       fn(doc);
       syncLeaving(doc);
@@ -472,6 +581,7 @@
       + '<span>' + freshHtml(doc.at) + '</span></div>';
     h += availLine(availOf(doc));
     h += castBar(doc);
+    h += waitingHtml(doc, now);
     h += '<div class="lv-title">チェックが近い順に上から並びます ・ 卓を押すと入力画面がひらきます</div><div class="rows">';
     sortForList(tables).forEach(function (t) {
       var busy = t.guests > 0 && t.startAt, prep = t.guests > 0 && !t.startAt, cls = "", mid;
@@ -506,6 +616,10 @@
           + '<button class="del" data-del="' + e.id + '">×</button></div>';
       });
     }
+
+    h += castNamesHtml(doc);
+    h += '<button class="closebtn' + (closeArm ? " arm" : "") + '" id="bizEnd">'
+      + (closeArm ? "⚠ もう一度押すと全卓リセット（営業終了）" : "🌙 営業終了（全卓・待ち・名簿をリセット）") + '</button>';
     return h + '</div>';
   }
 
@@ -593,6 +707,16 @@
     var list = ((doc.leaving || []).concat(auto ? auto.leaving : []))
       .filter(function (e) { return e.fromTable || now - e.t < 30 * 60e3; })
       .sort(function (a, b) { return a.t - b.t; });
+    // 待ち・出勤名簿も共有して見せる（相手店の混み具合と体制がわかる）
+    var ws = doc.waiting || [];
+    if (ws.length) {
+      var wg = ws.reduce(function (s, w) { return s + (w.guests || 0); }, 0);
+      var oldest = Math.max.apply(null, ws.map(function (w) { return now - (w.at || now); }));
+      accHtml += '<div class="stat s-soon"><b>⏳ 待ち ' + ws.length + '組 ' + wg + '名</b><span>最長 ' + Math.max(0, Math.floor(oldest / 60000)) + '分待ち</span></div>';
+    }
+    var nms = doc.castNames || [];
+    if (nms.length) accHtml += '<div class="lv-title">👩 出勤（' + nms.length + '名）: ' + nms.map(esc).join("・") + '</div>';
+
     var lvHtml = list.length ? "" : '<div class="empty">今は誰も出る予定なし</div>';
     list.forEach(function (e) {
       var diff = Math.round((e.t - now) / 60000);
@@ -648,10 +772,59 @@
   document.addEventListener("click", function (ev) {
     audio();   // iPhoneは画面を触って初めて音が出せるようになるため、毎回起こしておく
     var t = ev.target.closest
-      ? (ev.target.closest("[data-open],[data-num],[data-min],[data-now],[data-start],[data-ext],[data-out],[data-delt],[data-del],[data-cast],[data-ack],[data-close]") || ev.target)
+      ? (ev.target.closest("[data-open],[data-num],[data-min],[data-now],[data-start],[data-ext],[data-out],[data-delt],[data-del],[data-cast],[data-ack],[data-close],[data-wadd],[data-wdel],[data-cndel]") || ev.target)
       : ev.target;
 
     if (t.id === "backB") { view = "home"; openTid = null; render(); return; }
+
+    // 待ちのお客様
+    if (t.id === "waitTgl") { waitOpen = !waitOpen; render(); return; }
+    var wadd = t.getAttribute && t.getAttribute("data-wadd");
+    if (wadd) {
+      waitOpen = false;
+      updateMine(function (d) {
+        (d.waiting = d.waiting || []).push({ id: "w" + Math.random().toString(36).slice(2, 8), guests: +wadd, at: Date.now() });
+      });
+      return;
+    }
+    var wdel = t.getAttribute && t.getAttribute("data-wdel");
+    if (wdel) { updateMine(function (d) { d.waiting = (d.waiting || []).filter(function (w) { return w.id !== wdel; }); }); return; }
+
+    // 出勤キャスト名簿
+    if (t.id === "castNamesAdd") { addCastNames(); return; }
+    if (t.hasAttribute && t.hasAttribute("data-cndel")) {
+      var cni = +t.getAttribute("data-cndel");
+      updateMine(function (d) {
+        var names = d.castNames = d.castNames || [];
+        names.splice(cni, 1);
+        d.casts = Object.assign({ now: 0, total: 0 }, d.casts || {});
+        if (names.length) {
+          d.casts.total = names.length;
+          if (d.casts.now > names.length) d.casts.now = names.length;
+        }
+      });
+      return;
+    }
+
+    // 営業終了（2度押しで確定。confirmはモバイルでブロックされることがあるため使わない）
+    if (t.id === "bizEnd") {
+      if (!closeArm) {
+        closeArm = true; render();
+        setTimeout(function () { if (closeArm) { closeArm = false; render(true); } }, 6000);
+        return;
+      }
+      closeArm = false;
+      updateMine(function (d) {
+        d.tables = (d.tables || []).map(function (x) { return Object.assign({}, x, { guests: 0, startAt: 0, planAt: 0, min: d.setMin || 60 }); });
+        d.waiting = [];
+        d.leaving = [];
+        d.castNames = [];
+        d.casts = { now: 0, total: 0 };
+      });
+      view = "home"; openTid = null; waitOpen = false;
+      window.scrollTo(0, 0);
+      return;
+    }
     if (t.id === "addT") {
       updateMine(function (d) {
         var tb = d.tables || [];
@@ -768,6 +941,11 @@
       });
       return;
     }
+  });
+
+  // 名簿入力は Enter（決定キー）でも追加できる
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter" && ev.target && ev.target.id === "castNamesIn") { ev.preventDefault(); addCastNames(); }
   });
 
   render();
