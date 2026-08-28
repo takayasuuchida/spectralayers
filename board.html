@@ -290,12 +290,14 @@
     var names = doc.castNames || [];
     var castNow = c.now || 0, castTotal = Math.max(names.length || c.total || 0, castNow);
     var maxSeat = free.reduce(function (m, t) { return Math.max(m, capOf(t)); }, 0);
+    var freeSeats = free.reduce(function (s, t) { return s + capOf(t); }, 0);
     var freeCast = castNow ? Math.max(0, castNow - used) : 0;
     return {
-      freeTables: free.length, maxSeat: maxSeat,
+      freeTables: free.length, maxSeat: maxSeat, freeSeats: freeSeats,
       castNow: castNow, castTotal: castTotal, freeCast: freeCast,
       coming: Math.max(0, castTotal - castNow),
-      take: castNow ? Math.min(freeCast, maxSeat) : maxSeat
+      // 振れる人数 = 手空きキャストと空き席数の少ない方（キャスト未入力の店は席数だけで出す）
+      take: castNow ? Math.min(freeCast, freeSeats) : maxSeat
     };
   }
   function availLine(a) {
@@ -304,7 +306,7 @@
       : (a.castNow && a.take <= 0) ? "△ キャスト待ち（卓は " + a.freeTables + "卓 空き）"
       : "◯ 空き " + a.freeTables + "卓 ・ " + a.take + "名までOK";
     var sub = a.castNow
-      ? "キャスト " + a.castNow + "/" + a.castTotal + "（手空き " + a.freeCast + "）" + (a.coming ? " ・ あと" + a.coming + "名" : "")
+      ? "キャスト " + a.castNow + "/" + a.castTotal + "（手空き " + a.freeCast + "）" + (a.coming ? " ・ あと" + a.coming + "名" : "") + (a.maxSeat ? " ・ 大きい卓 " + a.maxSeat + "席" : "")
       : "";
     return '<div class="stat ' + cls + '"><b>' + main + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
   }
@@ -692,12 +694,12 @@
     if (auto) {
       var sc = auto.casts || null;
       accHtml = availLine({
-        freeTables: auto.free, maxSeat: auto.maxSeat,
+        freeTables: auto.free, maxSeat: auto.maxSeat, freeSeats: auto.freeSeats || 0,
         castNow: sc ? (sc.now || 0) : 0,
         castTotal: sc ? Math.max(sc.total || 0, sc.now || 0) : 0,
         freeCast: sc ? (sc.free || 0) : 0,
         coming: sc ? Math.max(0, (sc.total || 0) - (sc.now || 0)) : 0,
-        take: sc && sc.now ? Math.min(sc.free || 0, auto.maxSeat) : auto.maxSeat
+        take: sc && sc.now ? Math.min(sc.free || 0, auto.freeSeats || auto.maxSeat) : auto.maxSeat
       });
     } else {
       var tb = doc.tables || [];
