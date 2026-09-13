@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>🔁 振りっこボード 使い方ガイド</title>
+<title>外呼び込み共有 使い方ガイド</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-text-size-adjust: 100%; }
   body { background: #0a0a0c; color: #e8e8ec; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; line-height: 1.9; padding-bottom: 80px; }
@@ -75,16 +75,18 @@
   .demoalert .h { color: #f0c878; font-weight: bold; font-size: 16px; }
   .demoalert .b { font-size: 12.5px; color: #d8d8dd; margin-top: 4px; }
 </style>
+<link rel="stylesheet" href="outside-sharing.css?v=20260913" />
 </head>
-<body>
+<body class="outside-sharing sharing-guide">
 <header>
-  <div class="brand">🔁 振りっこボード</div>
+  <div class="brand">外呼び込み共有</div>
+  <p class="sharing-purpose">キャスト余り・空き卓をリアルタイム共有</p>
   <div class="sub">使い方ガイド（vivace ⇄ ANELA・初心者向け）</div>
 </header>
 
 <div class="wrap">
 
-<a class="applink" href="https://takayasuuchida.github.io/spectralayers/board.html">▶ 振りっこボードを開く（タップ）</a>
+<a class="applink" href="https://takayasuuchida.github.io/spectralayers/board.html">▶ 外呼び込み共有を開く（タップ）</a>
 <p style="text-align:center;font-size:11px;color:#7a7a82;">↑ このURLをホーム画面に追加しておくと毎回1タップで開けます</p>
 <a class="applink2" href="https://takayasuuchida.github.io/spectralayers/manual.html">つけ回しツール（本体アプリ）の説明書はこちら</a>
 
@@ -120,7 +122,7 @@
 
 <h2 id="s0">0. これは何をする画面？</h2>
 <div class="card">
-  <p><b>2店舗（vivace と ANELA）の間で、お客様を振りっこするための共有画面です。</b></p>
+  <p><b>2店舗（vivace と ANELA）の間で、お客様のご案内に使うリアルタイム共有画面です。</b></p>
   <p style="margin-top:8px;">お互いに知りたいのは、つまるところ<b>この3つだけ</b>です。</p>
   <ul>
     <li><b>何卓</b> … 今そっち何卓空いてる？</li>
@@ -130,7 +132,7 @@
   <p style="margin-top:8px;">この3つが、相手店の欄に<b>そのまま3行で</b>出ます。電話もLINEも要りません。</p>
   <div style="background:rgba(95,214,160,.1);border:1px solid #3f8f6a;border-radius:10px;padding:7px 10px;margin-top:10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
     <b style="font-size:15px;color:#7ee6ac;">◯ 空き 2卓 ・ 5名までOK</b>
-    <span style="font-size:10px;color:#8a8a92;">キャスト 9/12（手空き 5） ・ あと3名</span>
+    <span style="font-size:10px;color:#8a8a92;">キャスト 9/12（キャスト余り 5） ・ あと3名</span>
   </div>
   <div style="background:#0d0d10;border:1px solid #22222a;border-radius:10px;padding:6px 10px;margin-top:4px;display:flex;gap:8px;align-items:center;">
     <span style="font-size:15px;font-weight:bold;color:#e8e8ec;">3卓</span>
@@ -145,7 +147,7 @@
   <p style="font-size:12.5px;color:#8a8a92;margin-top:6px;">↑ これで全部です。<b>1行目が「今どれだけ受けられるか」、下が出るお客様の箇条書き。</b>スクロールも切り替えも要りません。</p>
 </div>
 <div class="tip">
-  <b>ANELA の方へ：</b>つけ回しツール（本体アプリ）を使う必要はありません。この振りっこボードだけ開いて、卓に人数を入れてもらえれば十分です。入力は <b>卓を押す → 人数を押す → ▶スタート</b> の3タップだけです。卓の数はお店に合わせて<b>いくつでも増やせます</b>。
+  <b>ANELA の方へ：</b>つけ回しツール（本体アプリ）を使う必要はありません。この外呼び込み共有だけ開いて、卓に人数を入れてもらえれば十分です。入力は <b>卓を押す → 人数を押す → ▶スタート</b> の3タップだけです。卓の数はお店に合わせて<b>いくつでも増やせます</b>。
 </div>
 <div class="tip">
   お客様の名前・売上・お給料などは<b>いっさい相手店に送られません</b>。送られるのは「卓の人数」と「チェック時刻」だけです。
@@ -214,7 +216,7 @@
 
 <h2 id="s2b">★ 出勤キャストを入れる（これが要）</h2>
 <div class="card">
-  <p><b>卓が空いていても、女の子が手空きでなければ振れません。</b>だから相手が本当に知りたい「何名まで振れるか」は、卓だけでは出せません。</p>
+  <p><b>卓が空いていても、女の子がキャスト余りでなければ振れません。</b>だから相手が本当に知りたい「何名まで振れるか」は、卓だけでは出せません。</p>
   <p style="margin-top:8px;">画面の上にある <b>👥 今いる</b> と <b>本日 出勤</b> を ＋− で打ってください。それだけで、相手店の画面に<b>「◯ 2卓 ・ 4名までOK」</b>が自動で出ます。</p>
 </div>
 <table>
@@ -223,10 +225,10 @@
 </table>
 <h3>どう計算されるか</h3>
 <div class="card">
-  <p><b>手空きの子＝ 今いる人数 − 今ついているお客様の人数</b><br>
-  <b>◯名までOK ＝ 手空きの子 と 空いている席の合計 の少ない方</b></p>
-  <p style="margin-top:6px;">例：今いる 14名／接客中のお客様 6名 → 手空き 8名。空き卓が10卓あれば <b>「8名までOK」</b>。<br>
-  逆に手空き 2名なら、空き席が何席あっても <b>「2名までOK」</b>と出ます。</p>
+  <p><b>キャスト余りの子＝ 今いる人数 − 今ついているお客様の人数</b><br>
+  <b>◯名までOK ＝ キャスト余りの子 と 空いている席の合計 の少ない方</b></p>
+  <p style="margin-top:6px;">例：今いる 14名／接客中のお客様 6名 → キャスト余り 8名。空き卓が10卓あれば <b>「8名までOK」</b>。<br>
+  逆にキャスト余り 2名なら、空き席が何席あっても <b>「2名までOK」</b>と出ます。</p>
   <p style="margin-top:6px;">1組でまとまって座れる上限は別なので、カッコ内に <b>「大きい卓 ◯席」</b>（一番大きい空き卓）も出します。大人数の1組を振る時はこちらを見てください。</p>
 </div>
 <table>
@@ -413,8 +415,8 @@
 
 <h2 id="s8">8. 相手のお店を見る</h2>
 <div class="card">
-  <p><b>◯ 空き 2卓 ・ 5名までOK</b>　<span style="font-size:11px;color:#8a8a92;">キャスト 9/12（手空き 5） ・ あと3名</span></p>
-  <p style="margin-top:6px;font-size:13px;">1行だけです。<b>「5名までOK」がそのまま今すぐ振れる人数。</b>右の小さい字はその根拠（出勤しているキャストと手空きの数）です。</p>
+  <p><b>◯ 空き 2卓 ・ 5名までOK</b>　<span style="font-size:11px;color:#8a8a92;">キャスト 9/12（キャスト余り 5） ・ あと3名</span></p>
+  <p style="margin-top:6px;font-size:13px;">大きな3つの数字で確認できます。<b>「5名までOK」がそのまま今すぐ振れる人数。</b>キャスト余り・空き卓・受け入れ人数を分けて表示し、その下に出勤人数を表示します。キャスト数が未入力の場合は受け入れ人数を「—」にして確認を促します。</p>
   <p style="margin-top:10px;"><b>チェック予定</b><br>
   <span style="font-size:13px;"><b>「3卓　2名　23:00 チェック」</b>の箇条書きが、時間の近い順に並ぶだけです。満席の時でも出るので、<b>いつ送れるか</b>がすぐ分かります。</span></p>
   <ul style="margin-top:6px;">
@@ -427,13 +429,13 @@
 <h2 id="s12">9. vivace 側（つけ回しツール連携）</h2>
 <div class="card">
   <p>vivace のように<b>つけ回しツール（本体アプリ）を使っているお店は、このボードに卓を手入力する必要はありません。</b></p>
-  <p style="margin-top:8px;">本体アプリの<b>卓の状況も、出勤キャストの人数も</b>そのまま自動で流れます。ANELA 側の画面にも <b>「◯ 2卓 ・ 5名までOK / キャスト 9/12名 出勤（手空き 5名）・あと3名 来る」</b> と、手入力の店とまったく同じ形で出ます。</p>
+  <p style="margin-top:8px;">本体アプリの<b>卓の状況も、出勤キャストの人数も</b>そのまま自動で流れます。ANELA 側の画面にも <b>「◯ 2卓 ・ 5名までOK / キャスト 9/12名 出勤（キャスト余り 5名）・あと3名 来る」</b> と、手入力の店とまったく同じ形で出ます。</p>
   <p style="margin-top:8px;">ボードには卓の入力欄が出ず、相手店の状況を見るだけの画面になります。</p>
 </div>
 <table>
   <tr><th>今いる</th><td>キャスト画面で「出勤」になっている人数</td></tr>
   <tr><th>本日</th><td>「退勤済」以外の人数（未出勤の子も含む）</td></tr>
-  <tr><th>手空き</th><td>出勤していて、まだどの卓にも付いていない人数</td></tr>
+  <tr><th>キャスト余り</th><td>出勤していて、まだどの卓にも付いていない人数</td></tr>
 </table>
 <div class="tip">
   本体アプリ側で「外用ビュー」の共有をONにしておく必要があります。設定タブから確認できます。<b>送られるのは人数だけで、誰が出勤しているかは送りません。</b>
@@ -487,10 +489,11 @@
 <p class="faq-a">A. 卓の画面の <b>退店</b> の欄に、出る時刻を直接入れてください。セット時間はそこから自動で計算され、「75分」のようにその卓だけの時間として残ります。時刻は5分単位に丸めます（両店で読み合う画面なので、5分で揃えたほうが伝わりやすいためです）。</p>
 
 <footer>
-  🔁 振りっこボード 使い方ガイド<br>
+  外呼び込み共有 使い方ガイド<br>
   vivace ⇄ ANELA
 </footer>
 
 </div>
 </body>
 </html>
+

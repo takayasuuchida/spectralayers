@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>🔁 2店舗 振りっこボード</title>
+<title>外呼び込み共有｜キャスト余り・リアルタイム共有</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
   body { background:#0a0a0c; color:#e8e8ec; font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif; padding-bottom:24px; }
@@ -167,11 +167,13 @@
   .note { font-size:10px; color:#4a4a52; text-align:center; margin-top:14px; line-height:1.7; }
   .err { background:rgba(224,85,85,.1); border:1px solid #a15050; color:#f0b0b0; border-radius:10px; padding:8px 10px; font-size:11px; margin-top:10px; }
 </style>
+<link rel="stylesheet" href="outside-sharing.css?v=20260913" />
 </head>
-<body>
+<body class="outside-sharing">
 <header>
   <div>
-    <div class="brand">🔁 振りっこボード</div>
+    <h1 class="brand">外呼び込み共有</h1>
+    <p class="sharing-purpose">キャスト余り・空き卓をリアルタイム共有</p>
     <div class="sub" id="clock">–</div>
   </div>
   <div class="hbtns">
@@ -321,20 +323,22 @@
       freeTables: free.length, maxSeat: maxSeat, freeSeats: freeSeats,
       castNow: castNow, castTotal: castTotal, freeCast: freeCast,
       coming: Math.max(0, castTotal - castNow),
-      // 振れる人数 = 手空きキャストと空き席数の少ない方（キャスト未入力の店は席数だけで出す）
+      // 振れる人数 = キャスト余りキャストと空き席数の少ない方（キャスト未入力の店は席数だけで出す）
       take: castNow ? Math.min(freeCast, freeSeats) : maxSeat
     };
   }
   function availLine(a) {
-    var cls = !a.freeTables ? "s-full" : (a.castNow && a.take <= 0) ? "s-soon" : "s-ok";
-    var main = !a.freeTables ? "✕ 満席"
-      : (a.castNow && a.take <= 0) ? "△ キャスト待ち（卓は " + a.freeTables + "卓 空き）"
-      : "◯ 空き " + a.freeTables + "卓 ・ " + a.take + "名までOK";
-    var sub = a.castNow
-      ? "キャスト " + a.castNow + "/" + a.castTotal + "（手空き " + a.freeCast + "）" + (a.coming ? " ・ あと" + a.coming + "名" : "") + (a.maxSeat ? " ・ 大きい卓 " + a.maxSeat + "席" : "")
-      : "";
-    return '<div class="stat ' + cls + '"><b>' + main + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
+    var known = a.castNow > 0;
+    var cls = !a.freeTables ? "s-full" : !known || a.take <= 0 ? "s-soon" : "s-ok";
+    var main = !a.freeTables ? "満席" : !known ? "キャスト数を確認" : a.take <= 0 ? "キャスト待ち" : "受け入れOK";
+    var sub = known ? "出勤 " + a.castNow + "/" + a.castTotal + "名" + (a.coming ? " ・ あと" + a.coming + "名" : "") : "キャスト数を入力すると受け入れ人数を表示します";
+    return '<div class="stat ' + cls + '"><b class="sharing-status">' + main + '</b>'
+      + '<div class="sharing-metrics"><div><span>キャスト余り</span><strong>' + (known ? a.freeCast : "—") + '<small>名</small></strong></div>'
+      + '<div><span>空き卓</span><strong>' + a.freeTables + '<small>卓</small></strong></div>'
+      + '<div><span>受け入れ人数</span><strong>' + (known ? a.take : !a.freeTables ? 0 : "—") + '<small>名</small></strong></div></div>'
+      + '<span class="sharing-meta">' + sub + '</span></div>';
   }
+
   function castBar(doc) {
     var c = doc.casts || {};
     var names = doc.castNames || [];
@@ -576,7 +580,7 @@
     // 入力中は作り直さない（時刻を打っている途中で消えないように）
     if (fromTimer) {
       var ae = document.activeElement;
-      if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT")) {
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT" || ae.tagName === "TEXTAREA")) {
         $("clock").textContent = hhmm(Date.now()) + " 現在";
         $("alerts").innerHTML = alertHtml();      // アラートだけは入力中でも出す
         return;
@@ -1007,3 +1011,4 @@
 </script>
 </body>
 </html>
+
