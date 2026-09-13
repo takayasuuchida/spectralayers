@@ -1,0 +1,76 @@
+/* Shared by both outside calling boards and their guide. */
+.outside-sharing {
+  --bg: #0d0d10;
+  --surface: #19191e;
+  --petrol: #201d17;
+  --plum: #19191e;
+  --ivory: #f4f1e9;
+  --dim: #c1beb8;
+  --mint: #e4cb91;
+  --line: #46413a;
+  --field: #111114;
+  --control: #2d2a25;
+  font-size: 16px;
+  touch-action: manipulation;
+}
+.outside-sharing input, .outside-sharing select, .outside-sharing textarea {
+  font-size: max(16px, 1rem) !important;
+  min-height: 48px;
+  max-width: 100%;
+  touch-action: manipulation;
+}
+.outside-sharing button, .outside-sharing a, .outside-sharing summary, .outside-sharing [role="button"] {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+.outside-sharing .cnt button { min-width: 48px; }
+.outside-sharing:not(.sharing-guide) header {
+  background: #131315;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 20px);
+  padding-bottom: 18px;
+  border-bottom: 2px solid #9c8151;
+}
+.outside-sharing header .brand {
+  font-family: inherit;
+  font-size: clamp(22px, 4.8vw, 30px);
+  letter-spacing: .015em;
+  line-height: 1.4;
+  color: #f4e1b2;
+}
+.outside-sharing .sharing-purpose { margin: 5px 0 10px; color: #d0c8b6; font-size: 14px; line-height: 1.6; }
+.outside-sharing .hbtns { margin-top: 4px; flex-wrap: wrap; max-width: 100%; }
+.outside-sharing .me { font-size: 14px; max-width: 100%; border-radius: 10px; }
+.outside-sharing .wrap { max-width: 1180px; }
+.outside-sharing .sec { padding: 18px; border-radius: 16px; border-color: #494238; }
+.outside-sharing .sec.mine { border-top: 3px solid #d8bb78; background: #201d17; }
+.outside-sharing .sec:not(.mine) { border-top: 3px solid #8f8c87; }
+.outside-sharing .sname { font-family: inherit; font-size: 25px; letter-spacing: .04em; color: #f4f1e9; }
+.outside-sharing .stat { display: block; padding: 16px; border-radius: 12px; background: #111114; }
+.outside-sharing .stat .sharing-status { display: inline-block; font-size: 18px; line-height: 1.5; }
+.outside-sharing .sharing-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 18px 0 10px; }
+.outside-sharing .sharing-metrics > div { min-width: 0; padding-left: 10px; border-left: 1px solid #555049; }
+.outside-sharing .sharing-metrics > div:first-child { border: 0; padding-left: 0; }
+.outside-sharing .sharing-metrics span { display: block; font-size: 14px; color: #d4cec3; }
+.outside-sharing .sharing-metrics strong { display: block; font-size: clamp(28px, 7vw, 44px); line-height: 1.4; font-variant-numeric: tabular-nums; color: #f7eedc; }
+.outside-sharing .sharing-metrics small { font-size: 14px; margin-left: 3px; font-weight: 500; }
+.outside-sharing .sharing-meta { display: block; font-size: 14px; line-height: 1.65; color: #c1beb8; }
+.outside-sharing .stat.s-ok { border-color: #759a7f; }
+.outside-sharing .stat.s-ok .sharing-status { color: #a2d9b4; }
+.outside-sharing .stat.s-soon .sharing-status { color: #f3c282; }
+.outside-sharing .stat.s-full .sharing-status { color: #f6a8ae; }
+.outside-sharing .row { min-height: 82px; border-radius: 12px; }
+.outside-sharing .row .nm { font-family: inherit; font-size: 21px; }
+.outside-sharing .castbar .cl, .outside-sharing .lv-title, .outside-sharing .fresh, .outside-sharing .stale, .outside-sharing .note { font-size: 14px; }
+.outside-sharing .panel { max-height: calc(100dvh - 24px); overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 900px) {
+  .outside-sharing #app:has(> .sec) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+  .outside-sharing #app:has(> .sec) > .sec:only-child { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  .outside-sharing .wrap { padding: 0 12px; }
+  .outside-sharing .sec { padding: 14px; }
+  .outside-sharing .stat { padding: 12px; }
+  .outside-sharing .hbtns { width: 100%; justify-content: flex-end; }
+}
