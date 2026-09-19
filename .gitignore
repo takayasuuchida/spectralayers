@@ -1,0 +1,8 @@
+node_modules/
+output/
+CODEX_SPEC.md
+CODEX_RESULT.md
+GEMINI_*.md
+*.log
+.env*
+!.env.example
