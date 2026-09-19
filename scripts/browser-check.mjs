@@ -280,6 +280,114 @@ try {
   await pageD.evaluate(() => { window.testHidden = false; document.dispatchEvent(new Event('visibilitychange')); });
   await eventually(() => calls.filter(c => c.context === d.context && c.name === 'heartbeat_furikko_pair').length === 3, 'foreground refresh heartbeat');
   console.log('PASS occupied deletion confirmation/cancel, 25s presence cadence, hidden pause, foreground refresh');
+
+  const parityRoom = randomToken(), parityV = randomToken(), parityA = randomToken();
+  newRoom(parityRoom, parityV, parityA);
+  const e = await context(), f = await context();
+  const pageE = await e.context.newPage(), pageF = await f.context.newPage();
+  for (const [page, control, side, key] of [[pageE, e.control, 'vivace', parityV], [pageF, f.control, 'anela', parityA]]) {
+    await page.goto(invitation(`${origin}/furikko-pair.html`, parityRoom, side, key)); await ready(page);
+    assert.equal(await page.locator('[data-roster-details]').evaluate(el => el.open), false);
+    await page.locator('[data-table="t1"]').click(); await page.locator('#table-label').fill(`${side}入口`); await page.locator('#table-cap').fill('6');
+    await page.locator('#table-guests').selectOption('2');
+    await page.locator('[data-set-min="60"]').click(); await page.locator('[data-set-min="50"]').click();
+    assert.match(await page.locator('#duration').textContent(), /50分/);
+    await page.locator('[data-set-min="60"]').click(); await page.locator('#table-now').click();
+    assert.match(await page.locator('#duration').textContent(), /60分/);
+    assert.equal(rooms.get(parityRoom).rows[side].revision, 0, 'set/now only change the draft');
+    await noOverflow(page, 'direct set/now'); await page.locator('#start-table').click();
+    await eventually(() => page.locator('#editor').evaluate(d => !d.open), 'direct draft start');
+    assert.equal(rooms.get(parityRoom).rows[side].data.tables[0].min, 60);
+    assert.equal(rooms.get(parityRoom).rows[side].data.tables[0].startAt % 300000, 0);
+    await settings(page, 2, 3);
+    await page.locator('[data-roster-details] summary').click(); await page.locator('[data-open-roster]').click();
+    await page.locator('#roster-input').fill('あや ねおん\nさら、あや'); await page.locator('#add-roster').click();
+    assert.equal(await page.locator('#roster-draft-list .name-chip').count(), 3);
+    assert.equal(rooms.get(parityRoom).rows[side].data.castNames.length, 0);
+    await noOverflow(page, 'roster editor');
+    if (side === 'vivace') {
+      control.failPut = true; await page.locator('#save-roster').click();
+      await eventually(() => page.locator('#roster-error').textContent().then(t => t.includes('通信')), 'roster failed save');
+      assert.equal(await page.locator('#roster-draft-list .name-chip').count(), 3);
+      assert.equal(rooms.get(parityRoom).rows[side].data.castNames.length, 0);
+      control.failPut = false; await page.evaluate(() => document.getElementById('refresh').click());
+      await eventually(() => page.locator('#save-roster').isEnabled(), 'roster retry');
+    }
+    await page.locator('#save-roster').click(); await eventually(() => page.locator('#roster-editor').evaluate(d => !d.open), 'roster saved');
+    assert.deepEqual(rooms.get(parityRoom).rows[side].data.castNames, ['あや', 'ねおん', 'さら']);
+    await page.locator('[data-settings]').click(); assert.equal(await page.locator('#cast-total').evaluate(i => i.readOnly), true);
+    assert.equal(await page.locator('#cast-total').inputValue(), '3'); await page.locator('#set-min').selectOption('60');
+    await page.locator('#save-settings').click(); await eventually(() => page.locator('#settings').evaluate(d => !d.open), 'roster-linked settings');
+    await page.locator('[data-open-wait]').click(); await page.locator('[data-wait-guests="8"]').click();
+    assert.equal(await page.locator('#waiting-guests').inputValue(), '8'); await page.locator('#waiting-guests').fill('9');
+    await noOverflow(page, 'waiting editor');
+    if (side === 'vivace') {
+      control.failPut = true; await page.locator('#save-waiting').click();
+      await eventually(() => page.locator('#waiting-error').textContent().then(t => t.includes('通信')), 'waiting failed save');
+      assert.equal(await page.locator('#waiting-guests').inputValue(), '9'); assert.equal(rooms.get(parityRoom).rows[side].data.waiting.length, 0);
+      control.failPut = false; await page.evaluate(() => document.getElementById('refresh').click()); await eventually(() => page.locator('#save-waiting').isEnabled(), 'waiting retry');
+    }
+    await page.locator('#save-waiting').click(); await eventually(() => page.locator('#waiting-editor').evaluate(d => !d.open), 'waiting saved');
+    assert.equal(rooms.get(parityRoom).rows[side].data.waiting[0].guests, 9);
+  }
+  await refresh(pageE); await refresh(pageF);
+  for (const page of [pageE, pageF]) {
+    await eventually(() => page.locator('#partner .waiting-list').textContent().then(t => t.includes('1組 / 9名')), 'peer waiting count');
+    assert.match(await page.locator('#partner .roster-view').textContent(), /あや・ねおん・さら/);
+    assert.equal(await page.locator('#partner [data-guide-wait], #partner [data-open-roster]').count(), 0);
+    const unchangedUrl = page.url(); await page.locator('#jump-partner').click();
+    assert.ok(await page.locator('#partner').evaluate(el => Math.abs(el.getBoundingClientRect().top) < 25));
+    await page.locator('#partner [data-return-mine]').click(); assert.equal(page.url(), unchangedUrl);
+    assert.ok(await page.locator('#mine').evaluate(el => Math.abs(el.getBoundingClientRect().top) < 25));
+    for (const id of ['jump-partner', 'jump-mine']) assert.ok(await page.locator(`#${id}`).evaluate(el => el.getBoundingClientRect().height >= 48));
+  }
+  await noOverflow(pageE, 'parity board'); await pageE.screenshot({ path: 'output/furikko-pair-parity-mobile.png', fullPage: true });
+  const tablesBeforeGuiding = clone(rooms.get(parityRoom).rows.vivace.data.tables);
+  await pageE.locator('[data-guide-wait]').click(); await eventually(() => rooms.get(parityRoom).rows.vivace.data.waiting.length === 0, 'guided wait removed');
+  assert.deepEqual(rooms.get(parityRoom).rows.vivace.data.tables, tablesBeforeGuiding, 'guiding does not auto-seat');
+  await pageE.locator('[data-business-close]').click();
+  const pState = rooms.get(parityRoom).rows.vivace;
+  pState.data.waiting.push({ id: 'intervening', guests: 4, at: Date.now() }); pState.revision++;
+  e.control.expectCAS = true;
+  await pageE.locator('#confirm-business-close').click();
+  await eventually(() => pageE.locator('#business-close-error').textContent().then(t => t.includes('他の端末')), 'reset stale confirmation');
+  await eventually(() => pageE.locator('#confirm-business-close').isDisabled(), 'reset confirmation invalidated');
+  assert.equal(pState.data.waiting.length, 1); assert.equal(pState.data.tables[0].guests, 2);
+  await pageE.locator('[data-close="business-close"]').click();
+  for (const [page, side, peer] of [[pageE, 'vivace', 'anela'], [pageF, 'anela', 'vivace']]) {
+    const before = clone(rooms.get(parityRoom).rows[side].data), peerBefore = clone(rooms.get(parityRoom).rows[peer].data);
+    await page.locator('[data-business-close]').click(); assert.deepEqual(rooms.get(parityRoom).rows[side].data, before);
+    await noOverflow(page, 'business close confirmation'); await page.locator('#confirm-business-close').click();
+    await eventually(() => page.locator('#business-close').evaluate(d => !d.open), 'business closed');
+    const after = rooms.get(parityRoom).rows[side].data;
+    assert.equal(after.setMin, 60); assert.ok(after.tables.every(t => !t.guests && !t.startAt && !t.planAt && t.min === 60));
+    assert.deepEqual(after.tables.map(t => [t.id, t.label, t.cap]), before.tables.map(t => [t.id, t.label, t.cap]));
+    assert.deepEqual(after.waiting, []); assert.deepEqual(after.castNames, []); assert.deepEqual(after.casts, { now: 0, total: 0 });
+    assert.deepEqual(rooms.get(parityRoom).rows[peer].data, peerBefore);
+  }
+  console.log('PASS symmetric waiting/roster/daily close, failed drafts, revision-bound reset, direct set/now, fragment-preserving navigation');
+
+  const overdue = rooms.get(parityRoom).rows.vivace;
+  overdue.data.tables[0] = { ...overdue.data.tables[0], guests: 1, startAt: Date.now() - 51 * 60000, min: 50 };
+  overdue.data.tables[1] = { ...overdue.data.tables[1], guests: 1, startAt: Date.now() - 70 * 60000, min: 50 };
+  overdue.revision++; await refresh(pageE);
+  await eventually(() => pageE.locator('#alerts').textContent().then(t => t.includes('経過')), 'overdue alert timing');
+  assert.equal(await pageE.locator('#alerts .alert').count(), 1, 'old overdue table gets no fresh notification');
+  assert.doesNotMatch(await pageE.locator('#alerts').textContent(), /5分前/);
+  const g = await context(), pageG = await g.context.newPage(); let releaseGet;
+  g.control.getGate = new Promise(resolve => { releaseGet = resolve; });
+  await pageG.goto(vivaceLink);
+  await eventually(() => calls.some(c => c.context === g.context && c.name === 'get_furikko_pair'), 'slow initial get');
+  const initialGet = calls.find(c => c.context === g.context && c.name === 'get_furikko_pair'); expectedCancellations.add(initialGet.request);
+  await pageG.evaluate(link => { location.hash = new URL(link).hash; }, otherLink);
+  await pageG.waitForFunction(() => document.getElementById('current-store')?.textContent.includes('ANELA')); await ready(pageG);
+  releaseGet(); await pageG.waitForTimeout(150);
+  const currentRoom = new URLSearchParams(new URL(otherLink).hash.slice(1)).get('room');
+  assert.equal(await pageG.locator('#mine').textContent().then(t => t.includes('旧店舗')), false);
+  await settings(pageG, 1, 2);
+  const ownWrites = calls.filter(c => c.context === g.context && c.name === 'put_furikko_pair');
+  assert.equal(ownWrites.length, 1); assert.equal(ownWrites[0].args.p_store, 'anela'); assert.equal(ownWrites[0].args.p_room, currentRoom);
+  console.log('PASS delayed initial GET identity cancellation, overdue timing, stale notification suppression, strict console/network error gate');
   assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
   console.log('PASS storage failure session, hash identity change during save, no legacy/external requests, no page errors');
   console.log('BROWSER CHECK PASSED (mock RPC; no live backend). Screenshots: output/furikko-pair-mobile.png, output/furikko-pair-desktop.png');
