@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#10171c">
+  <title>振りっこボード | VIVACE × ANELA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23151f26'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='43' fill='%23dec384'%3EV%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/furikko-pair.css">
+  <script type="module" src="assets/furikko-pair.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div><a class="brand" href="furikko-pair.html">振りっこボード</a><div class="eyebrow">VIVACE × ANELA</div></div>
+    <a id="guide-link" class="button quiet" href="furikko-pair-guide.html">使い方</a>
+  </header>
+  <main>
+    <section id="landing" class="landing" hidden>
+      <span class="eyebrow">ビバーチェ × アネラ</span>
+      <h1>次のお客様を、<br>迎えられるお店へ。</h1>
+      <p>卓とキャストの人数、チェックの時間を<br>2店舗で共有する専用ボードです。</p>
+      <button id="create-room" class="primary">2店舗の専用ボードを作る</button>
+      <p class="muted">作成後、それぞれの店舗用リンクを渡してください。<br>リンクを持つ人は両店を閲覧し、その店舗を編集できます。</p>
+      <p id="landing-message" role="status"></p>
+      <button id="restore-links" class="quiet" hidden>このブラウザで作った共有リンク</button>
+      <a id="resume-link" class="button quiet" hidden>前回の店舗を開く</a>
+    </section>
+    <section id="board" hidden>
+      <div class="board-heading"><div><span class="eyebrow">今使う店舗</span><h1 id="current-store"></h1></div><time id="clock"></time></div>
+      <div class="connection"><span id="status" role="status">接続確認中</span><span id="pending"></span><button id="refresh" class="quiet">再確認</button></div>
+      <p id="notice" role="status" class="notice" hidden></p>
+      <div class="tools"><button id="share-links" class="quiet">共有リンク</button><button id="sound" class="quiet" aria-pressed="false">通知音：オフ</button></div>
+      <nav class="store-nav" aria-label="店舗の表示位置"><button id="jump-mine" class="quiet">自店舗</button><button id="jump-partner" class="primary">相手店舗を見る</button></nav>
+      <div id="alerts" class="alerts" aria-live="polite"></div>
+      <div class="store-grid"><section id="mine" class="store mine"></section><section id="partner" class="store partner"></section></div>
+      <p class="muted footnote">受け入れ人数は、空き卓とキャスト余りから出した「1組の目安」です。移動前にお店同士で確認してください。</p>
+    </section>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="table-form">
+      <div class="dialog-heading"><h2 id="editor-title">卓の編集</h2><button type="button" data-close="editor" class="quiet">閉じる</button></div>
+      <p id="draft-notice" class="muted"></p>
+      <div class="field-grid"><label>卓の名前<input id="table-label" maxlength="24" required></label><label>席数<input id="table-cap" type="number" min="1" max="12" required></label></div>
+      <label>お客様の人数<select id="table-guests"></select></label>
+      <div class="field-grid" aria-label="この卓のセット"><button type="button" data-set-min="50">50分</button><button type="button" data-set-min="60">60分</button></div>
+      <div id="time-fields">
+        <div class="field-grid"><label id="start-label">開始予定<input id="table-start" type="time" step="60" required></label><label>チェック<input id="table-end" type="time" step="60" required></label></div>
+        <p id="duration" class="muted"></p>
+        <button type="button" id="table-now" class="quiet">今の時刻にする</button>
+        <div class="adjust"><span>開始</span><button type="button" data-adjust="start:-5">−5分</button><button type="button" data-adjust="start:5">＋5分</button></div>
+        <div class="adjust"><span>チェック</span><button type="button" data-adjust="end:-5">−5分</button><button type="button" data-adjust="end:5">＋5分</button></div>
+        <div id="extensions" class="field-grid"><button type="button" data-extend="25">ハーフ ＋25分</button><button type="button" data-extend="50">ワンタイム ＋50分</button></div>
+      </div>
+      <p id="editor-error" class="error" role="alert" hidden></p>
+      <button type="button" id="reload-draft" class="quiet" hidden>最新の卓を読み直す</button>
+      <button type="button" id="start-table" class="primary">この人数でスタート</button>
+      <button type="submit" id="save-table" class="primary">保存する</button>
+      <button type="button" id="checkout-table" class="danger">チェック完了・空席にする</button>
+      <button type="button" id="delete-table" class="quiet danger-text">この卓を削除</button>
+    </form>
+  </dialog>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form id="settings-form"><div class="dialog-heading"><h2 id="settings-title">キャスト・セット</h2><button type="button" data-close="settings" class="quiet">閉じる</button></div>
+      <div class="field-grid"><label>今いるキャスト<input id="cast-now" type="number" min="0" max="60" required></label><label>本日の合計<input id="cast-total" type="number" min="0" max="60" required></label></div>
+      <p id="roster-count-note" class="muted" hidden>本日の合計は出勤名簿と連動しています。名簿を編集すると人数も変わります。</p>
+      <label>基本セット<select id="set-min"><option value="50">50分</option><option value="60">60分</option></select></label>
+      <p class="muted">セット変更は、次に準備する空席の卓に反映します。</p>
+      <p id="settings-error" class="error" role="alert" hidden></p><button type="button" id="reload-settings" class="quiet" hidden>最新の人数を読み直す</button><button type="submit" id="save-settings" class="primary">保存する</button>
+    </form>
+  </dialog>
+  <dialog id="waiting-editor" aria-labelledby="waiting-title">
+    <form id="waiting-form"><div class="dialog-heading"><h2 id="waiting-title">待ちのお客様</h2><button type="button" data-close="waiting-editor" class="quiet">閉じる</button></div>
+      <div class="guest-pads" aria-label="待ちの人数"><button type="button" data-wait-guests="1">1名</button><button type="button" data-wait-guests="2">2名</button><button type="button" data-wait-guests="3">3名</button><button type="button" data-wait-guests="4">4名</button><button type="button" data-wait-guests="5">5名</button><button type="button" data-wait-guests="6">6名</button><button type="button" data-wait-guests="7">7名</button><button type="button" data-wait-guests="8">8名</button></div>
+      <label>人数（1〜20名）<input id="waiting-guests" type="number" min="1" max="20" value="1" required></label>
+      <p class="muted">「案内した」は待ち一覧から外す操作です。卓への入店は別操作で行ってください。</p>
+      <p id="waiting-error" class="error" role="alert" hidden></p><button id="save-waiting" type="submit" class="primary">待ちに登録する</button>
+    </form>
+  </dialog>
+  <dialog id="roster-editor" aria-labelledby="roster-title">
+    <form id="roster-form"><div class="dialog-heading"><h2 id="roster-title">本日の出勤名簿</h2><button type="button" data-close="roster-editor" class="quiet">閉じる</button></div>
+      <p class="muted">源氏名など、お店で使う短い表示名のみ。お客様の名前・本名・連絡先は入れないでください。相手店舗にも共有されます。</p>
+      <div id="roster-draft-list" class="name-list"></div>
+      <label>まとめて追加<textarea id="roster-input" rows="3" maxlength="4096" placeholder="例：あや ねおん、さら"></textarea></label>
+      <p class="muted">スペース・改行・「、」などで区切れます。重複なしで60名まで、1名24文字以内です。</p>
+      <button id="add-roster" type="button">入力を名簿に追加</button>
+      <p id="roster-draft-note" class="muted"></p><p id="roster-error" class="error" role="alert" hidden></p>
+      <button id="reload-roster" type="button" class="quiet" hidden>最新の名簿を読み直す</button><button id="save-roster" type="submit" class="primary">名簿を保存する</button>
+    </form>
+  </dialog>
+  <dialog id="business-close" aria-labelledby="business-close-title">
+    <div class="dialog-heading"><h2 id="business-close-title">営業終了の確認</h2><button type="button" data-close="business-close" class="quiet">閉じる</button></div>
+    <p id="business-close-summary"></p><p>自店舗の全卓を空席にして、待ちのお客様・出勤名簿・キャスト人数をリセットします。卓の名前・席数・基本セットは残ります。</p>
+    <p id="business-close-error" class="error" role="alert" hidden></p><button id="confirm-business-close" class="danger">リセットして営業終了する</button>
+  </dialog>
+  <dialog id="links" aria-labelledby="links-title">
+    <div class="dialog-heading"><h2 id="links-title">共有リンク</h2><button type="button" data-close="links" class="quiet">閉じる</button></div>
+    <p>リンクを持つ人は両店を閲覧し、リンクに書かれた店舗を編集できます。店舗の担当者だけに渡してください。</p>
+    <div id="link-list"></div><p id="link-message" role="status" class="muted"></p>
+    <p class="muted">作成した2本のリンクは、このブラウザだけに保存します。履歴や保存データの削除・端末変更で失うことがあります。必要な店舗用リンクを各店で保管してください。</p>
+  </dialog>
+  <noscript>JavaScriptを有効にして、店舗用リンクを開いてください。</noscript>
+</body>
+</html>
