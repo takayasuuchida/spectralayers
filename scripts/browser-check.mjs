@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { dependency } from './runtime.mjs';
 import { initialDoc, validateDoc, clone, randomToken, invitation } from '../assets/furikko-pair-core.js';
 
+import { attendanceText, attendanceNames } from '../tests/attendance-fixture.mjs';
+
 const { chromium } = await dependency('playwright-core');
 const root = resolve('.');
 const server = createServer(async (req, res) => {
@@ -287,7 +289,7 @@ try {
   const pageE = await e.context.newPage(), pageF = await f.context.newPage();
   for (const [page, control, side, key] of [[pageE, e.control, 'vivace', parityV], [pageF, f.control, 'anela', parityA]]) {
     await page.goto(invitation(`${origin}/furikko-pair.html`, parityRoom, side, key)); await ready(page);
-    assert.equal(await page.locator('[data-roster-details]').evaluate(el => el.open), false);
+    assert.equal(await page.locator('#mine .roster-view').isVisible(), true);
     await page.locator('[data-table="t1"]').click(); await page.locator('#table-label').fill(`${side}入口`); await page.locator('#table-cap').fill('6');
     await page.locator('#table-guests').selectOption('2');
     await page.locator('[data-set-min="60"]').click(); await page.locator('[data-set-min="50"]').click();
@@ -300,7 +302,7 @@ try {
     assert.equal(rooms.get(parityRoom).rows[side].data.tables[0].min, 60);
     assert.equal(rooms.get(parityRoom).rows[side].data.tables[0].startAt % 300000, 0);
     await settings(page, 2, 3);
-    await page.locator('[data-roster-details] summary').click(); await page.locator('[data-open-roster]').click();
+    await page.locator('[data-open-roster]').click();
     await page.locator('#roster-input').fill('あや ねおん\nさら、あや'); await page.locator('#add-roster').click();
     assert.equal(await page.locator('#roster-draft-list .name-chip').count(), 3);
     assert.equal(rooms.get(parityRoom).rows[side].data.castNames.length, 0);
@@ -333,13 +335,19 @@ try {
   await refresh(pageE); await refresh(pageF);
   for (const page of [pageE, pageF]) {
     await eventually(() => page.locator('#partner .waiting-list').textContent().then(t => t.includes('1組 / 9名')), 'peer waiting count');
-    assert.match(await page.locator('#partner .roster-view').textContent(), /あや・ねおん・さら/);
+    assert.deepEqual(await page.locator('#partner .roster-chip b').allTextContents(), ['あや', 'ねおん', 'さら']);
     assert.equal(await page.locator('#partner [data-guide-wait], #partner [data-open-roster]').count(), 0);
-    const unchangedUrl = page.url(); await page.locator('#jump-partner').click();
-    assert.ok(await page.locator('#partner').evaluate(el => Math.abs(el.getBoundingClientRect().top) < 25));
-    await page.locator('#partner [data-return-mine]').click(); assert.equal(page.url(), unchangedUrl);
-    assert.ok(await page.locator('#mine').evaluate(el => Math.abs(el.getBoundingClientRect().top) < 25));
-    for (const id of ['jump-partner', 'jump-mine']) assert.ok(await page.locator(`#${id}`).evaluate(el => el.getBoundingClientRect().height >= 48));
+    const unchangedUrl = page.url(), ownSide = new URLSearchParams(new URL(unchangedUrl).hash.slice(1)).get('side');
+    const peerSide = ownSide === 'vivace' ? 'anela' : 'vivace';
+    await page.locator(`#tab-${peerSide}`).click();
+    assert.equal(await page.locator('[role="tabpanel"]:visible').count(), 1);
+    assert.equal(await page.locator('#partner').isVisible(), true);
+    assert.equal(await page.locator('#mine').isVisible(), false);
+    assert.equal(await page.locator('#partner button, #partner select').count(), 0);
+    assert.equal(page.url(), unchangedUrl);
+    await page.locator(`#tab-${ownSide}`).click(); assert.equal(page.url(), unchangedUrl);
+    assert.equal(await page.locator('#mine').isVisible(), true);
+    for (const id of ['tab-anela', 'tab-vivace']) assert.ok(await page.locator(`#${id}`).evaluate(el => el.getBoundingClientRect().height >= 48));
   }
   await noOverflow(pageE, 'parity board'); await pageE.screenshot({ path: 'output/furikko-pair-parity-mobile.png', fullPage: true });
   const tablesBeforeGuiding = clone(rooms.get(parityRoom).rows.vivace.data.tables);
@@ -388,9 +396,122 @@ try {
   const ownWrites = calls.filter(c => c.context === g.context && c.name === 'put_furikko_pair');
   assert.equal(ownWrites.length, 1); assert.equal(ownWrites[0].args.p_store, 'anela'); assert.equal(ownWrites[0].args.p_room, currentRoom);
   console.log('PASS delayed initial GET identity cancellation, overdue timing, stale notification suppression, strict console/network error gate');
+  const rosterRoom = randomToken(), rosterV = randomToken(), rosterA = randomToken();
+  newRoom(rosterRoom, rosterV, rosterA);
+  const rosterState = rooms.get(rosterRoom).rows;
+  rosterState.vivace.data.castNames = [...attendanceNames]; rosterState.vivace.data.casts.total = 8;
+  rosterState.anela.data.castNames = [...attendanceNames, 'あや']; rosterState.anela.data.casts.total = 9;
+  const h = await context(), i = await context(), pageH = await h.context.newPage(), pageI = await i.context.newPage();
+  const rosterLink = invitation(`${origin}/furikko-pair.html`, rosterRoom, 'vivace', rosterV);
+  const putsH = () => calls.filter(c => c.context === h.context && c.name === 'put_furikko_pair');
+  await pageH.goto(rosterLink); await ready(pageH);
+  await eventually(() => pageH.locator('#mine .remainder b').textContent().then(t => t === '8'), 'legacy roster effective now 8');
+  assert.equal(putsH().length, 0); assert.equal(rosterState.vivace.data.casts.now, 0);
+  assert.equal(Object.hasOwn(rosterState.vivace.data, 'castStatus'), false);
+  await pageI.goto(invitation(`${origin}/furikko-pair.html`, rosterRoom, 'anela', rosterA)); await ready(pageI);
+  await eventually(() => Date.parse(rosterState.anela.seen_at) > 0, 'peer heartbeat confirmed');
+  await refresh(pageH);
+  await eventually(() => pageH.locator('#partner .remainder b').textContent().then(t => t === '9'), 'legacy peer effective now 9');
+  assert.equal(await pageH.locator('#tab-vivace').getAttribute('aria-selected'), 'true');
+  await pageH.locator('[data-open-roster]').click(); await pageH.locator('#roster-input').fill(attendanceText);
+  await pageH.locator('#import-roster').click();
+  assert.deepEqual(await pageH.locator('#roster-draft-list .name-chip > span').allTextContents(), attendanceNames);
+  assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'late');
+  assert.match(await pageH.locator('#roster-draft-note').textContent(), /出勤中 7人/);
+  assert.equal(putsH().length, 0);
+  await noOverflow(pageH, 'attendance preview');
+  h.control.failPut = true; await pageH.locator('#save-roster').click();
+  await eventually(() => pageH.locator('#roster-error').textContent().then(t => t.includes('通信')), 'attendance save failed');
+  assert.equal(await pageH.locator('#roster-input').inputValue(), attendanceText);
+  assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'late');
+  assert.equal(rosterState.vivace.data.casts.now, 0); assert.equal(await pageH.locator('#roster-editor').evaluate(d => d.open), true);
+  h.control.failPut = false; await pageH.evaluate(() => document.getElementById('refresh').click());
+  await eventually(() => pageH.locator('#save-roster').isEnabled(), 'attendance retry ready');
+  await pageH.locator('#save-roster').click(); await eventually(() => pageH.locator('#roster-editor').evaluate(d => !d.open), 'attendance saved');
+  assert.deepEqual(rosterState.vivace.data.castNames, attendanceNames);
+  assert.deepEqual(rosterState.vivace.data.casts, { now: 7, total: 8 });
+  assert.equal(await pageH.locator('#mine .remainder b').textContent(), '7');
+  await pageH.locator('[data-open-roster]').click(); await pageH.locator('[data-name-status="3"]').selectOption('present');
+  await pageH.locator('#roster-input').fill(''); await pageH.locator('#roster-input').focus();
+  await pageH.waitForTimeout(1200);
+  assert.equal(await pageH.locator('#roster-input').evaluate(el => document.activeElement === el), true);
+  h.control.failPut = true; await pageH.locator('#save-roster').click();
+  await eventually(() => pageH.locator('#status').textContent().then(t => t === '保存できません'), 'status save failed');
+  assert.equal(rosterState.vivace.data.castStatus['なつき'], 'late');
+  assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'present');
+  h.control.failPut = false; await pageH.evaluate(() => document.getElementById('refresh').click());
+  await eventually(() => pageH.locator('#save-roster').isEnabled(), 'status retry ready');
+  await pageH.locator('#save-roster').click(); await eventually(() => pageH.locator('#roster-editor').evaluate(d => !d.open), 'arrival saved');
+  assert.deepEqual(rosterState.vivace.data.casts, { now: 8, total: 8 });
+  for (const [status, now] of [['off', 7], ['present', 8]]) {
+    await pageH.locator('[data-open-roster]').click(); await pageH.locator('[data-name-status="0"]').selectOption(status);
+    await pageH.locator('#save-roster').click(); await eventually(() => pageH.locator('#roster-editor').evaluate(d => !d.open), 'status saved');
+    assert.equal(rosterState.vivace.data.casts.now, now);
+  }
+  await pageH.locator('[data-table="t1"]').click(); await pageH.locator('#table-guests').selectOption('3');
+  await pageH.locator('#save-table').click(); await eventually(() => pageH.locator('#editor').evaluate(d => !d.open), 'three guests saved');
+  assert.equal(await pageH.locator('#mine .remainder b').textContent(), '5');
+  assert.deepEqual(await pageH.locator('#mine .roster-chip b').allTextContents(), attendanceNames);
+  await noOverflow(pageH, 'eight-name board'); await pageH.evaluate(() => scrollTo(0, 0));
+  const layout = await pageH.evaluate(() => {
+    const roster = document.querySelector('#mine .roster-view'), tables = document.querySelector('#mine .tables'), count = document.querySelector('#mine .remainder b');
+    return { first: roster.previousElementSibling.className, rosterBottom: roster.getBoundingClientRect().bottom,
+      tableTop: tables.getBoundingClientRect().top, countBottom: count.getBoundingClientRect().bottom,
+      font: parseFloat(getComputedStyle(count).fontSize), height: document.documentElement.scrollHeight,
+      columns: getComputedStyle(tables).gridTemplateColumns.split(' ').length,
+      smallTargets: [...document.querySelectorAll('#mine button')].some(el => el.getBoundingClientRect().height < 48) };
+  });
+  assert.equal(layout.first, 'store-heading'); assert.ok(layout.rosterBottom < layout.tableTop);
+  assert.ok(layout.rosterBottom < 844 && layout.countBottom < 844); assert.ok(layout.font >= 48);
+  assert.equal(layout.columns, 2); assert.equal(layout.smallTargets, false);
+  assert.ok(layout.height <= 1300, `ordinary board height: ${layout.height}`);
+  await mkdir('output/playwright', { recursive: true });
+  await pageH.screenshot({ path: 'output/playwright/roster-tabs-mobile.png', fullPage: true });
+  await pageH.setViewportSize({ width: 1280, height: 900 });
+  assert.equal(await pageH.locator('[role="tabpanel"]:visible').count(), 1);
+  await pageH.screenshot({ path: 'output/playwright/roster-tabs-desktop.png', fullPage: true });
+  await pageH.setViewportSize({ width: 390, height: 844 });
+  await pageH.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await pageH.locator('#tab-anela').click();
+  assert.equal(pageH.url(), rosterLink); assert.equal(await pageH.locator('[role="tabpanel"]:visible').count(), 1);
+  assert.equal(await pageH.locator('#partner button, #partner select, #partner input').count(), 0);
+  assert.ok(await pageH.locator('#partner .roster-view').evaluate(el => el.getBoundingClientRect().top < 240));
+  const pollCount = calls.filter(c => c.context === h.context && c.name === 'get_furikko_pair').length;
+  await pageH.waitForTimeout(10500);
+  assert.ok(calls.filter(c => c.context === h.context && c.name === 'get_furikko_pair').length > pollCount);
+  assert.equal(await pageH.locator('#tab-anela').getAttribute('aria-selected'), 'true');
+  assert.equal(await pageH.locator('#partner').isVisible(), true); assert.equal(pageH.url(), rosterLink);
+  h.control.stale = true; await refresh(pageH);
+  await eventually(() => pageH.locator('#partner .remainder b').textContent().then(t => t === '—'), 'stale remainder suppressed');
+  assert.match(await pageH.locator('#partner').textContent(), /最終確認/);
+  h.control.stale = false;
+  await pageH.locator('#tab-anela').focus(); await pageH.keyboard.press('ArrowRight');
+  assert.equal(await pageH.locator('#tab-vivace').getAttribute('aria-selected'), 'true');
+  await pageH.keyboard.press('Home'); assert.equal(await pageH.locator('#tab-anela').getAttribute('aria-selected'), 'true');
+  await pageH.keyboard.press('End'); assert.equal(await pageH.locator('#mine').isVisible(), true);
+  await pageH.locator('[data-open-roster]').click();
+  await pageH.locator('#roster-input').fill('ANELA\n2026/09/20\n出勤8人'); await pageH.locator('#import-roster').click();
+  assert.match(await pageH.locator('#roster-error').textContent(), /名前が見つかりません/);
+  assert.equal(await pageH.locator('#roster-draft-list .name-chip').count(), 8);
+  const beforeDirect = putsH().length;
+  await pageH.locator('#roster-input').fill(attendanceText.replace('8人', '9人')); await pageH.locator('#save-roster').click();
+  assert.equal(putsH().length, beforeDirect); assert.match(await pageH.locator('#roster-draft-note').textContent(), /見出しは9人/);
+  assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'late');
+  await pageH.locator('#save-roster').click(); await eventually(() => pageH.locator('#roster-editor').evaluate(d => !d.open), 'direct save uses parsed preview');
+  assert.equal(rosterState.vivace.data.casts.now, 7);
+  await pageH.locator('[data-open-roster]').click(); await pageH.locator('[data-name-status="3"]').selectOption('present');
+  const beforeConflict = putsH().length; h.control.conflict = true; await pageH.locator('#save-roster').click();
+  await eventually(() => pageH.locator('#roster-error').textContent().then(t => t.includes('他の端末') || t.includes('更新されています')), 'status CAS conflict');
+  await pageH.waitForTimeout(300); assert.equal(putsH().length, beforeConflict + 1);
+  assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'present'); assert.equal(rosterState.vivace.data.castStatus['なつき'], 'late');
+  await pageH.locator('#save-roster').click(); await pageH.waitForTimeout(200); assert.equal(putsH().length, beforeConflict + 1, 'old draft revision never replayed');
+  await pageH.locator('#reload-roster').click(); assert.equal(await pageH.locator('[data-name-status="3"]').inputValue(), 'late');
+  await pageH.locator('[data-close="roster-editor"]').click();
+  for (const call of putsH()) { assert.equal(call.args.p_store, 'vivace'); assert.equal(call.args.p_room, rosterRoom); assert.equal(call.args.p_write_key, rosterV); }
+  assert.equal(rosterState.anela.data.casts.now, 0); assert.equal(Object.hasOwn(rosterState.anela.data, 'castStatus'), false);
+  console.log(`PASS exact attendance paste/preview, legacy 8/9 counts without writes, arrival/off, failed status drafts/CAS, tabs/poll/keyboard/credentials, stale remainder; mobile height ${layout.height}px`);
   assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
   console.log('PASS storage failure session, hash identity change during save, no legacy/external requests, no page errors');
-  console.log('BROWSER CHECK PASSED (mock RPC; no live backend). Screenshots: output/furikko-pair-mobile.png, output/furikko-pair-desktop.png');
+  console.log('BROWSER CHECK PASSED (mock RPC; no live backend). Screenshots: output/playwright/roster-tabs-mobile.png, output/playwright/roster-tabs-desktop.png');
 } finally {
   closing = true;
   await browser.close(); await new Promise(resolve => server.close(resolve));

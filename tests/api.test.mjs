@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApi, PairSession, ApiError } from '../assets/furikko-pair-api.js';
-import { initialDoc, clone, closeBusiness } from '../assets/furikko-pair-core.js';
+import { initialDoc, clone, closeBusiness, effectiveCasts } from '../assets/furikko-pair-core.js';
 const identity = () => ({ room: 'a'.repeat(48), side: 'vivace', key: 'b'.repeat(48) });
 const row = side => ({ store_id: side, data: initialDoc(), revision: 0, updated_at: new Date().toISOString(), seen_at: new Date().toISOString() });
 const response = data => new Response(JSON.stringify(data), { status: 200 });
@@ -19,6 +19,15 @@ function mockApi() {
     return [{ seen_at: new Date().toISOString() }];
   } };
 }
+test('legacy named attendance migrates only on explicit save, never on refresh/heartbeat', async () => {
+  const api = mockApi(); api.rows.vivace.data.castNames = ['あや', 'ゆあ']; api.rows.vivace.data.casts.total = 2;
+  const s = new PairSession(identity(), api); await s.refresh(); await s.heartbeat();
+  assert.equal(s.rows.vivace.data.casts.now, 0); assert.equal(effectiveCasts(s.rows.vivace.data).now, 2);
+  assert.equal(Object.hasOwn(api.rows.vivace.data, 'castStatus'), false);
+  assert.equal(api.calls.filter(c => c.name === 'put_furikko_pair').length, 0);
+  await s.mutate(d => { d.tables[0].label = '入口'; return d; }); await s.tail;
+  assert.deepEqual(api.rows.vivace.data.castStatus, { あや: 'present', ゆあ: 'present' }); assert.equal(api.rows.vivace.data.casts.now, 2);
+});
 test('RPC HTTP/JSON/network failures propagate and URL is fixed', async () => {
   for (const fetchImpl of [async () => new Response('denied', { status: 403 }), async () => new Response('bad json'), async () => { throw new Error('offline'); }]) {
     await assert.rejects(createApi({ fetchImpl }).call('get_furikko_pair', { p_room: identity().room }), ApiError);

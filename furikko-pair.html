@@ -8,8 +8,8 @@
   <meta name="theme-color" content="#10171c">
   <title>振りっこボード | VIVACE × ANELA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23151f26'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='43' fill='%23dec384'%3EV%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/furikko-pair.css">
-  <script type="module" src="assets/furikko-pair.js"></script>
+  <link rel="stylesheet" href="assets/furikko-pair.css?v=20260920">
+  <script type="module" src="assets/furikko-pair.js?v=20260920"></script>
 </head>
 <body>
   <header class="site-header">
@@ -32,9 +32,9 @@
       <div class="connection"><span id="status" role="status">接続確認中</span><span id="pending"></span><button id="refresh" class="quiet">再確認</button></div>
       <p id="notice" role="status" class="notice" hidden></p>
       <div class="tools"><button id="share-links" class="quiet">共有リンク</button><button id="sound" class="quiet" aria-pressed="false">通知音：オフ</button></div>
-      <nav class="store-nav" aria-label="店舗の表示位置"><button id="jump-mine" class="quiet">自店舗</button><button id="jump-partner" class="primary">相手店舗を見る</button></nav>
+      <nav id="store-tabs" class="store-nav" role="tablist" aria-label="表示する店舗"><button id="tab-anela" role="tab" data-store-tab="anela" aria-selected="false">ANELA</button><button id="tab-vivace" role="tab" data-store-tab="vivace" aria-selected="false">VIVACE</button></nav>
       <div id="alerts" class="alerts" aria-live="polite"></div>
-      <div class="store-grid"><section id="mine" class="store mine"></section><section id="partner" class="store partner"></section></div>
+      <div class="store-grid"><section id="mine" class="store mine" role="tabpanel" tabindex="0"></section><section id="partner" class="store partner" role="tabpanel" tabindex="0" hidden></section></div>
       <p class="muted footnote">受け入れ人数は、空き卓とキャスト余りから出した「1組の目安」です。移動前にお店同士で確認してください。</p>
     </section>
   </main>
@@ -64,7 +64,7 @@
   <dialog id="settings" aria-labelledby="settings-title">
     <form id="settings-form"><div class="dialog-heading"><h2 id="settings-title">キャスト・セット</h2><button type="button" data-close="settings" class="quiet">閉じる</button></div>
       <div class="field-grid"><label>今いるキャスト<input id="cast-now" type="number" min="0" max="60" required></label><label>本日の合計<input id="cast-total" type="number" min="0" max="60" required></label></div>
-      <p id="roster-count-note" class="muted" hidden>本日の合計は出勤名簿と連動しています。名簿を編集すると人数も変わります。</p>
+      <p id="roster-count-note" class="muted" hidden>人数は名簿の出勤状態と連動します。「名簿・状態を編集」で出勤中・遅刻・退勤を変更してください。</p>
       <label>基本セット<select id="set-min"><option value="50">50分</option><option value="60">60分</option></select></label>
       <p class="muted">セット変更は、次に準備する空席の卓に反映します。</p>
       <p id="settings-error" class="error" role="alert" hidden></p><button type="button" id="reload-settings" class="quiet" hidden>最新の人数を読み直す</button><button type="submit" id="save-settings" class="primary">保存する</button>
@@ -82,9 +82,9 @@
     <form id="roster-form"><div class="dialog-heading"><h2 id="roster-title">本日の出勤名簿</h2><button type="button" data-close="roster-editor" class="quiet">閉じる</button></div>
       <p class="muted">源氏名など、お店で使う短い表示名のみ。お客様の名前・本名・連絡先は入れないでください。相手店舗にも共有されます。</p>
       <div id="roster-draft-list" class="name-list"></div>
-      <label>まとめて追加<textarea id="roster-input" rows="3" maxlength="4096" placeholder="例：あや ねおん、さら"></textarea></label>
-      <p class="muted">スペース・改行・「、」などで区切れます。重複なしで60名まで、1名24文字以内です。</p>
-      <button id="add-roster" type="button">入力を名簿に追加</button>
+      <label>出勤表を貼り付け<textarea id="roster-input" rows="4" placeholder="例：あや ねおん、さら"></textarea></label>
+      <p class="muted">店名・日付・出勤人数の見出しを除いて解析します。「なつき 遅刻」も対応。改行・空白・「、」区切り、60名まで、1名24文字以内です。</p>
+      <button id="import-roster" type="button" class="primary">解析して名簿を置き換え・確認</button><button id="add-roster" type="button" class="quiet">名前を追加</button>
       <p id="roster-draft-note" class="muted"></p><p id="roster-error" class="error" role="alert" hidden></p>
       <button id="reload-roster" type="button" class="quiet" hidden>最新の名簿を読み直す</button><button id="save-roster" type="submit" class="primary">名簿を保存する</button>
     </form>

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dependency } from '../scripts/runtime.mjs';
-import { initialDoc } from '../assets/furikko-pair-core.js';
+import { initialDoc, parseAttendance, importAttendance } from '../assets/furikko-pair-core.js';
+import { attendanceText } from './attendance-fixture.mjs';
 
 test('actual PostgreSQL runtime: isolated room/store permissions, validation, CAS, presence', async t => {
   const { PGlite } = await dependency('@electric-sql/pglite'); const db = new PGlite();
@@ -15,6 +16,8 @@ test('actual PostgreSQL runtime: isolated room/store permissions, validation, CA
   const migration = await readFile(new URL('../supabase/migrations/20260918_furikko_pair.sql', import.meta.url), 'utf8');
   assert.equal(migration.match(/CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;/g)?.length, 1);
   await db.exec(migration.replace('CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;', '-- Test SHA-256 adapter installed above.'));
+  const attendanceMigration = await readFile(new URL('../supabase/migrations/20260920_furikko_pair_attendance.sql', import.meta.url), 'utf8');
+  await db.exec(attendanceMigration);
   const room = 'a'.repeat(48), vivace = 'b'.repeat(48), anela = 'c'.repeat(48), other = 'd'.repeat(48);
   const asRole = async (role, sql, args = []) => { await db.exec(`SET ROLE ${role}`); try { return await db.query(sql, args); } finally { await db.exec('RESET ROLE'); } };
   const rpc = (sql, args) => asRole('anon', sql, args);
@@ -113,5 +116,26 @@ test('actual PostgreSQL runtime: isolated room/store permissions, validation, CA
     const flags = (await db.query("SELECT relrowsecurity FROM pg_class WHERE relname IN ('furikko_pair_rooms','furikko_pair_state')")).rows;
     assert.equal(flags.length, 2); assert.ok(flags.every(r => r.relrowsecurity));
     const policies = (await db.query("SELECT * FROM pg_policies WHERE tablename LIKE 'furikko_pair_%'")).rows; assert.equal(policies.length, 0);
+  });
+  await t.test('additive status validator: legacy still accepted, new exact counts and enums enforced', async () => {
+    const valid = importAttendance(initialDoc(), parseAttendance(attendanceText));
+    const legacy = initialDoc(); legacy.castNames = ['あや']; legacy.casts.total = 1;
+    const accepts = async d => (await db.query('SELECT public.furikko_pair_validate($1::jsonb) AS ok', [JSON.stringify(d)])).rows[0].ok;
+    assert.equal(await accepts(legacy), true); assert.equal(await accepts(valid), true);
+    const manual = { ...initialDoc(), castStatus: {} }; manual.casts.total = 8;
+    assert.equal(await accepts(manual), true);
+    assert.equal(await accepts(importAttendance(initialDoc(), parseAttendance('__proto__ constructor toString'))), true);
+    for (const mutate of [d => d.castStatus = null, d => d.castStatus = [], d => d.castStatus = {},
+      d => delete d.castStatus['ゆあ'], d => d.castStatus.extra = 'present', d => d.castStatus['ゆあ'] = null,
+      d => d.castStatus['ゆあ'] = ['present'], d => d.castStatus['ゆあ'] = 'unknown', d => d.casts.now = 8,
+      d => d.casts.total = 9, d => d.castStatus['ゆあ'] = 'present\n']) {
+      const bad = structuredClone(valid); mutate(bad); assert.equal(await accepts(bad), false);
+      const rev = Number((await get(room)).rows.find(r => r.store_id === 'anela').revision);
+      await rejects(put('anela', anela, rev, bad), 'PT400');
+    }
+    let rev = Number((await get(room)).rows.find(r => r.store_id === 'anela').revision);
+    await put('anela', anela, rev++, legacy); await put('anela', anela, rev, valid);
+    assert.deepEqual((await get(room)).rows.find(r => r.store_id === 'anela').data, valid);
+    await rejects(put('anela', anela, rev, legacy), 'PT409');
   });
 });
