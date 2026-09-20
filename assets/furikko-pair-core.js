@@ -1,13 +1,15 @@
 export const STORES = Object.freeze({ vivace: 'VIVACE', anela: 'ANELA' });
 export const STORE_KANA = Object.freeze({ vivace: 'ビバーチェ', anela: 'アネラ' });
 export const MAX_TIME = 4102444800000;
+export const CAST_STATUSES = Object.freeze({ present: '出勤中', late: '遅刻', off: '退勤' });
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/u;
 const TOKEN = /^[0-9a-f]{48}$/;
 const int = (v, min, max) => Number.isSafeInteger(v) && v >= min && v <= max;
 const exact = (v, keys) => v !== null && typeof v === 'object' && !Array.isArray(v) &&
   Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 export function validateDoc(d) {
-  if (!exact(d, ['tables', 'setMin', 'casts', 'waiting', 'castNames']) || ![50, 60].includes(d.setMin) ||
+  const fields = ['tables', 'setMin', 'casts', 'waiting', 'castNames'];
+  if (!d || (!exact(d, fields) && !exact(d, [...fields, 'castStatus'])) || ![50, 60].includes(d.setMin) ||
       !exact(d.casts, ['now', 'total']) || !int(d.casts.now, 0, 60) || !int(d.casts.total, d.casts.now, 60) ||
       !Array.isArray(d.tables) || d.tables.length > 20 || !Array.isArray(d.waiting) || d.waiting.length > 30 ||
       !Array.isArray(d.castNames) || d.castNames.length > 60) throw new Error('店舗の入力内容を確認してください。');
@@ -19,6 +21,14 @@ export function validateDoc(d) {
     names.add(name);
   }
   if (names.size && d.casts.total !== names.size) throw new Error('本日の合計は出勤名簿の人数に合わせてください。');
+  if (Object.hasOwn(d, 'castStatus')) {
+    if (!exact(d.castStatus, [...names]) || [...names].some(name => typeof d.castStatus[name] !== 'string' || !Object.hasOwn(CAST_STATUSES, d.castStatus[name]))) {
+      throw new Error('出勤状態は名簿の全員に出勤中・遅刻・退勤を指定してください。');
+    }
+    if (names.size && d.casts.now !== [...names].filter(name => d.castStatus[name] === 'present').length) {
+      throw new Error('今いる人数は出勤中の人数に合わせてください。');
+    }
+  }
   const waitIds = new Set();
   for (const w of d.waiting) {
     if (!exact(w, ['id', 'guests', 'at']) || typeof w.id !== 'string' || !w.id.length || w.id.length > 48 ||
@@ -112,18 +122,68 @@ export function removeWaiting(doc, id) {
 }
 export function replaceRoster(doc, names) {
   const next = clone(doc); next.castNames = [...names];
-  next.casts = { now: Math.min(next.casts.now, names.length), total: names.length };
+  next.castStatus = Object.fromEntries(names.map(name => [name, doc.castStatus && Object.hasOwn(doc.castStatus, name) ? doc.castStatus[name] : 'present']));
+  next.casts = { now: names.filter(name => next.castStatus[name] === 'present').length, total: names.length };
   return validateDoc(next);
 }
+export function effectiveCasts(doc) {
+  return doc.castNames.length ? { now: doc.castNames.filter(name => !doc.castStatus || doc.castStatus[name] === 'present').length, total: doc.castNames.length } : { ...doc.casts };
+}
+// Reading never migrates a stored document. Call only on an explicit mutation.
+export function synchronizeAttendance(doc) {
+  validateDoc(doc);
+  const next = clone(doc);
+  next.castStatus = Object.fromEntries(doc.castNames.map(name => [name, doc.castStatus?.[name] ?? 'present']));
+  next.casts = effectiveCasts(doc);
+  return validateDoc(next);
+}
+export function setCastStatus(doc, name, status) {
+  if (!doc.castNames.includes(name) || typeof status !== 'string' || !Object.hasOwn(CAST_STATUSES, status)) throw new Error('出勤状態を確認してください。');
+  const next = synchronizeAttendance(doc); next.castStatus[name] = status;
+  next.casts = effectiveCasts(next); return validateDoc(next);
+}
+export function parseAttendance(raw) {
+  if (typeof raw !== 'string' || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(raw)) throw new Error('出勤表の文字を確認してください。');
+  const entries = new Map(); let declaredCount = null;
+  for (const input of raw.split(/\r?\n|\r/u)) {
+    const line = input.trim(), header = line.normalize('NFKC');
+    if (!line || /^(ANELA|VIVACE|VIVERCE|アネラ|ビバーチェ)$/i.test(header)) continue;
+    if (/^\d{4}(?:\/\d{1,2}\/\d{1,2}|-\d{1,2}-\d{1,2}|年\s*\d{1,2}月\s*\d{1,2}日)(?:\s*(?:\([月火水木金土日](?:曜日|曜)?\)|[月火水木金土日](?:曜日|曜)?))?$/u.test(header)) continue;
+    const count = header.match(/^出勤\s*(\d+)\s*[人名]$/u);
+    if (count) { declaredCount = Number(count[1]); continue; }
+    const parts = line.replace(/[（(]\s*(出勤中|遅刻|退勤)\s*[）)]/gu, ' $1 ').split(/[\s　,、，.．。・･\/｜|]+/u).filter(Boolean);
+    let previous = null;
+    for (const part of parts) {
+      const status = Object.entries(CAST_STATUSES).find(([, label]) => label === part)?.[0];
+      if (status) {
+        if (previous === null) throw new Error('出勤状態は名前の後ろに付けてください。');
+        const old = entries.get(previous);
+        if (old.explicit && old.status !== status) throw new Error(`${previous}の出勤状態が重複しています。`);
+        entries.set(previous, { status, explicit: true }); previous = null;
+      } else {
+        if (part === '出勤' || /^\d+[人名]$/u.test(part.normalize('NFKC'))) throw new Error('見出しは「出勤 8人」のように1行で入力してください。');
+        if (!entries.has(part)) entries.set(part, { status: 'present', explicit: false });
+        previous = part;
+      }
+    }
+  }
+  if (!entries.size) throw new Error('名前が見つかりません。出勤する名前を入力してください。');
+  const names = [...entries.keys()], castStatus = Object.fromEntries([...entries].map(([name, value]) => [name, value.status]));
+  const doc = replaceRoster(initialDoc(), names); doc.castStatus = castStatus; doc.casts = effectiveCasts(doc); validateDoc(doc);
+  return { names, castStatus, declaredCount, mismatch: declaredCount !== null && declaredCount !== names.length };
+}
+export function importAttendance(doc, parsed) {
+  const next = replaceRoster(doc, parsed.names); next.castStatus = clone(parsed.castStatus);
+  next.casts = effectiveCasts(next); return validateDoc(next);
+}
 export function addRosterNames(doc, raw) {
-  if (typeof raw !== 'string') throw new Error('源氏名を入力してください。');
-  const parts = raw.split(/[\s　,、，.．。・･\/｜|]+/u).map(s => s.trim()).filter(Boolean);
-  if (!parts.length) throw new Error('源氏名を入力してください。');
-  return replaceRoster(doc, [...new Set([...doc.castNames, ...parts])]);
+  const parsed = parseAttendance(raw), next = replaceRoster(doc, [...new Set([...doc.castNames, ...parsed.names])]);
+  for (const name of parsed.names) if (!doc.castNames.includes(name)) next.castStatus[name] = parsed.castStatus[name];
+  next.casts = effectiveCasts(next); return validateDoc(next);
 }
 export function closeBusiness(doc) {
   const next = clone(doc); next.tables = next.tables.map(t => checkout(t, next.setMin));
-  next.waiting = []; next.castNames = []; next.casts = { now: 0, total: 0 }; return validateDoc(next);
+  next.waiting = []; next.castNames = []; next.castStatus = {}; next.casts = { now: 0, total: 0 }; return validateDoc(next);
 }
 export function checkTiming(end, now = Date.now()) {
   const left = end - now;
@@ -139,7 +199,7 @@ export function addTable(doc) {
 export function availability(doc) {
   const used = doc.tables.reduce((n, t) => n + t.guests, 0);
   const free = doc.tables.filter(t => !t.guests);
-  const freeCast = Math.max(0, doc.casts.now - used);
+  const freeCast = Math.max(0, effectiveCasts(doc).now - used);
   return { used, freeTables: free.length, freeCast, take: Math.min(freeCast, Math.max(0, ...free.map(t => t.cap))) };
 }
 export function orderedTables(tables) {

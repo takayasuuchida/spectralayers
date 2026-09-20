@@ -1,8 +1,9 @@
 import { STORES, STORE_KANA, clone, validateDoc, round5, endOf, hhmm, startTime, durationTo, setGuests,
   startTable, extendTable, adjustTable, checkout, addTable, availability, orderedTables, isLive,
   randomToken, parseIdentity, invitation, createAlertTracker, setTableMinutes, setTableNow,
-  addWaiting, removeWaiting, addRosterNames, replaceRoster, closeBusiness, checkTiming } from './furikko-pair-core.js';
-import { createApi, PairSession } from './furikko-pair-api.js';
+  addWaiting, removeWaiting, addRosterNames, replaceRoster, closeBusiness, checkTiming,
+  CAST_STATUSES, effectiveCasts, setCastStatus, parseAttendance, importAttendance } from './furikko-pair-core.js?v=20260920';
+import { createApi, PairSession } from './furikko-pair-api.js?v=20260920';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -16,7 +17,7 @@ let session = null, identity = parseIdentity(location.hash), draft = null, setti
 let sound = null, soundOn = false, transitioning = false, creationPending = false;
 const alertTracker = createAlertTracker();
 let alerts = [];
-let waitingDraft = null, rosterDraft = null, resetRevision = null, rosterExpanded = false;
+let waitingDraft = null, rosterDraft = null, resetRevision = null, activeStore = identity?.side;
 const setMessage = (id, message) => { $(id).textContent = message; $(id).hidden = !message; };
 const mineRow = () => session?.rows[identity.side];
 const currentLink = () => invitation(location.href, identity.room, identity.side, identity.key);
@@ -113,11 +114,12 @@ function render() {
   setMessage('notice', session.message);
   const peer = identity.side === 'vivace' ? 'anela' : 'vivace';
   renderStore($('mine'), identity.side, true); renderStore($('partner'), peer, false);
+  updateTabs();
   updateEditorControls();
   $('save-settings').disabled = !canSave();
   for (const field of $('settings-form').querySelectorAll('input, select')) field.disabled = Boolean(session.pending);
   for (const id of ['save-waiting', 'save-roster']) $(id).disabled = !canSave();
-  for (const field of document.querySelectorAll('#waiting-form input, #waiting-form [data-wait-guests], #roster-form textarea, #roster-form [data-remove-name], #add-roster')) field.disabled = Boolean(session.pending);
+  for (const field of document.querySelectorAll('#waiting-form input, #waiting-form [data-wait-guests], #roster-form textarea, #roster-form select, #roster-form [data-remove-name], #add-roster, #import-roster')) field.disabled = Boolean(session.pending);
   $('confirm-business-close').disabled = !canSave() || resetRevision !== mineRow()?.revision;
   if ($('business-close').open && resetRevision !== mineRow()?.revision) setMessage('business-close-error', '他の端末で更新されました。閉じて最新の状況を確認し、営業終了をやり直してください。');
   if ($('roster-editor').open && rosterDraft?.revision !== mineRow()?.revision) {
@@ -134,35 +136,57 @@ function renderStore(root, side, own) {
   let summary;
   if (!row) summary = `<div class="summary waiting"><strong>${session.connected ? '未共有' : '確認待ち'}</strong><p class="muted">${own ? '店舗の情報を確認しています。' : '相手店舗の共有を待っています。'}</p></div>`;
   else {
-    const a = availability(row.data);
-    const state = !confirmed ? '確認待ち' : !live ? (own ? '自店舗の接続を確認' : unshared ? '未共有' : '相手店の接続を確認') : a.take > 0 ? '受け入れの目安' : !a.freeTables ? '空き卓なし' : 'キャスト待ち';
-    summary = `<div class="summary ${live && a.take > 0 ? 'good' : 'waiting'}"><strong>${state}</strong><div class="take">${live ? a.take : '—'}<small>${live ? '名まで / 1組の目安' : '接続確認後に目安を表示'}</small></div><div class="metrics"><span>お客様 ${a.used}名</span><span>空き ${a.freeTables}卓</span><span>キャスト ${row.data.casts.now} / ${row.data.casts.total}名</span><span>キャスト余り ${a.freeCast}名</span></div>${!live ? '<p class="muted">表示中の卓・人数は最後に確認した内容です。</p>' : ''}</div>`;
+    const a = availability(row.data), casts = effectiveCasts(row.data);
+    const state = !confirmed ? '確認待ち' : !live ? (own ? '自店舗の接続を確認' : unshared ? '未共有' : '相手店の接続を確認') : 'キャスト余り';
+    summary = `<div class="summary ${live && a.freeCast > 0 ? 'good' : 'waiting'}"><strong>キャスト余り</strong><div class="remainder"><b>${live ? a.freeCast : '—'}</b><small>人</small></div><div class="metrics"><span>出勤中 ${casts.now} / 合計 ${casts.total}人</span><span>お客様 ${a.used}人</span><span>空き ${a.freeTables}卓</span></div><div class="take">1組受け入れ目安：${live ? `${a.take}人` : '—'}</div>${!live ? `<p class="muted">${state} · 最終確認の名簿・卓・人数です。</p>` : ''}</div>`;
   }
   const tables = row ? orderedTables(row.data.tables).map(t => tableMarkup(t, own)).join('') : '';
   const extras = row ? operationsMarkup(row.data, own) : '';
-  const markup = `<div class="store-heading"><div><div class="eyebrow">${own ? '今使う店舗 · 編集できます' : '相手店舗 · 閲覧のみ'}</div><h2>${STORES[side]} <small>${STORE_KANA[side]}</small></h2></div></div>${summary}${!own ? '<button data-return-mine class="quiet">自店舗へ戻る</button>' : ''}<div class="tables">${tables}</div>${own && row ? `<div class="store-actions"><button data-settings ${!session.connected ? 'disabled' : ''}>キャスト・セット</button><button data-add ${!session.connected || row.data.tables.length >= 20 ? 'disabled' : ''}>＋ 卓を追加</button></div>` : ''}${extras}`;
+  const markup = `<div class="store-heading"><div><div class="eyebrow">${own ? '自店舗・編集' : '相手店舗・閲覧'}</div><h2>${STORES[side]} <small>${STORE_KANA[side]}</small></h2></div></div>${row ? rosterMarkup(row.data, own) : ''}${summary}<div class="tables">${tables}</div>${own && row ? `<div class="store-actions"><button data-settings ${!session.connected ? 'disabled' : ''}>キャスト・セット</button><button data-add ${!session.connected || row.data.tables.length >= 20 ? 'disabled' : ''}>＋ 卓を追加</button></div>` : ''}${extras}`;
   // Keep keyboard focus on the same table/action across poll and clock updates.
   const focused = root.contains(document.activeElement) ? document.activeElement : null;
   const focusId = focused?.dataset.table;
-  const focusAction = focused?.hasAttribute('data-settings') ? '[data-settings]' : focused?.hasAttribute('data-add') ? '[data-add]' : null;
+  const focusAction = ['data-settings', 'data-add', 'data-open-roster', 'data-open-wait', 'data-business-close'].find(attr => focused?.hasAttribute(attr));
   if (root.dataset.markup !== markup) {
     root.innerHTML = markup; root.dataset.markup = markup;
-    const replacement = focusId ? root.querySelector(`[data-table="${CSS.escape(focusId)}"]`) : focusAction ? root.querySelector(focusAction) : null;
+    const replacement = focusId ? root.querySelector(`[data-table="${CSS.escape(focusId)}"]`) : focusAction ? root.querySelector(`[${focusAction}]`) : null;
     if (replacement && !replacement.disabled) replacement.focus({ preventScroll: true });
   }
+}
+function rosterMarkup(doc, own) {
+  const chips = doc.castNames.map(name => {
+    const status = doc.castStatus?.[name] ?? 'present';
+    return `<span class="roster-chip ${status}"><b>${esc(name)}</b><small>${CAST_STATUSES[status]}</small></span>`;
+  }).join('');
+  return `<section class="roster-view"><div class="roster-heading"><h3>出勤名簿 · ${doc.castNames.length}人</h3>${own ? `<button data-open-roster class="quiet" ${!canSave() ? 'disabled' : ''}>名簿・状態を編集</button>` : ''}</div><div class="roster-chips">${chips || '<span class="muted">名簿は未入力。人数だけでも使えます。</span>'}</div></section>`;
 }
 function operationsMarkup(doc, own) {
   const disabled = !canSave() ? 'disabled' : '';
   const waiting = [...doc.waiting].sort((a, b) => a.at - b.at);
   const waitList = waiting.map((w, index) => `<div class="waiting-row"><span>${index + 1}組目 · ${w.guests}名<small>${hhmm(w.at)} 受付 · ${Math.max(0, Math.floor((Date.now() - w.at) / 60000))}分待ち</small></span>${own ? `<button data-guide-wait="${esc(w.id)}" ${disabled}>案内した</button>` : ''}</div>`).join('');
-  const roster = `<p>${doc.castNames.length ? doc.castNames.map(esc).join('・') : '名簿は未入力です。人数だけでも使えます。'}</p>`;
-  return `<section class="waiting-list"><h3>待ちのお客様 · ${waiting.length}組 / ${waiting.reduce((n, w) => n + w.guests, 0)}名</h3>${waitList}${own ? `<button data-open-wait ${disabled || (waiting.length >= 30 ? 'disabled' : '')}>＋ 待ちのお客様を入れる</button><p class="muted">「案内した」は待ち一覧から外します。卓への入店は別操作です。</p>` : ''}</section>${own ? `<details class="roster-view" data-roster-details ${rosterExpanded ? 'open' : ''}><summary>出勤名簿（任意） · ${doc.castNames.length}名</summary>${roster}<button data-open-roster ${disabled}>名簿を編集</button></details><div class="store-footer"><button data-business-close class="quiet danger-text" ${disabled}>営業終了</button></div>` : `<section class="roster-view"><h3>出勤名簿 · ${doc.castNames.length}名</h3>${roster}</section>`}`;
+  return `<section class="waiting-list"><h3>待ちのお客様 · ${waiting.length}組 / ${waiting.reduce((n, w) => n + w.guests, 0)}名</h3>${waitList}${own ? `<button data-open-wait ${disabled || (waiting.length >= 30 ? 'disabled' : '')}>＋ 待ちのお客様を入れる</button>${waiting.length ? '<p class="muted">「案内した」は待ち一覧から外します。卓への入店は別操作です。</p>' : ''}` : ''}</section>${own ? `<div class="store-footer"><button data-business-close class="quiet danger-text" ${disabled}>営業終了</button></div>` : ''}`;
 }
-function scrollToStore(id) { $(id).scrollIntoView({ behavior: 'auto', block: 'start' }); }
-$('jump-mine').onclick = () => scrollToStore('mine');
-$('jump-partner').onclick = () => scrollToStore('partner');
-$('partner').onclick = e => { if (e.target.closest('[data-return-mine]')) scrollToStore('mine'); };
-$('mine').addEventListener('toggle', e => { if (e.target.matches('[data-roster-details]')) rosterExpanded = e.target.open; }, true);
+function updateTabs() {
+  for (const tab of document.querySelectorAll('[data-store-tab]')) {
+    const selected = tab.dataset.storeTab === activeStore, own = tab.dataset.storeTab === identity.side;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+    tab.setAttribute('aria-controls', own ? 'mine' : 'partner');
+    $(own ? 'mine' : 'partner').hidden = !selected;
+    $(own ? 'mine' : 'partner').setAttribute('aria-labelledby', tab.id);
+  }
+}
+function selectStore(tab) {
+  activeStore = tab.dataset.storeTab; updateTabs();
+  $('store-tabs').scrollIntoView({ behavior: 'instant', block: 'start' });
+  tab.focus({ preventScroll: true });
+}
+$('store-tabs').onclick = e => { const tab = e.target.closest('[data-store-tab]'); if (tab) selectStore(tab); };
+$('store-tabs').onkeydown = e => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+  e.preventDefault(); const tabs = [...document.querySelectorAll('[data-store-tab]')];
+  const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : (tabs.findIndex(t => t.dataset.storeTab === activeStore) + 1) % 2;
+  selectStore(tabs[index]);
+};
 function tableMarkup(t, own) {
   const active = t.guests > 0 && t.startAt > 0, left = endOf(t) - Date.now();
   const cls = active ? left <= 300000 ? 'due' : left <= 600000 ? 'soon' : '' : t.guests ? 'prep' : 'empty';
@@ -205,21 +229,29 @@ $('waiting-form').onsubmit = async e => {
   catch (err) { showError('waiting-error', err); }
 };
 function openRoster() {
-  const row = mineRow(); rosterDraft = { doc: clone(row.data), revision: row.revision, originalNow: row.data.casts.now, dirty: false };
+  const row = mineRow(); rosterDraft = { doc: clone(row.data), revision: row.revision, dirty: false, parsedInput: '', preview: '' };
   $('roster-input').value = ''; setMessage('roster-error', ''); $('reload-roster').hidden = true;
   renderRosterDraft(); if (!$('roster-editor').open) $('roster-editor').showModal();
 }
 function renderRosterDraft() {
   rosterDraft.doc = replaceRoster(rosterDraft.doc, rosterDraft.doc.castNames);
-  rosterDraft.doc.casts.now = Math.min(rosterDraft.originalNow, rosterDraft.doc.castNames.length);
-  $('roster-draft-list').innerHTML = rosterDraft.doc.castNames.map((name, index) => `<div class="name-chip"><span>${esc(name)}</span><button type="button" data-remove-name="${index}" aria-label="${esc(name)}を名簿から外す">×</button></div>`).join('');
-  $('roster-draft-note').textContent = `保存後の本日の合計：${rosterDraft.doc.castNames.length}名。今いる人数：${rosterDraft.doc.casts.now}名。保存するまで共有されません。名簿を空にすると人数も0名に戻ります。`;
+  $('roster-draft-list').innerHTML = rosterDraft.doc.castNames.map((name, index) => `<div class="name-chip"><span>${esc(name)}</span><select data-name-status="${index}" aria-label="${esc(name)}の出勤状態">${Object.entries(CAST_STATUSES).map(([value, label]) => `<option value="${value}" ${rosterDraft.doc.castStatus[name] === value ? 'selected' : ''}>${label}</option>`).join('')}</select><button type="button" data-remove-name="${index}" aria-label="${esc(name)}を名簿から外す">×</button></div>`).join('');
+  $('roster-draft-note').textContent = `${rosterDraft.preview} 保存後：合計 ${rosterDraft.doc.castNames.length}人、出勤中 ${rosterDraft.doc.casts.now}人。保存するまで共有されません。名簿を空にすると人数も0人に戻ります。`;
 }
-function addRosterDraft() {
-  rosterDraft.doc = addRosterNames(rosterDraft.doc, $('roster-input').value); rosterDraft.dirty = true;
-  $('roster-input').value = ''; renderRosterDraft(); setMessage('roster-error', '');
+function parseRosterDraft(add = false) {
+  const raw = $('roster-input').value, parsed = parseAttendance(raw);
+  rosterDraft.doc = add ? addRosterNames(rosterDraft.doc, raw) : importAttendance(rosterDraft.doc, parsed);
+  rosterDraft.dirty = true; rosterDraft.parsedInput = raw;
+  rosterDraft.preview = `${add ? '名前を追加しました。' : '入力した名簿に置き換えました。'}${parsed.mismatch ? ` 見出しは${parsed.declaredCount}人ですが、解析した名前は${parsed.names.length}人です。` : ''}`;
+  renderRosterDraft(); setMessage('roster-error', '');
 }
-$('add-roster').onclick = () => { try { addRosterDraft(); } catch (e) { showError('roster-error', e); } };
+$('import-roster').onclick = () => { try { parseRosterDraft(); } catch (e) { showError('roster-error', e); } };
+$('add-roster').onclick = () => { try { parseRosterDraft(true); } catch (e) { showError('roster-error', e); } };
+$('roster-draft-list').onchange = e => {
+  const field = e.target.closest('[data-name-status]'); if (!field || session.pending) return;
+  rosterDraft.doc = setCastStatus(rosterDraft.doc, rosterDraft.doc.castNames[Number(field.dataset.nameStatus)], field.value);
+  rosterDraft.dirty = true; renderRosterDraft();
+};
 $('roster-draft-list').onclick = e => {
   const button = e.target.closest('[data-remove-name]'); if (!button || session.pending) return;
   rosterDraft.doc = replaceRoster(rosterDraft.doc, rosterDraft.doc.castNames.filter((_, index) => index !== Number(button.dataset.removeName)));
@@ -228,9 +260,11 @@ $('roster-draft-list').onclick = e => {
 $('roster-form').onsubmit = async e => {
   e.preventDefault(); if (!canSave()) return;
   try {
-    if ($('roster-input').value.trim()) addRosterDraft();
-    const names = [...rosterDraft.doc.castNames], revision = rosterDraft.revision;
-    await session.mutate(doc => replaceRoster(doc, names), { expectedRevision: revision });
+    if ($('roster-input').value.trim() && $('roster-input').value !== rosterDraft.parsedInput) {
+      parseRosterDraft(); setMessage('roster-error', '解析結果を確認して、もう一度「名簿を保存する」を押してください。'); return;
+    }
+    const parsed = { names: [...rosterDraft.doc.castNames], castStatus: clone(rosterDraft.doc.castStatus) }, revision = rosterDraft.revision;
+    await session.mutate(doc => importAttendance(doc, parsed), { expectedRevision: revision });
     rosterDraft = null; $('roster-editor').close();
   } catch (err) { showError('roster-error', err); if (err.status === 409) $('reload-roster').hidden = false; }
 };
@@ -347,7 +381,9 @@ $('reload-draft').onclick = () => { if (session.connected && confirm('入力中�
 } };
 function openSettings() {
   const row = mineRow(); settingsRevision = row.revision;
-  $('cast-now').value = row.data.casts.now; $('cast-total').value = row.data.casts.total; $('set-min').value = row.data.setMin;
+  const casts = effectiveCasts(row.data);
+  $('cast-now').value = casts.now; $('cast-total').value = casts.total; $('set-min').value = row.data.setMin;
+  $('cast-now').readOnly = row.data.castNames.length > 0;
   $('cast-total').readOnly = row.data.castNames.length > 0; $('roster-count-note').hidden = !row.data.castNames.length;
   setMessage('settings-error', ''); $('reload-settings').hidden = true;
   if (!$('settings').open) $('settings').showModal();

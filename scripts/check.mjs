@@ -14,6 +14,6 @@ for (const path of scripts) {
 for (const path of ['furikko-pair.html', 'furikko-pair-guide.html']) {
   const source = await readFile(path, 'utf8');
   assert.match(source, /name="referrer" content="no-referrer"/);
-  for (const [, asset] of source.matchAll(/(?:src|href)="(assets\/[^"#]+)"/g)) await readFile(asset);
+  for (const [, asset] of source.matchAll(/(?:src|href)="(assets\/[^"#]+)"/g)) await readFile(asset.split('?')[0]);
 }
 console.log(`Syntax OK: ${scripts.length} new JS/MJS files; both page asset references OK.`);

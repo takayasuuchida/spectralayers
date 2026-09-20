@@ -1,4 +1,4 @@
-import { clone, validateDoc, STORES } from './furikko-pair-core.js';
+import { clone, validateDoc, synchronizeAttendance, STORES } from './furikko-pair-core.js?v=20260920';
 
 // Public browser configuration, identical to the existing furikko page. No endpoint override.
 const ENDPOINT = 'https://kngkckweonnnhfocfqan.supabase.co/rest/v1/rpc/';
@@ -87,7 +87,7 @@ export class PairSession {
       try {
         const row = this.rows[identity.side];
         if (expectedRevision !== undefined && expectedRevision !== row.revision) throw new ApiError(409, CONFLICT);
-        const doc = validateDoc(operation(clone(row.data)));
+        const doc = synchronizeAttendance(operation(synchronizeAttendance(row.data)));
         const data = await this.api.call('put_furikko_pair', { p_room: identity.room, p_store: identity.side,
           p_write_key: identity.key, p_expected_revision: row.revision, p_data: doc });
         if (this.disposed || generation !== this.generation) throw new ApiError(0, '操作を取り消しました。');
