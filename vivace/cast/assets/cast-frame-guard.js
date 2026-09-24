@@ -1,0 +1,1 @@
+try{if(window.top!==window.self&&window.top.location.origin!==window.location.origin){document.documentElement.dataset.castFrameBlocked='true';}}catch{document.documentElement.dataset.castFrameBlocked='true';}
