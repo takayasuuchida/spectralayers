@@ -19,8 +19,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stage Pages artifact
+        shell: bash
+        run: |
+          staging="${RUNNER_TEMP}/pages-staging"
+          mkdir -p "$staging"
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='CODEX*' \
+            --exclude='vivace/' \
+            ./ "$staging/"
+
+          mkdir -p \
+            "$staging/vivace/members" \
+            "$staging/vivace/cast" \
+            "$staging/vivace/live"
+          cp maintenance.html "$staging/vivace/index.html"
+          cp maintenance.html "$staging/vivace/members/index.html"
+          cp maintenance.html "$staging/vivace/cast/index.html"
+          cp maintenance.html "$staging/vivace/live/index.html"
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ${{ runner.temp }}/pages-staging
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b10">
+  <title>ただいま改修中です | LIST HACKER</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Helvetica Neue", "Noto Sans JP", system-ui, sans-serif;
+      background: #090b10;
+      color: #f5f7fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      min-height: 100svh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 50% 15%, rgba(90, 255, 190, .12), transparent 38%),
+        #090b10;
+    }
+    main {
+      width: min(100%, 560px);
+      padding: clamp(36px, 8vw, 64px) clamp(24px, 7vw, 52px);
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 24px;
+      background: rgba(17, 20, 28, .9);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .45);
+    }
+    .brand {
+      margin: 0 0 28px;
+      color: #62f3b3;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .28em;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.75rem, 7vw, 2.6rem);
+      line-height: 1.35;
+      letter-spacing: .04em;
+    }
+    p {
+      margin: 20px 0 0;
+      color: #aeb5c3;
+      font-size: clamp(.92rem, 3.5vw, 1rem);
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">LIST HACKER</div>
+    <h1>ただいま改修中です</h1>
+    <p>より良いサービスにするため、現在アップデートを行っています。</p>
+  </main>
+</body>
+</html>
